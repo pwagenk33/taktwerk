@@ -46,6 +46,7 @@ Schema ändern: `server/src/db/schema.ts` anpassen, dann `npm run db:generate -w
 - Installierbare Handy-App (PWA): Startbildschirm-Icon, App-Hülle und letzte Daten offline, Buchungen ohne Netz werden zwischengespeichert und beim nächsten Kontakt gesendet.
 - Wochenfreigabe: «Woche einreichen» im Kalender, Leads sehen unter Monatsabschluss pro Person und Woche, was eingereicht ist und wo Stunden fehlen.
 - Persönliche Erinnerung «Heute noch nichts gebucht» per E-Mail, Microsoft Teams oder Slack (Incoming Webhook), Uhrzeit und Wochentage im Profil wählbar; kommt nur an Arbeitstagen ohne Buchung.
+- Beleg-OCR: Beleg mit der Handykamera fotografieren, Betrag, Datum, MwSt-Satz, Kategorie und Händler werden vorgeschlagen (Texterkennung läuft im Browser, das Foto bleibt auf dem Gerät).
 
 ## Arbeitszeit & Absenzen
 
