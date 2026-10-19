@@ -1,5 +1,7 @@
 # Build web + server, then run the API server which also serves the web app.
 FROM node:22-alpine AS build
+# git only to stamp the build with the commit hash (shown under «Version» in the navigation)
+RUN apk add --no-cache git
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/domain/package.json packages/domain/

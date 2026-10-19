@@ -3,6 +3,7 @@ import { addMonths, fmt1, fmtCHF, fmtDay, fmtH, monthOf, vacationSummary, workBa
 import type { TimeEntry } from "@taktwerk/domain";
 import { useStore, useThemeColors } from "../store";
 import { BulletBars, BurnUpChart, ChartTip, HBar, StatusPill, VelocityChart, reportToBullet } from "../ui/components";
+import { Select } from "../ui/Select";
 
 export type WidgetConfig = Record<string, string>;
 
@@ -125,11 +126,7 @@ function VelocityTrend() {
 function ProjectSelect({ config, setConfig }: WidgetProps) {
   const { data } = useStore();
   return (
-    <select className="mini-select" aria-label="Projekt" value={config.projectId ?? data.projects[0]?.id} onChange={(e) => setConfig({ ...config, projectId: e.target.value })}>
-      {data.projects.map((p) => (
-        <option key={p.id} value={p.id}>{p.name}</option>
-      ))}
-    </select>
+    <Select small ariaLabel="Projekt" value={config.projectId ?? data.projects[0]?.id ?? ""} onChange={(v) => setConfig({ ...config, projectId: v })} options={data.projects.map((p) => ({ value: p.id, label: p.name }))} />
   );
 }
 

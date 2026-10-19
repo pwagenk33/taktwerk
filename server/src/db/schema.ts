@@ -35,6 +35,9 @@ export interface Branding {
   primaryColor: string;
   /** Show the Matterhorn motif on login and in the navigation. */
   showMotif: boolean;
+  /** Own logo, served under /api/branding/logo (set by the upload route). */
+  logo?: string;
+  logoMime?: string;
 }
 
 export const DEFAULT_BRANDING: Branding = { appName: "Taktwerk", primaryColor: "#D52B1E", showMotif: true };

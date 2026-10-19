@@ -97,6 +97,18 @@ export async function authRoutes(app: FastifyInstance) {
     return user;
   });
 
+  /** Change the own password: current password required, same rules as for a new one. */
+  app.post("/api/auth/password/change", async (req) => {
+    const me = requireUser(req);
+    const body = z.object({ current: z.string().max(500), next: z.string().max(500) }).parse(req.body);
+    const [user] = await ctx.db.select().from(users).where(eq(users.id, me.id)).limit(1);
+    if (!user || !(await verifyPassword(body.current, user.passwordHash))) throw new HttpError(400, "Das aktuelle Passwort ist falsch.");
+    const problem = passwordProblem(body.next);
+    if (problem) throw new HttpError(400, problem);
+    await ctx.db.update(users).set({ passwordHash: await hashPassword(body.next) }).where(eq(users.id, user.id));
+    return { ok: true };
+  });
+
   // ---------- password reset & invitation ----------
 
   app.post("/api/auth/password/forgot", async (req) => {

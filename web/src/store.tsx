@@ -62,6 +62,7 @@ interface Store {
   setRole: (r: Role) => void;
   branding: Branding;
   setBranding: (b: Branding) => Promise<void>;
+  setLogo: (file: File | null) => Promise<void>;
   logout: () => void;
   velocitySettings: VelocitySettings;
   setVelocitySettings: (s: VelocitySettings) => void;
@@ -166,9 +167,22 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     },
     branding,
     setBranding: async (b) => {
-      if (mode === "api") await api("/api/settings", { method: "PUT", body: { branding: b } });
+      if (mode === "api") await api("/api/settings", { method: "PUT", body: { branding: { appName: b.appName, primaryColor: b.primaryColor, showMotif: b.showMotif } } });
       else saveLocal("rt.branding", b);
       onBranding(b);
+    },
+    setLogo: async (file) => {
+      let next: Branding;
+      if (mode === "api") {
+        next = file ? await upload<Branding>("/api/branding/logo", file) : await api<Branding>("/api/branding/logo", { method: "DELETE" });
+      } else {
+        if (file && file.size > 300 * 1024) throw new Error("In der Demo sind Logos bis 300 KB möglich.");
+        const logo = file ? await new Promise<string>((ok, fail) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => fail(new Error("Datei konnte nicht gelesen werden.")); r.readAsDataURL(file); }) : undefined;
+        const { logo: _l, logoMime: _m, ...rest } = branding;
+        next = logo ? { ...rest, logo, logoMime: file!.type } : rest;
+        saveLocal("rt.branding", next);
+      }
+      onBranding(next);
     },
     logout: onLogout,
     velocitySettings,

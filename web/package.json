@@ -10,11 +10,12 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@radix-ui/react-select": "^2.1.6",
+    "@taktwerk/domain": "*",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-grid-layout": "1.5.4",
-    "recharts": "2.15.4",
-    "@taktwerk/domain": "*"
+    "recharts": "2.15.4"
   },
   "devDependencies": {
     "@types/react": "18.3.12",

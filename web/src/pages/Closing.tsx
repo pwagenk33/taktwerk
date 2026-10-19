@@ -3,6 +3,7 @@ import { addMonths, fmt1, fmtCHF2, fmtDate, fmtMonthLong, monthOf, workBalance }
 import { useStore, type ClosingStatus } from "../store";
 import { Icon } from "../ui/components";
 import { signedH } from "./WorkTime";
+import { Select } from "../ui/Select";
 
 /** Expenses of employees waiting for a lead's decision. */
 function OpenExpenses() {
@@ -195,9 +196,7 @@ export function Closing() {
               <span className="muted" style={{ fontSize: "0.8rem" }}>
                 {counts.approved} freigegeben · {counts.submitted} eingereicht · {counts.open} offen
               </span>
-              <select id="c-month" className="input mini-select" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Monat">
-                {months.map((m) => <option key={m} value={m}>{fmtMonthLong(m)}</option>)}
-              </select>
+              <Select id="c-month" small ariaLabel="Monat" value={month} onChange={setMonth} options={months.map((m) => ({ value: m, label: fmtMonthLong(m) }))} />
             </div>
           </div>
           <div className="table-wrap">

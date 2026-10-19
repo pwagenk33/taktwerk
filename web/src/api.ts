@@ -7,6 +7,9 @@ export interface Branding {
   appName: string;
   primaryColor: string;
   showMotif: boolean;
+  /** Own logo: a URL on the server, or a data URL in demo mode. */
+  logo?: string;
+  logoMime?: string;
 }
 
 export const DEFAULT_BRANDING: Branding = { appName: "Taktwerk", primaryColor: "#D52B1E", showMotif: true };

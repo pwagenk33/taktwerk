@@ -89,7 +89,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const org = await orgOf(user.organizationId);
     const settings: OrgSettings = {
       ...org.settings,
-      branding: body.branding ?? org.settings.branding,
+      branding: body.branding ? { ...org.settings.branding, ...body.branding } : org.settings.branding,
       ssoAutoProvisionDomains: body.ssoAutoProvisionDomains ?? org.settings.ssoAutoProvisionDomains,
       reportDay: body.reportDay ?? org.settings.reportDay ?? 3,
       weeklyHours: body.weeklyHours ?? org.settings.weeklyHours,

@@ -5,6 +5,7 @@ import { api } from "../api";
 import { loadLocal, saveLocal, useStore } from "../store";
 import { Icon } from "../ui/components";
 import { TYPE_CLASS, WorkTiles, signedH } from "./WorkTime";
+import { Select } from "../ui/Select";
 
 const CATEGORIES = EXPENSE_CATEGORIES as readonly ExpenseCategory[];
 
@@ -17,7 +18,7 @@ export interface Favorite {
 const favKey = (userId: string) => `rt.fav.${userId}`;
 const sameFav = (a: Favorite, b: Favorite) => a.subProjectId === b.subProjectId && a.reason === b.reason && (a.jiraIssueKey ?? "") === (b.jiraIssueKey ?? "");
 
-function useFavorites(userId: string) {
+export function useFavorites(userId: string) {
   const [favorites, setFavorites] = useState<Favorite[]>(() => loadLocal<Favorite[]>(favKey(userId), []));
   useEffect(() => setFavorites(loadLocal<Favorite[]>(favKey(userId), [])), [userId]);
   const toggle = (f: Favorite) => {
@@ -85,21 +86,15 @@ function useTarget() {
     <>
       <label className="field">
         <span>Kunde</span>
-        <select id={`${prefix}-customer`} className="input" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-          {data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <Select id={`${prefix}-customer`} value={customerId} onChange={setCustomerId} options={data.customers.map((c) => ({ value: c.id, label: c.name }))} />
       </label>
       <label className="field">
         <span>Projekt</span>
-        <select id={`${prefix}-project`} className="input" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <Select id={`${prefix}-project`} value={projectId} onChange={setProjectId} options={projects.map((p) => ({ value: p.id, label: p.name }))} placeholder="Kein Projekt" />
       </label>
       <label className="field">
         <span>Subprojekt</span>
-        <select id={`${prefix}-sub`} className="input" value={subProjectId} onChange={(e) => setSubProjectId(e.target.value)}>
-          {subs.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+        <Select id={`${prefix}-sub`} value={subProjectId} onChange={setSubProjectId} options={subs.map((s) => ({ value: s.id, label: s.name }))} placeholder="Kein Subprojekt" />
       </label>
     </>
   );
@@ -107,7 +102,7 @@ function useTarget() {
 }
 
 /** Short «Kunde · Subprojekt» label for a sub-project id. */
-function useLabels() {
+export function useLabels() {
   const { data } = useStore();
   const sub = new Map(data.subProjects.map((s) => [s.id, s]));
   const proj = new Map(data.projects.map((p) => [p.id, p]));
@@ -305,10 +300,7 @@ function TimeForm() {
         {target.fields("t")}
         <label className="field">
           <span>JIRA-Issue (optional)</span>
-          <select id="t-issue" className="input" value={issueKey} onChange={(e) => setIssueKey(e.target.value)}>
-            <option value="">Ohne Issue (z. B. Meeting)</option>
-            {openIssues.map((i) => <option key={i.key} value={i.key}>{i.key} · {i.summary} · {i.storyPoints} SP</option>)}
-          </select>
+          <Select id="t-issue" value={issueKey} onChange={setIssueKey} options={[{ value: "", label: "Ohne Issue (z. B. Meeting)" }, ...openIssues.map((i) => ({ value: i.key, label: `${i.key} · ${i.summary} · ${i.storyPoints} SP` }))]} />
         </label>
       </div>
       <label className="field">
@@ -393,9 +385,7 @@ function ExpenseForm({ compact = false, initialDate, onDone }: { compact?: boole
         {target.fields("x")}
         <label className="field">
           <span>Kategorie</span>
-          <select id="x-cat" className="input" value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)}>
-            {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-          </select>
+          <Select id="x-cat" value={category} onChange={(v) => setCategory(v as ExpenseCategory)} options={CATEGORIES.map((c) => ({ value: c, label: c }))} />
         </label>
         <label className="field"><span>Datum</span><input id="x-date" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
         {isKm ? (
@@ -408,9 +398,7 @@ function ExpenseForm({ compact = false, initialDate, onDone }: { compact?: boole
             <label className="field"><span>Betrag brutto (CHF)</span><input id="x-amount" type="number" step="0.05" min="0" className="input num" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
             <label className="field">
               <span>MwSt enthalten</span>
-              <select id="x-vat" className="input" value={vatRate} onChange={(e) => setVatRate(Number(e.target.value))}>
-                {VAT_RATES.map((v) => <option key={v} value={v}>{v === 0 ? "keine" : `${fmt1(v)} %`}</option>)}
-              </select>
+              <Select id="x-vat" value={String(vatRate)} onChange={(v) => setVatRate(Number(v))} options={VAT_RATES.map((v) => ({ value: String(v), label: v === 0 ? "keine" : `${fmt1(v)} %` }))} />
             </label>
           </>
         )}
@@ -632,9 +620,7 @@ function EntryRow(props: EntryProps) {
             {expense && expense.category !== "Kilometer" && (
               <label className="field">
                 <span>MwSt enthalten</span>
-                <select className="input" value={vatRate} onChange={(e) => setVatRate(Number(e.target.value))}>
-                  {VAT_RATES.map((v) => <option key={v} value={v}>{v === 0 ? "keine" : `${fmt1(v)} %`}</option>)}
-                </select>
+                <Select value={String(vatRate)} onChange={(v) => setVatRate(Number(v))} options={VAT_RATES.map((v) => ({ value: String(v), label: v === 0 ? "keine" : `${fmt1(v)} %` }))} />
               </label>
             )}
             {expense && (
@@ -825,11 +811,16 @@ function EntryDialog({ state, onClose }: { state: DialogState; onClose: () => vo
               </label>
               <label className="field">
                 <span>JIRA-Issue (optional)</span>
-                <select id="d-issue" className="input" value={issueKey} onChange={(ev) => setIssueKey(ev.target.value)}>
-                  <option value="">Ohne Issue</option>
-                  {openIssues.map((i) => <option key={i.key} value={i.key}>{i.key} · {i.summary}</option>)}
-                  {e?.jiraIssueKey && !openIssues.some((i) => i.key === e.jiraIssueKey) && <option value={e.jiraIssueKey}>{e.jiraIssueKey}</option>}
-                </select>
+                <Select
+                  id="d-issue"
+                  value={issueKey}
+                  onChange={setIssueKey}
+                  options={[
+                    { value: "", label: "Ohne Issue" },
+                    ...openIssues.map((i) => ({ value: i.key, label: `${i.key} · ${i.summary}` })),
+                    ...(e?.jiraIssueKey && !openIssues.some((i) => i.key === e.jiraIssueKey) ? [{ value: e.jiraIssueKey, label: e.jiraIssueKey }] : []),
+                  ]}
+                />
               </label>
             </div>
             <label className="field">
@@ -912,7 +903,9 @@ function WeekCalendar() {
     gridRef.current?.scrollTo({ top: (6.75 * 60 - DAY_START) * PX_PER_MIN });
   }, []);
 
-  const minutesAt = (col: HTMLElement, clientY: number) => {
+  const minutesAt = (clientY: number) => {
+    const col = gridRef.current?.querySelector<HTMLElement>(".cal-col");
+    if (!col) return DAY_START;
     const rect = col.getBoundingClientRect();
     return clamp(snap(DAY_START + (clientY - rect.top) / PX_PER_MIN), DAY_START, DAY_END);
   };
@@ -927,60 +920,70 @@ function WeekCalendar() {
 
   const startCreate = (ev: React.PointerEvent<HTMLDivElement>, date: string) => {
     if (ev.button !== 0 || (ev.target as HTMLElement).closest(".cal-block") || lockOf(currentUserId, date)) return;
-    const from = minutesAt(ev.currentTarget, ev.clientY);
+    ev.preventDefault();
+    const from = minutesAt(ev.clientY);
     setDrag({ kind: "create", date, from, to: from + SNAP });
-    ev.currentTarget.setPointerCapture(ev.pointerId);
   };
   const startMove = (ev: React.PointerEvent<HTMLDivElement>, entry: TimeEntry, date: string) => {
     if (ev.button !== 0 || lockOf(currentUserId, date) || !entry.startTime) return;
     ev.stopPropagation();
-    const col = ev.currentTarget.parentElement as HTMLElement;
-    const at = minutesAt(col, ev.clientY);
+    ev.preventDefault();
+    const at = minutesAt(ev.clientY);
     setDrag({ kind: "move", entry, date, start: toMin(entry.startTime), offset: at - toMin(entry.startTime), moved: false });
-    col.setPointerCapture(ev.pointerId);
   };
   const startResize = (ev: React.PointerEvent<HTMLSpanElement>, entry: TimeEntry, date: string) => {
     if (ev.button !== 0 || lockOf(currentUserId, date) || !entry.startTime) return;
     ev.stopPropagation();
-    const col = ev.currentTarget.closest(".cal-col") as HTMLElement;
+    ev.preventDefault();
     setDrag({ kind: "resize", entry, date, end: toMin(entry.startTime) + Math.round(entry.hours * 60) });
-    col.setPointerCapture(ev.pointerId);
   };
-  const onMove = (ev: React.PointerEvent<HTMLDivElement>) => {
+
+  // While a drag runs, the whole window reports pointer moves, so the block follows even outside the column or grid.
+  useEffect(() => {
     if (!drag) return;
-    const at = minutesAt(ev.currentTarget, ev.clientY);
-    if (drag.kind === "create") setDrag({ ...drag, to: Math.max(drag.from + SNAP, at) });
-    if (drag.kind === "move") {
-      const start = clamp(at - drag.offset, DAY_START, DAY_END - SNAP);
-      const date = dateAt(ev.clientX) ?? drag.date;
-      setDrag({ ...drag, start, date, moved: drag.moved || start !== toMin(drag.entry.startTime!) || date !== drag.entry.date });
-    }
-    if (drag.kind === "resize") setDrag({ ...drag, end: Math.max(toMin(drag.entry.startTime!) + SNAP, at) });
-  };
-  const onUp = async () => {
-    if (!drag) return;
-    const d = drag;
-    setDrag(null);
-    try {
-      if (d.kind === "create") {
-        setDialog({ date: d.date, startTime: toClock(d.from), hours: (d.to - d.from) / 60 });
-      } else if (d.kind === "move") {
-        if (!d.moved) return setDialog({ entry: d.entry, date: d.entry.date, hours: d.entry.hours });
-        if (lockOf(currentUserId, d.date)) throw new Error(lockOf(currentUserId, d.date)!);
-        await updateTimeEntry(d.entry.id, { startTime: toClock(d.start), date: d.date });
-        notify(`Verschoben auf ${fmtDay(d.date)} ${toClock(d.start)}`);
-      } else {
-        const hours = Math.round(((d.end - toMin(d.entry.startTime!)) / 60) * 100) / 100;
-        if (hours !== d.entry.hours) {
-          await updateTimeEntry(d.entry.id, { hours });
-          notify(`Dauer: ${fmt1(hours)} h`);
-        }
+    const onMove = (ev: PointerEvent) => {
+      const at = minutesAt(ev.clientY);
+      if (drag.kind === "create") setDrag({ ...drag, to: Math.max(drag.from + SNAP, at) });
+      if (drag.kind === "move") {
+        const start = clamp(at - drag.offset, DAY_START, DAY_END - SNAP);
+        const date = dateAt(ev.clientX) ?? drag.date;
+        setDrag({ ...drag, start, date, moved: drag.moved || start !== toMin(drag.entry.startTime!) || date !== drag.entry.date });
       }
-      setError("");
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
+      if (drag.kind === "resize") setDrag({ ...drag, end: Math.max(toMin(drag.entry.startTime!) + SNAP, at) });
+    };
+    const onUp = async () => {
+      const d = drag;
+      setDrag(null);
+      try {
+        if (d.kind === "create") {
+          setDialog({ date: d.date, startTime: toClock(d.from), hours: (d.to - d.from) / 60 });
+        } else if (d.kind === "move") {
+          if (!d.moved) return setDialog({ entry: d.entry, date: d.entry.date, hours: d.entry.hours });
+          if (lockOf(currentUserId, d.date)) throw new Error(lockOf(currentUserId, d.date)!);
+          await updateTimeEntry(d.entry.id, { startTime: toClock(d.start), date: d.date });
+          notify(`Verschoben auf ${fmtDay(d.date)} ${toClock(d.start)}`);
+        } else {
+          const hours = Math.round(((d.end - toMin(d.entry.startTime!)) / 60) * 100) / 100;
+          if (hours !== d.entry.hours) {
+            await updateTimeEntry(d.entry.id, { hours });
+            notify(`Dauer: ${fmt1(hours)} h`);
+          }
+        }
+        setError("");
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    };
+    const onCancel = () => setDrag(null);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+  }, [drag]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const block = (p: Placed, date: string, preview = false) => {
     const e = p.entry;
@@ -1061,12 +1064,9 @@ function WeekCalendar() {
               <div
                 key={d}
                 data-date={d}
-                className={`cal-col ${d === data.today ? "today" : ""} ${off ? "off" : ""} ${lock ? "locked" : ""}`}
+                className={`cal-col ${d === data.today ? "today" : ""} ${off ? "off" : ""} ${lock ? "locked" : ""} ${drag ? "dragging" : ""}`}
                 style={{ height }}
                 onPointerDown={(ev) => startCreate(ev, d)}
-                onPointerMove={onMove}
-                onPointerUp={onUp}
-                onPointerCancel={() => setDrag(null)}
               >
                 {hoursAxis.map((m) => <div key={m} className="cal-line" style={{ top: (m - DAY_START) * PX_PER_MIN }} />)}
                 {d === data.today && nowMin >= DAY_START && nowMin <= DAY_END && <div className="cal-now" style={{ top: (nowMin - DAY_START) * PX_PER_MIN }} />}

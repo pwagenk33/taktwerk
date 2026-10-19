@@ -19,6 +19,7 @@ import {
 } from "@taktwerk/domain";
 import { useStore } from "../store";
 import { Icon } from "../ui/components";
+import { Select } from "../ui/Select";
 
 const STATUS: Record<Absence["status"], { label: string; cls: string }> = {
   requested: { label: "Beantragt", cls: "risk" },
@@ -134,16 +135,12 @@ function AbsenceForm() {
         {lead && (
           <label className="field">
             <span>Person</span>
-            <select id="a-person" className="input" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
-              {data.employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-            </select>
+            <Select id="a-person" value={employeeId} onChange={setEmployeeId} options={data.employees.map((e) => ({ value: e.id, label: e.name }))} />
           </label>
         )}
         <label className="field">
           <span>Art</span>
-          <select id="a-type" className="input" value={type} onChange={(e) => setType(e.target.value as AbsenceType)}>
-            {ABSENCE_TYPES.map((t) => <option key={t}>{t}</option>)}
-          </select>
+          <Select id="a-type" value={type} onChange={(v) => setType(v as AbsenceType)} options={ABSENCE_TYPES.map((t) => ({ value: t, label: t }))} />
         </label>
         <label className="field"><span>Von</span><input id="a-from" type="date" className="input" value={startDate} onChange={(e) => { setStart(e.target.value); if (e.target.value > endDate) setEnd(e.target.value); }} /></label>
         <label className="field"><span>Bis</span><input id="a-to" type="date" className="input" value={endDate} min={startDate} onChange={(e) => setEnd(e.target.value)} /></label>

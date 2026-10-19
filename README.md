@@ -54,7 +54,11 @@ Schema ändern: `server/src/db/schema.ts` anpassen, dann `npm run db:generate -w
 
 - **Kalender** unter Zeiterfassung: Woche mit Zeitachse. Ziehen auf eine freie Stelle öffnet das Eintrags-Fenster (Zeit oder Spese) mit genau der gezogenen Dauer (15-Minuten-Raster, Beginn- und Endzeit werden beim Ziehen angezeigt), Blöcke verschieben oder am unteren Rand verlängern ändert Beginn und Dauer, Klick bearbeitet. Jeder Kunde hat eine eigene Farbe, interne Arbeit ist grau, eine rote Linie markiert die aktuelle Uhrzeit. Buchungen ohne Uhrzeit (z. B. aus der Listenansicht oder von früher) stehen oben im Tag; die Uhrzeit wird in der Spalte `start_time` gespeichert.
 - **Schnellwahl** im Eintrags-Fenster und in der Listenansicht: ein Suchfeld über Favoriten (Stern) und die Buchungen der letzten 30 Tage; Pfeiltasten und Enter übernehmen Kunde, Projekt, Subprojekt und Tätigkeit. Favoriten liegen pro Person im Browser.
-- **Darstellung** Hell, Dunkel oder wie das System: Umschalter unten in der Navigation, pro Browser gespeichert.
+- **Darstellung** Hell, Dunkel oder wie das System: Umschalter unten in der Navigation und auf der Profilseite, pro Browser gespeichert.
+- **Profil** (Klick auf den eigenen Namen unten in der Navigation): Konto, Passwort ändern, Darstellung, Favoriten verwalten. Unter dem Profil steht die Version (Commit-Hash und Build-Datum).
+- **Logo**: Admins laden unter Einstellungen → Erscheinungsbild ein eigenes Logo hoch (PNG, SVG, JPEG, WebP bis 1 MB, abgelegt unter `DATA_DIR/branding`); ohne Logo erscheint das Matterhorn-Zeichen in der Hauptfarbe.
+- **Dropdowns** sind gestaltete Auswahlfelder (Radix Select, `web/src/ui/Select.tsx`) mit Tastaturbedienung statt Browser-Standard.
+- Aufbau und alle Abhängigkeiten: [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md).
 - **Kunden & Projekte**: durchsuchbare Kundenliste (Name, Projekt, JIRA-Schlüssel) mit Budget, Verbrauch, Auslastung, Forecast und Status, in Seiten zu 50 Kunden. Kunde anklicken öffnet die Kundenseite mit Kennzahlen und dem Projektbaum.
 - **Projektseite** von der Kundenseite aus → Projekt öffnen: Kennzahlen, Subprojekte mit JIRA-Tickets und Burn-up; Budgets, Namen und JIRA-Schlüssel dort bearbeiten (Admins und Consultants).
 - **Erinnerung:** montags ab 09:00 Uhr Zürich geht eine E-Mail an alle, denen in der Vorwoche mehr als zwei Stunden zur Sollzeit fehlen (Absenzen zählen mit). Ausschalten unter Einstellungen → Arbeitszeit.

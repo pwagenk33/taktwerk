@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { api, type Branding, type Providers } from "../api";
-import { MatterhornMark, MatterhornRidge } from "../ui/motif";
+import { BrandMark, MatterhornRidge } from "../ui/motif";
 
 const SSO_ERRORS: Record<string, string> = {
   abgebrochen: "Die Anmeldung wurde abgebrochen. Bitte erneut versuchen.",
@@ -13,7 +13,7 @@ function BrandPanel({ branding }: { branding: Branding }) {
   return (
     <aside className="login-brand">
       <div className="brand">
-        <span className="brand-mark brand-mark-inverse"><MatterhornMark /></span>
+        <BrandMark logo={branding.logo} inverse size={34} />
         <span>{branding.appName}</span>
       </div>
       <div className="login-claim">

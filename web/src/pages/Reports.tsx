@@ -3,6 +3,7 @@ import { addMonths, fmt1, fmtCHF, fmtCHF2, fmtDate, fmtMonth, fmtMonthLong, fmtN
 import { api, type Invoice, type InvoicePosition, type InvoiceStatus } from "../api";
 import { useStore } from "../store";
 import { BulletBars, BurnUpChart, Icon, Money, StatusPill, reportToBullet } from "../ui/components";
+import { Select } from "../ui/Select";
 
 /** PDF/Excel download, recipients and «send now» for one customer. */
 function ReportExport({ customerId }: { customerId: string }) {
@@ -64,9 +65,7 @@ function ReportExport({ customerId }: { customerId: string }) {
       <div className="export-bar">
         <label className="field">
           <span>Leistungsnachweis für</span>
-          <select id="r-month" className="input" value={month} onChange={(e) => setMonth(e.target.value)}>
-            {months.map((m) => <option key={m} value={m}>{fmtMonthLong(m)}</option>)}
-          </select>
+          <Select id="r-month" value={month} onChange={setMonth} options={months.map((m) => ({ value: m, label: fmtMonthLong(m) }))} />
         </label>
         {demo ? (
           <>
@@ -206,9 +205,7 @@ function Invoices({ customerId }: { customerId: string }) {
       <div className="export-bar">
         <label className="field">
           <span>Rechnung für</span>
-          <select id="i-month" className="input" value={month} onChange={(e) => setMonth(e.target.value)}>
-            {months.map((m) => <option key={m} value={m}>{fmtMonthLong(m)}</option>)}
-          </select>
+          <Select id="i-month" value={month} onChange={setMonth} options={months.map((m) => ({ value: m, label: fmtMonthLong(m) }))} />
         </label>
         <span className="muted" style={{ fontSize: "0.82rem" }}>
           {preview ? (preview.positions.length ? `${preview.positions.length} Positionen · netto ${fmtCHF2(preview.net)}` : "Keine verrechenbaren Stunden oder Spesen") : "…"}
@@ -320,10 +317,12 @@ export function Reports() {
         </div>
         <label className="field" style={{ minWidth: 220 }}>
           <span>Kunde</span>
-          <select id="r-customer" className="input" value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSelected(null); setOpen(new Set(reports.filter((r) => r.customer.id === e.target.value).map((r) => r.project.id))); }}>
-            <option value="">Alle Kunden</option>
-            {data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <Select
+            id="r-customer"
+            value={customerId}
+            onChange={(v) => { setCustomerId(v); setSelected(null); setOpen(new Set(reports.filter((r) => r.customer.id === v).map((r) => r.project.id))); }}
+            options={[{ value: "", label: "Alle Kunden" }, ...data.customers.map((c) => ({ value: c.id, label: c.name }))]}
+          />
         </label>
       </div>
 

@@ -2,7 +2,8 @@ import { DEFAULT_RATES, VAT_RATES, defaultHolidays, fmt1, fmtCHF2, fmtDate, type
 import { useEffect, useState } from "react";
 import { api, type BillingSettings, type Branding, type Settings as OrgSettings, type UserRow } from "../api";
 import { useStore } from "../store";
-import { MatterhornMark, MatterhornRidge } from "../ui/motif";
+import { BrandMark, MatterhornRidge } from "../ui/motif";
+import { Select } from "../ui/Select";
 
 const PRESETS = [
   { name: "Schweizer Rot", color: "#D52B1E" },
@@ -14,9 +15,22 @@ const PRESETS = [
 const ROLE_LABEL: Record<Role, string> = { admin: "Admin", consultant: "Consultant", employee: "Mitarbeitende" };
 
 function Appearance() {
-  const { branding, setBranding, notify } = useStore();
+  const { branding, setBranding, setLogo, notify } = useStore();
   const [draft, setDraft] = useState<Branding>(branding);
   const [error, setError] = useState("");
+  const [logoBusy, setLogoBusy] = useState(false);
+  const changeLogo = async (file: File | null) => {
+    setLogoBusy(true);
+    try {
+      await setLogo(file);
+      setError("");
+      notify(file ? "Logo gespeichert" : "Logo entfernt");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLogoBusy(false);
+    }
+  };
   const valid = /^#[0-9a-fA-F]{6}$/.test(draft.primaryColor) && draft.appName.trim() !== "";
 
   const save = async () => {
@@ -46,6 +60,20 @@ function Appearance() {
             <input id="b-hex" className="input mono" style={{ width: 110 }} value={draft.primaryColor} onChange={(e) => setDraft({ ...draft, primaryColor: e.target.value })} />
           </div>
         </div>
+        <div className="field">
+          <span>Logo</span>
+          <div className="logo-row">
+            <BrandMark logo={branding.logo} size={40} />
+            <div className="toolbar">
+              <label className="btn small">
+                {branding.logo ? "Logo ersetzen" : "Logo hochladen"}
+                <input id="b-logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden disabled={logoBusy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) changeLogo(f); }} />
+              </label>
+              {branding.logo && <button className="btn small ghost" disabled={logoBusy} onClick={() => changeLogo(null)}>Entfernen</button>}
+            </div>
+          </div>
+          <span className="muted" style={{ fontSize: "0.78rem", fontWeight: 400 }}>PNG, SVG, JPEG oder WebP bis 1 MB, am besten quadratisch oder quer mit transparentem Hintergrund. Ohne eigenes Logo erscheint das Matterhorn-Zeichen in der Hauptfarbe.</span>
+        </div>
         <label className="check"><input id="b-motif" type="checkbox" checked={draft.showMotif} onChange={(e) => setDraft({ ...draft, showMotif: e.target.checked })} />Matterhorn-Motiv auf Anmeldeseite und in der Navigation zeigen</label>
         {error && <p className="error">{error}</p>}
         <div className="toolbar">
@@ -58,7 +86,7 @@ function Appearance() {
         <h3>Vorschau</h3>
         <div className="preview" style={{ ["--brand" as string]: valid ? draft.primaryColor : branding.primaryColor }}>
           <div className="preview-rail">
-            <div className="brand" style={{ fontSize: "0.9rem" }}><span className="brand-mark" style={{ width: 24, height: 24 }}><MatterhornMark /></span>{draft.appName || "–"}</div>
+            <div className="brand" style={{ fontSize: "0.9rem" }}><BrandMark logo={branding.logo} size={24} />{draft.appName || "–"}</div>
             <div className="nav"><a className="active">Dashboard</a><a>Zeiterfassung</a></div>
             {draft.showMotif && <span className="rail-motif" style={{ marginTop: "auto", margin: "auto -12px -12px" }}><MatterhornRidge /></span>}
           </div>
@@ -113,9 +141,7 @@ function Users() {
           <label className="field"><span>E-Mail</span><input id="u-email" type="email" className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
           <label className="field"><span>Benutzername</span><input id="u-username" className="input" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="z. B. vorname.nachname" /></label>
           <label className="field"><span>Rolle</span>
-            <select id="u-role" className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-              {(Object.keys(ROLE_LABEL) as Role[]).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-            </select>
+            <Select id="u-role" value={form.role} onChange={(v) => setForm({ ...form, role: v as Role })} options={(Object.keys(ROLE_LABEL) as Role[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))} />
           </label>
           <button className="btn primary" onClick={invite}>Einladung senden</button>
         </div>
@@ -132,9 +158,7 @@ function Users() {
                   <td className="mono">{u.username}</td>
                   <td>{u.email}</td>
                   <td>
-                    <select className="mini-select" aria-label={`Rolle von ${u.name}`} value={u.role} onChange={(e) => patch(u.id, { role: e.target.value })}>
-                      {(Object.keys(ROLE_LABEL) as Role[]).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-                    </select>
+                    <Select small ariaLabel={`Rolle von ${u.name}`} value={u.role} onChange={(v) => patch(u.id, { role: v })} options={(Object.keys(ROLE_LABEL) as Role[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))} />
                   </td>
                   <td>{!u.active ? <span className="pill neutral">Deaktiviert</span> : u.lastLoginAt ? <span className="pill ok">Aktiv</span> : <span className="pill risk">Eingeladen</span>}</td>
                   <td className="r"><button className="btn small ghost" onClick={() => patch(u.id, { active: !u.active })}>{u.active ? "Deaktivieren" : "Aktivieren"}</button></td>
@@ -267,9 +291,7 @@ function WorkSettings() {
       <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div className="tree-row">
           <h3>Feiertage</h3>
-          <select aria-label="Jahr" className="input mini-select" value={year} onChange={(e) => setYear(Number(e.target.value))}>
-            {[-1, 0, 1].map((n) => Number(data.today.slice(0, 4)) + n).map((y) => <option key={y}>{y}</option>)}
-          </select>
+          <Select small ariaLabel="Jahr" value={String(year)} onChange={(v) => setYear(Number(v))} options={[-1, 0, 1].map((n) => Number(data.today.slice(0, 4)) + n).map((y) => ({ value: String(y), label: String(y) }))} />
         </div>
         <p className="explain">Feiertage unterscheiden sich je nach Kanton. Der Vorschlag enthält die Feiertage der meisten Deutschschweizer Kantone; ergänze oder entferne, was bei euch gilt.</p>
         {ofYear.length === 0 && <p className="muted">Für {year} sind noch keine Feiertage erfasst.</p>}
@@ -284,10 +306,7 @@ function WorkSettings() {
         <div className="holiday-row">
           <input type="date" className="input" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
           <input className="input" placeholder="Name, z. B. Sechseläuten (Nachmittag)" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-          <select className="input" value={draft.fraction} onChange={(e) => setDraft({ ...draft, fraction: Number(e.target.value) })}>
-            <option value={1}>ganzer Tag</option>
-            <option value={0.5}>halber Tag</option>
-          </select>
+          <Select value={String(draft.fraction)} onChange={(v) => setDraft({ ...draft, fraction: Number(v) })} options={[{ value: "1", label: "ganzer Tag" }, { value: "0.5", label: "halber Tag" }]} />
           <button className="btn small" disabled={!draft.name.trim() || !draft.date} onClick={() => { upsert([{ ...draft, name: draft.name.trim() }]); setDraft({ ...draft, name: "" }); }}>Hinzufügen</button>
         </div>
         <div className="toolbar">
@@ -368,9 +387,7 @@ function Billing() {
           <label className="field"><span>Kilometerpauschale (CHF/km)</span><input id="bl-km" type="number" step={0.05} min={0} max={5} className="input num" value={kmRate} onChange={(e) => setKmRate(e.target.value)} /></label>
           <label className="field">
             <span>MwSt-Satz auf Rechnungen</span>
-            <select id="bl-vatrate" className="input" value={vatRate} onChange={(e) => setVatRate(Number(e.target.value))}>
-              {VAT_RATES.map((v) => <option key={v} value={v}>{v === 0 ? "keine MwSt" : `${fmt1(v)} %`}</option>)}
-            </select>
+            <Select id="bl-vatrate" value={String(vatRate)} onChange={(v) => setVatRate(Number(v))} options={VAT_RATES.map((v) => ({ value: String(v), label: v === 0 ? "keine MwSt" : `${fmt1(v)} %` }))} />
           </label>
         </div>
         <p className="muted" style={{ fontSize: "0.82rem" }}>100 km ergeben {fmtCHF2(Math.round(100 * Number(kmRate) * 20) / 20)}. Bereits erfasste Kilometerspesen behalten ihren Betrag.</p>

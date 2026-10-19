@@ -25,12 +25,24 @@ export function MatterhornRidge({ snow = "var(--surface)", back = true, classNam
   );
 }
 
-/** Compact peak for the logo square. */
+/** Compact peak for the logo square: Matterhorn silhouette with a snow cap and the Hörnli shoulder. */
 export function MatterhornMark() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M2,20 L8.5,13 L10.5,8.5 L11.4,4.6 L12.4,4 L13.3,5.6 L14.6,9.4 L16.4,11.6 L22,20 Z" fill="currentColor" />
-      <path d="M11.4,4.6 L10.9,8.6 M13.3,5.6 L14.2,10.2" stroke="var(--brand)" strokeWidth="0.9" strokeLinecap="round" fill="none" />
+    <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M17,27 L22.5,15.5 L26,20 L31,27 Z" fill="currentColor" opacity="0.4" />
+      <path d="M1,27 L9.5,17 L13,11 L15.6,4.6 L17,3.5 L18.6,6.8 L21.2,12.5 L24.5,18 L30,27 Z" fill="currentColor" />
+      <path d="M13.6,9.8 L15.6,4.6 L17,3.5 L18.6,6.8 L19.9,9.6 C18.9,9.1 18.3,10.2 17.3,9.6 C16.4,9 15.7,10 14.9,9.5 C14.5,9.3 14.1,9.5 13.6,9.8 Z" fill="var(--snow, #ffffff)" opacity="0.95" />
+      <path d="M1,27 L31,27" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
     </svg>
+  );
+}
+
+/** The logo as shown in the navigation and on the login page: an uploaded image, or the Matterhorn mark in a square. */
+export function BrandMark({ logo, size = 30, inverse = false }: { logo?: string; size?: number; inverse?: boolean }) {
+  if (logo) return <img className="brand-logo" src={logo} alt="" style={{ height: size, maxWidth: size * 4 }} />;
+  return (
+    <span className={`brand-mark ${inverse ? "brand-mark-inverse" : ""}`} style={{ width: size, height: size }}>
+      <MatterhornMark />
+    </span>
   );
 }
