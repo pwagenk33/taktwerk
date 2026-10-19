@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api, loadDataset, upload, type Branding, type Me } from "./api";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { api, loadDataset, upload, type Branding, type Me, type EntryComment, type OpenQuestion } from "./api";
 import { currentVelocity, projectReports, velocityByMonth, type ProjectReport, type VelocityFactor, type VelocityMonth } from "@taktwerk/domain";
 import { NEEDS_APPROVAL, absenceProblem, monthRange } from "@taktwerk/domain";
 import type { Absence, Customer, Dataset, Employee, Expense, Holiday, Project, Role, SubProject, TimeEntry, VelocitySettings } from "@taktwerk/domain";
@@ -95,6 +95,10 @@ interface Store {
   approveSubmitted: (month: string) => Promise<number>;
   /** Leads: e-mail one person that the month is still open. */
   remindClosing: (month: string, userId: string) => Promise<void>;
+  /** Unanswered questions on bookings the viewer should see (own bookings; leads: all). */
+  questions: OpenQuestion[];
+  comments: (entryId: string) => Promise<EntryComment[]>;
+  addComment: (entryId: string, text: string, question: boolean) => Promise<void>;
   addAbsence: (a: Omit<Absence, "id" | "status">) => Promise<Absence["status"]>;
   decideAbsence: (id: string, approve: boolean) => Promise<void>;
   deleteAbsence: (id: string) => Promise<void>;
@@ -126,9 +130,17 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
   const [toast, setToast] = useState<string | null>(null);
   const [closings, setClosings] = useState<Closing[]>(() => (me ? [] : loadLocal<Closing[]>("rt.closings", [])));
   const loadClosings = async () => setClosings(await api<Closing[]>("/api/closings"));
+  const [questions, setQuestions] = useState<OpenQuestion[]>([]);
+  const loadQuestions = async () => setQuestions(await api<OpenQuestion[]>("/api/comments/open"));
+  // Demo mode keeps comments in the browser so the flow can be tried without a server.
+  type LocalComment = EntryComment & { entryId: string };
+  const [localComments, setLocalCommentsState] = useState<LocalComment[]>(() => (me ? [] : loadLocal<LocalComment[]>("rt.comments", [])));
+  // A ref keeps `comments()` fresh for callers holding an older render's closure.
+  const localRef = useRef(localComments);
+  const setLocalComments = (next: LocalComment[]) => { localRef.current = next; setLocalCommentsState(next); };
 
   useEffect(() => {
-    if (me) loadClosings().catch(() => {});
+    if (me) { loadClosings().catch(() => {}); loadQuestions().catch(() => {}); }
   }, [me]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -276,6 +288,32 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     },
     remindClosing: async (month, userId) => {
       if (mode === "api") await api(`/api/months/${month}/remind`, { body: { userId } });
+    },
+    questions:
+      mode === "api"
+        ? questions
+        : localComments
+            .filter((c) => c.kind === "question" && !c.resolvedAt)
+            .map((c) => {
+              const e = data.timeEntries.find((x) => x.id === c.entryId);
+              return e ? { entryId: e.id, ownerId: e.employeeId, date: e.date, reason: e.reason, text: c.text, askedBy: c.authorName, createdAt: c.createdAt } : null;
+            })
+            .filter((q): q is OpenQuestion => q !== null && (role !== "employee" || q.ownerId === currentUserId)),
+    comments: async (entryId) => (mode === "api" ? api<EntryComment[]>(`/api/time-entries/${entryId}/comments`) : localRef.current.filter((c) => c.entryId === entryId)),
+    addComment: async (entryId, text, question) => {
+      if (mode === "api") {
+        await api(`/api/time-entries/${entryId}/comments`, { body: { text, question } });
+        await loadQuestions();
+        return;
+      }
+      const e = data.timeEntries.find((x) => x.id === entryId);
+      const owner = e?.employeeId === currentUserId;
+      const author = data.employees.find((x) => x.id === currentUserId)?.name ?? "Ich";
+      const now = new Date().toISOString();
+      const resolved = localRef.current.map((c) => (owner && c.entryId === entryId && c.kind === "question" && !c.resolvedAt ? { ...c, resolvedAt: now } : c));
+      const next = [...resolved, { id: uid("c"), entryId, kind: question && !owner && role !== "employee" ? ("question" as const) : ("comment" as const), text, authorId: currentUserId, authorName: author, createdAt: now, resolvedAt: null }];
+      setLocalComments(next);
+      saveLocal("rt.comments", next);
     },
     addAbsence: async (a) => {
       if (mode === "api") {

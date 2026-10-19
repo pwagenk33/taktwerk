@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, fmt1, fmtCHF, fmtCHF2, fmtDay, rateOn } from "@taktwerk/domain";
 import type { Expense, ExpenseCategory, TimeEntry } from "@taktwerk/domain";
-import { api } from "../api";
+import { api, type EntryComment } from "../api";
 import { loadLocal, saveLocal, useStore } from "../store";
 import { Icon } from "../ui/components";
 import { TYPE_CLASS, WorkTiles, signedH } from "./WorkTime";
@@ -703,6 +703,55 @@ function layoutDay(entries: TimeEntry[]): Placed[] {
   return timed;
 }
 
+/** Thread of comments under a booking; leads can ask a question that stays open until the owner answers. */
+function Comments({ entry }: { entry: TimeEntry }) {
+  const { comments, addComment, currentUserId, role, notify } = useStore();
+  const [rows, setRows] = useState<EntryComment[] | null>(null);
+  const [text, setText] = useState("");
+  const [question, setQuestion] = useState(false);
+  const [error, setError] = useState("");
+  const owner = entry.employeeId === currentUserId;
+  const canAsk = !owner && role !== "employee";
+  const load = () => comments(entry.id).then(setRows).catch((e) => setError((e as Error).message));
+  useEffect(() => { void load(); }, [entry.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const open = rows?.some((c) => c.kind === "question" && !c.resolvedAt) ?? false;
+  const submit = async () => {
+    if (!text.trim()) return;
+    try {
+      await addComment(entry.id, text.trim(), question);
+      setText("");
+      setQuestion(false);
+      notify(question && canAsk ? "Rückfrage gestellt, die Person wird benachrichtigt" : owner && open ? "Antwort gespeichert, Rückfrage erledigt" : "Kommentar gespeichert");
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <div className="comments">
+      <div className="tree-row"><span className="label">Kommentare</span>{open && <span className="pill risk">Rückfrage offen</span>}</div>
+      {rows === null && !error && <p className="muted" style={{ fontSize: "0.82rem" }}>Lade …</p>}
+      {rows && rows.length === 0 && <p className="muted" style={{ fontSize: "0.82rem" }}>Noch keine Kommentare.</p>}
+      {rows && rows.length > 0 && (
+        <ul className="comment-list">
+          {rows.map((c) => (
+            <li key={c.id} className={`comment ${c.kind} ${c.authorId === currentUserId ? "mine" : ""}`}>
+              <div className="comment-head"><strong>{c.authorName ?? "Unbekannt"}</strong>{c.kind === "question" && <span className={`pill ${c.resolvedAt ? "ok" : "risk"}`}>{c.resolvedAt ? "Beantwortet" : "Rückfrage"}</span>}<span className="muted">{new Date(c.createdAt).toLocaleString("de-CH", { dateStyle: "short", timeStyle: "short" })}</span></div>
+              <div>{c.text}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="comment-form">
+        <input id="c-text" className="input" placeholder={owner && open ? "Antwort schreiben …" : canAsk ? "Kommentar oder Rückfrage …" : "Kommentar …"} value={text} onChange={(ev) => setText(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && void submit()} />
+        {canAsk && <label className="check" title="Die Person bekommt eine Mail und sieht die Rückfrage, bis sie antwortet."><input id="c-question" type="checkbox" checked={question} onChange={(ev) => setQuestion(ev.target.checked)} />Als Rückfrage</label>}
+        <button id="c-send" className="btn small" disabled={!text.trim()} onClick={() => void submit()}>Senden</button>
+      </div>
+      {error && <p className="error">{error}</p>}
+    </div>
+  );
+}
+
 interface DialogState {
   entry?: TimeEntry;
   date: string;
@@ -833,6 +882,7 @@ function EntryDialog({ state, onClose }: { state: DialogState; onClose: () => vo
               <input id="d-reason" className="input" placeholder="z. B. Abnahme-Workshop vorbereitet" value={reason} autoFocus={!e} onChange={(ev) => setReason(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && save()} />
             </label>
             {error && <p className="error">{error}</p>}
+            {e && <Comments entry={e} />}
             {history && e && <History id={e.id} />}
             <div className="tree-row" style={{ flexWrap: "wrap", gap: 8 }}>
               <label className="check"><input id="d-billable" type="checkbox" checked={billable} onChange={(ev) => setBillable(ev.target.checked)} />Verrechenbar · {fmtCHF(rate)}/h</label>
@@ -876,7 +926,8 @@ function usePhone() {
 
 /** Week calendar: columns are days, the vertical axis is the time of day. Drag on empty space to book. */
 function WeekCalendar() {
-  const { data, currentUserId, addTimeEntry, updateTimeEntry, lockOf, notify } = useStore();
+  const { data, currentUserId, addTimeEntry, updateTimeEntry, lockOf, notify, questions } = useStore();
+  const asked = useMemo(() => new Set(questions.map((q) => q.entryId)), [questions]);
   const labels = useLabels();
   const [monday, setMonday] = useState(() => mondayOf(data.today));
   const phone = usePhone();
@@ -899,6 +950,20 @@ function WeekCalendar() {
   };
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [hover, setHover] = useState<TimeEntry | null>(null);
+  useEffect(() => {
+    const openFromHash = () => {
+      const [, kind, id] = location.hash.replace("#", "").split("/");
+      if (kind !== "e" || !id) return;
+      const e = data.timeEntries.find((x) => x.id === id);
+      if (!e) return;
+      setMonday(mondayOf(e.date));
+      setDialog({ entry: e, date: e.date, hours: e.hours });
+      history.replaceState(null, "", "#zeit");
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+    return () => window.removeEventListener("hashchange", openFromHash);
+  }, [data.timeEntries]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const open = (ev: Event) => {
       const d = (ev as CustomEvent<{ date?: string; startTime?: string; hours?: number }>).detail ?? {};
@@ -1088,7 +1153,7 @@ function WeekCalendar() {
         onPointerEnter={() => !preview && setHover(e)}
         onPointerLeave={() => setHover((h) => (h?.id === e.id ? null : h))}
       >
-        <div className="cal-block-title">{e.reason}</div>
+        <div className="cal-block-title">{asked.has(e.id) && <span className="q-badge" title="Rückfrage offen">?</span>}{e.reason}</div>
         {h >= 34 && <div className="cal-block-meta">{labels.short(e.subProjectId)}</div>}
         <div className="cal-block-time">{toClock(p.start)}–{toClock(p.end)} · {fmt1((p.end - p.start) / 60)} h</div>
         {preview && <span className="cal-badge top">{toClock(p.start)}</span>}

@@ -76,8 +76,10 @@ function greeting(): string {
 }
 
 export function Dashboard({ firstName }: { firstName: string }) {
-  const { role, data, mode, closings, currentUserId } = useStore();
+  const { role, data, mode, closings, currentUserId, questions } = useStore();
   const employee = role === "employee";
+  const myQuestions = questions.filter((q) => q.ownerId === currentUserId);
+  const teamQuestions = employee ? [] : questions.filter((q) => q.ownerId !== currentUserId);
   const lastMonth = addMonths(monthOf(data.today), -1);
   const myLastOpen = !closings.some((c) => c.userId === currentUserId && c.month === lastMonth);
   const waiting = employee ? 0 : closings.filter((c) => c.month === lastMonth && c.status === "submitted").length;
@@ -124,8 +126,10 @@ export function Dashboard({ firstName }: { firstName: string }) {
 
   return (
     <>
-      {(myLastOpen || waiting > 0) && (
+      {(myLastOpen || waiting > 0 || myQuestions.length > 0 || teamQuestions.length > 0) && (
         <div className="todo-strip">
+          {myQuestions.length > 0 && <a href={`#zeit/e/${myQuestions[0].entryId}`} className="todo"><span className="pill risk">{myQuestions.length}</span>{myQuestions.length === 1 ? "Rückfrage zu deiner Buchung" : "Rückfragen zu deinen Buchungen"}<span className="todo-go">Antworten →</span></a>}
+          {teamQuestions.length > 0 && <a href={`#zeit/e/${teamQuestions[0].entryId}`} className="todo"><span className="pill neutral">{teamQuestions.length}</span>{teamQuestions.length === 1 ? "Rückfrage im Team unbeantwortet" : "Rückfragen im Team unbeantwortet"}<span className="todo-go">Ansehen →</span></a>}
           {myLastOpen && <a href="#abschluss" className="todo"><span className="pill risk">Offen</span>{fmtMonthLong(lastMonth)} noch nicht eingereicht<span className="todo-go">Einreichen →</span></a>}
           {waiting > 0 && <a href="#abschluss" className="todo"><span className="pill risk">{waiting}</span>{waiting === 1 ? "Monat wartet" : "Monate warten"} auf deine Freigabe<span className="todo-go">Prüfen →</span></a>}
         </div>

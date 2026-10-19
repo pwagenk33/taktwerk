@@ -584,3 +584,14 @@ table.data .btn.ghost { color: var(--ink-2); }
 .combo .select-item.active { background: var(--accent-soft); }
 .combo .select-item.disabled { opacity: 0.5; cursor: default; }
 .combo-empty { padding: 10px 12px; color: var(--muted); font-size: 0.84rem; }
+
+/* ---------- comments on bookings ---------- */
+.comments { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.comment-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow: auto; }
+.comment { background: var(--surface-2); border-radius: var(--radius-s); padding: 8px 10px; font-size: 0.86rem; }
+.comment.question { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+.comment.mine { background: var(--accent-soft); }
+.comment-head { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; margin-bottom: 2px; }
+.comment-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.comment-form .input { flex: 1; min-width: 180px; }
+.q-badge { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--warn); color: #3b2a00; font-size: 0.68rem; font-weight: 800; margin-right: 4px; vertical-align: -2px; }

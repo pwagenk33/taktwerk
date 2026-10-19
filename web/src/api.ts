@@ -121,3 +121,26 @@ export function applyBranding(b: Branding) {
   document.documentElement.style.setProperty("--brand", b.primaryColor);
   document.title = b.appName;
 }
+
+/** One comment or question on a booking. */
+export interface EntryComment {
+  id: string;
+  kind: "comment" | "question";
+  text: string;
+  authorId: string | null;
+  authorName: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+/** An unanswered question on a booking, as listed for the viewer. */
+export interface OpenQuestion {
+  entryId: string;
+  ownerId: string;
+  date: string;
+  reason: string;
+  text: string;
+  askedBy: string | null;
+  createdAt: string;
+}
+

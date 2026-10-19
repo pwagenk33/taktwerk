@@ -374,3 +374,20 @@ export const jobRuns = mysqlTable(
   },
   (t) => [primaryKey({ columns: [t.job, t.period] })],
 );
+
+/** Comments on a booking. A lead's «question» stays open until the booking's owner answers. */
+export const entryComments = mysqlTable(
+  "entry_comments",
+  {
+    id: id().primaryKey(),
+    organizationId: orgId(),
+    entryId: id("entry_id").notNull().references(() => timeEntries.id, { onDelete: "cascade" }),
+    authorId: id("author_id").references(() => users.id, { onDelete: "set null" }),
+    kind: mysqlEnum("kind", ["comment", "question"]).notNull().default("comment"),
+    text: varchar("text", { length: 1000 }).notNull(),
+    resolvedAt: datetime("resolved_at", { mode: "date" }),
+    createdAt: datetime("created_at", { mode: "date", fsp: 3 }).notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [index("ec_entry_idx").on(t.entryId), index("ec_org_open_idx").on(t.organizationId, t.kind, t.resolvedAt)],
+);
+
