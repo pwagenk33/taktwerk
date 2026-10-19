@@ -412,7 +412,7 @@ table.week tfoot tr.muted td { font-weight: 400; border-top: 0; }
 .cal-block:hover { background: color-mix(in srgb, var(--ev) 32%, var(--surface)); box-shadow: 0 4px 14px rgba(0,0,0,0.18); z-index: 2; }
 .cal-block.internal { --ev: var(--muted); background: color-mix(in srgb, var(--muted) 14%, var(--surface)); }
 .cal-block.locked { cursor: default; opacity: 0.8; }
-.cal-block.preview { background: color-mix(in srgb, var(--ev) 40%, var(--surface)); border-color: var(--ev); border-style: solid; box-shadow: 0 8px 24px rgba(0,0,0,0.25); pointer-events: none; cursor: grabbing; z-index: 4; overflow: visible; }
+.cal-block.cal-preview { background: color-mix(in srgb, var(--ev) 40%, var(--surface)); border-color: var(--ev); border-style: solid; box-shadow: 0 8px 24px rgba(0,0,0,0.25); pointer-events: none; cursor: grabbing; z-index: 4; overflow: visible; }
 .cal-block.creating { --ev: var(--accent); }
 .cal-badge { position: absolute; right: 6px; background: var(--ink); color: var(--surface); font-size: 0.72rem; font-weight: 600; font-variant-numeric: tabular-nums; padding: 2px 7px; border-radius: 99px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.25); z-index: 5; }
 .cal-badge.top { top: -11px; }

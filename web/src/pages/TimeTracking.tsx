@@ -994,7 +994,7 @@ function WeekCalendar() {
     return (
       <div
         key={preview ? "preview" : e.id}
-        className={`cal-block ${color ? "" : "internal"} ${preview ? "preview" : ""} ${lock ? "locked" : ""}`}
+        className={`cal-block ${color ? "" : "internal"} ${preview ? "cal-preview" : ""} ${lock ? "locked" : ""}`}
         style={{ top, height: h, left: `calc(${(p.col / p.cols) * 100}% + 2px)`, width: `calc(${100 / p.cols}% - 4px)`, ...(color ? ({ "--ev": color } as React.CSSProperties) : {}) }}
         title={`${e.reason}\n${labels.long(e.subProjectId)} · ${fmt1(e.hours)} h${lock ? `\n${lock}` : ""}`}
         onPointerDown={(ev) => !preview && startMove(ev, e, date)}
@@ -1072,7 +1072,7 @@ function WeekCalendar() {
                 {d === data.today && nowMin >= DAY_START && nowMin <= DAY_END && <div className="cal-now" style={{ top: (nowMin - DAY_START) * PX_PER_MIN }} />}
                 {placed.filter((p) => !(drag && drag.kind !== "create" && drag.entry.id === p.entry.id)).map((p) => block(p, d))}
                 {drag?.kind === "create" && drag.date === d && (
-                  <div className="cal-block preview creating" style={{ top: (drag.from - DAY_START) * PX_PER_MIN, height: (drag.to - drag.from) * PX_PER_MIN, left: 2, right: 2 }}>
+                  <div className="cal-block cal-preview creating" style={{ top: (drag.from - DAY_START) * PX_PER_MIN, height: (drag.to - drag.from) * PX_PER_MIN, left: 2, right: 2 }}>
                     <div className="cal-block-title">Neue Buchung</div>
                     <span className="cal-badge top">{toClock(drag.from)}</span>
                     <span className="cal-badge bottom">{toClock(drag.to)} · {fmt1((drag.to - drag.from) / 60)} h</span>
