@@ -15,7 +15,7 @@ afterAll(async () => {
 });
 
 const get = (url: string, cookie: string) => t.app.inject({ method: "GET", url, headers: { cookie } });
-const send = (method: "POST" | "PUT" | "DELETE", url: string, cookie: string, payload?: unknown) => t.app.inject({ method, url, headers: { cookie }, payload });
+const send = (method: "POST" | "PUT" | "DELETE", url: string, cookie: string, payload?: object) => t.app.inject({ method, url, headers: { cookie }, payload });
 
 describe("resource planning", () => {
   it("leads reserve hours per person, project and week; everyone sees what concerns them", async () => {

@@ -24,6 +24,8 @@ import { invoiceRoutes } from "./routes/invoices";
 import { worktimeRoutes } from "./routes/worktime";
 import { planningRoutes } from "./routes/planning";
 import { portalRoutes } from "./routes/portal";
+import { platformRoutes } from "./routes/platform";
+import { statusRoutes } from "./routes/status";
 
 export type Role = "admin" | "consultant" | "employee" | "customer";
 
@@ -36,6 +38,8 @@ export interface SessionUser {
   role: Role;
   /** Set for portal accounts (role "customer"). */
   customerId?: string | null;
+  /** Operator of the installation (may manage organizations). */
+  platformAdmin?: boolean;
 }
 
 /** Portal accounts only reach the portal, auth and branding routes. */
@@ -76,10 +80,30 @@ export function requireRole(req: FastifyRequest, ...roles: Role[]): SessionUser 
   return user;
 }
 
-/** The installation's organization (one per installation for now; the schema is multi-tenant ready). */
+/**
+ * The organization a request belongs to, by host name: an organization with this `domain`, else the only organization
+ * of the installation, else null (several organizations, neutral host: branding falls back to the default).
+ */
+export async function organizationForHost(db: Db, host: string | undefined) {
+  const h = (host ?? "").split(":")[0]!.toLowerCase();
+  if (h) {
+    const [byDomain] = await db.select().from(organizations).where(eq(organizations.domain, h)).limit(1);
+    if (byDomain) return byDomain;
+  }
+  const rows = await db.select().from(organizations).limit(2);
+  return rows.length === 1 ? rows[0]! : null;
+}
+
+/** @deprecated kept for the CLI; routes use organizationForHost. */
 export async function defaultOrganization(db: Db) {
   const [org] = await db.select().from(organizations).limit(1);
   return org ?? null;
+}
+
+/** Public origin for links in e-mails: the organization's own domain when set, otherwise APP_URL. */
+export function appOrigin(config: Config, org?: { domain?: string | null } | null) {
+  const base = new URL(config.APP_URL);
+  return org?.domain ? `${base.protocol}//${org.domain}` : base.origin;
 }
 
 export async function buildApp(ctx: AppContext) {
@@ -92,13 +116,16 @@ export async function buildApp(ctx: AppContext) {
   app.decorateRequest("user", null);
   await app.register(cookie);
 
-  const appOrigin = new URL(ctx.config.APP_URL).origin;
+  const mainOrigin = new URL(ctx.config.APP_URL).origin;
 
   // CSRF: state-changing API calls must come from our own origin (cookies are SameSite=Lax as second layer).
+  // With several organizations on their own domains, the request's own host is an accepted origin too.
   app.addHook("onRequest", async (req) => {
     if (!req.url.startsWith("/api/") || ["GET", "HEAD", "OPTIONS"].includes(req.method)) return;
     const origin = req.headers.origin;
-    if (origin && origin !== appOrigin) throw new HttpError(403, "Ungültige Herkunft der Anfrage.");
+    if (!origin) return;
+    const originHost = (() => { try { return new URL(origin).host; } catch { return ""; } })();
+    if (origin !== mainOrigin && originHost !== req.headers.host) throw new HttpError(403, "Ungültige Herkunft der Anfrage.");
   });
 
   app.addHook("preHandler", async (req) => {
@@ -112,7 +139,7 @@ export async function buildApp(ctx: AppContext) {
       .limit(1);
     if (row) {
       const u = row.user;
-      req.user = { id: u.id, organizationId: u.organizationId, name: u.name, username: u.username, email: u.email, role: u.role, customerId: u.customerId };
+      req.user = { id: u.id, organizationId: u.organizationId, name: u.name, username: u.username, email: u.email, role: u.role, customerId: u.customerId, platformAdmin: u.platformAdmin };
       if (u.role === "customer" && req.url.startsWith("/api/") && !PORTAL_PREFIXES.some((p) => req.url.startsWith(p))) throw new HttpError(403, "Dieser Bereich ist für das Kundenportal nicht zugänglich.");
     }
   });
@@ -126,6 +153,7 @@ export async function buildApp(ctx: AppContext) {
   });
 
   app.get("/api/health", async () => ({ ok: true }));
+  await app.register(statusRoutes);
   await app.register(authRoutes);
   await app.register(dataRoutes);
   await app.register(adminRoutes);
@@ -140,6 +168,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(invoiceRoutes);
   await app.register(planningRoutes);
   await app.register(portalRoutes);
+  await app.register(platformRoutes);
 
   // Production: serve the built web app with SPA fallback.
   const webDist = ctx.config.WEB_DIST ? resolve(ctx.config.WEB_DIST) : null;

@@ -89,3 +89,15 @@ Die Buttons erscheinen auf der Anmeldeseite, sobald die Werte gesetzt sind.
 ## Prototyp als einzelne HTML-Datei
 
 `npm run build:single -w web` erzeugt `web/dist-single/artifact.html`, eine Version mit Beispieldaten ohne Server.
+
+## Betrieb in der Schweiz
+
+Produktionsbetrieb auf einer Schweizer Cloud-VM (Infomaniak Public Cloud oder Exoscale) mit Docker Compose, automatischem TLS und nächtlichen Backups:
+
+- [docs/BETRIEB.md](docs/BETRIEB.md) – Runbook: VM einrichten, Docker, DNS, erster Start, Updates, Rollback, Backups und Wiederherstellung, Überwachung, Logs, Datenstandort.
+- [docs/AVV-Vorlage.md](docs/AVV-Vorlage.md) – Vorlage einer Vereinbarung zur Auftragsbearbeitung nach revDSG/DSV mit TOM-Liste und Unterauftragsbearbeitern (vor Gebrauch juristisch prüfen lassen).
+- `deploy/docker-compose.prod.yml` – Stack mit `app`, `db` (MariaDB 11.4), `caddy` (Let's Encrypt) und `backup`.
+- `deploy/Caddyfile` – Reverse-Proxy, Sicherheits-Header, öffentliche Statusseite unter `status.<Domain>`.
+- `deploy/.env.prod.example` – Vorlage für `deploy/.env.prod` (alle Umgebungsvariablen mit Erklärung).
+- `deploy/backup.sh` – nächtlicher Dump um 02:30 Uhr, 30 Tage Aufbewahrung, `latest.json` für die Statusseite, optionale Off-Site-Kopie per S3.
+- `deploy/restore.sh` – Backup auflisten und mit Rückfrage wiederherstellen.

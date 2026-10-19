@@ -18,6 +18,60 @@ import { CommandPalette } from "./ui/CommandPalette";
 import { Icon } from "./ui/components";
 import { BrandMark } from "./ui/motif";
 import { Select } from "./ui/Select";
+import { api } from "./api";
+import { loadLocal, saveLocal } from "./store";
+
+/** Minimal Markdown for CHANGELOG.md: headings, bullets and paragraphs. */
+function Changelog({ markdown }: { markdown: string }) {
+  const out: JSX.Element[] = [];
+  let list: string[] = [];
+  const flush = () => { if (list.length) { out.push(<ul key={out.length}>{list.map((l, i) => <li key={i}>{l}</li>)}</ul>); list = []; } };
+  for (const raw of markdown.split("\n")) {
+    const line = raw.trim();
+    if (line.startsWith("- ")) { list.push(line.slice(2)); continue; }
+    flush();
+    if (line.startsWith("### ")) out.push(<h4 key={out.length}>{line.slice(4)}</h4>);
+    else if (line === "## Unveröffentlicht") continue;
+    else if (line.startsWith("## ")) out.push(<h3 key={out.length}>{line.slice(3)}</h3>);
+    else if (line.startsWith("# ") || line === "") continue;
+    else out.push(<p key={out.length}>{line.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")}</p>);
+  }
+  flush();
+  return <div className="changelog">{out}</div>;
+}
+
+const DEMO_CHANGELOG = `## ${__BUILD__.version} – ${__BUILD__.date}\n### Neu\n- Mehrere Firmen auf einer Installation, strikt getrennt, mit eigener Domain und eigenem Design.\n- Versionsnummer und Änderungsliste in der App.\n- Ressourcenplanung und Kundenportal.\n- Projektarten, Profitabilität, Mehrwährung, Forecast-Szenarien, geplante Berichte, Export, neue Widgets.`;
+
+function VersionInfo({ mode }: { mode: "demo" | "api" }) {
+  const [open, setOpen] = useState(false);
+  const [md, setMd] = useState<string | null>(null);
+  const [seen, setSeen] = useState(() => loadLocal<string>("rt.seenVersion", ""));
+  const fresh = seen !== __BUILD__.version;
+  const show = async () => {
+    setOpen(true);
+    saveLocal("rt.seenVersion", __BUILD__.version);
+    setSeen(__BUILD__.version);
+    if (md !== null) return;
+    if (mode === "api") setMd(await api<{ markdown: string }>("/api/changelog").then((r) => r.markdown).catch(() => "Die Änderungsliste konnte nicht geladen werden."));
+    else setMd(DEMO_CHANGELOG);
+  };
+  return (
+    <>
+      <button className="version" id="version-btn" title="Was ist neu?" onClick={() => void show()}>
+        Version {__BUILD__.version} · {__BUILD__.hash}{fresh && <span className="new-dot" aria-label="Neue Version" />}
+      </button>
+      {open && (
+        <div className="overlay" onMouseDown={(ev) => ev.target === ev.currentTarget && setOpen(false)}>
+          <div className="dialog" role="dialog" aria-label="Was ist neu" id="changelog-dialog">
+            <div className="dialog-head"><h2>Was ist neu</h2><button className="btn small ghost" onClick={() => setOpen(false)} aria-label="Schliessen"><Icon.close /></button></div>
+            <p className="muted" style={{ margin: 0 }}>Version {__BUILD__.version} · Build {__BUILD__.hash} vom {__BUILD__.date.split("-").reverse().join(".")}</p>
+            {md === null ? <p className="muted">Lade …</p> : <Changelog markdown={md} />}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 const PAGES = [
   { id: "dashboard", label: "Übersicht", icon: Icon.dashboard, lead: false },
@@ -147,7 +201,7 @@ export function App() {
             </div>
             <button className="btn small ghost logout" onClick={logout} title="Abmelden" aria-label="Abmelden"><Icon.logout /></button>
           </div>
-          <span className="version" title="Version der Anwendung">Version {__BUILD__.hash} · {__BUILD__.date.split("-").reverse().join(".")}</span>
+          <VersionInfo mode={mode} />
         </div>
       </aside>
 

@@ -4,9 +4,9 @@ import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { HttpError, SESSION_COOKIE, defaultOrganization, requireUser, type AppContext } from "../app";
+import { HttpError, SESSION_COOKIE, appOrigin, organizationForHost, requireUser, type AppContext } from "../app";
 import { hashPassword, newToken, passwordProblem, sha256, verifyPassword } from "../auth/crypto";
-import { DEFAULT_BRANDING, oauthAccounts, passwordTokens, sessions, users } from "../db/schema";
+import { DEFAULT_BRANDING, oauthAccounts, organizations, passwordTokens, sessions, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 
 type Provider = "microsoft" | "google";
@@ -47,8 +47,8 @@ export async function createPasswordToken(ctx: AppContext, userId: string, purpo
   return token;
 }
 
-export function passwordLink(ctx: AppContext, token: string) {
-  return `${new URL(ctx.config.APP_URL).origin}/passwort?token=${encodeURIComponent(token)}`;
+export function passwordLink(ctx: AppContext, token: string, org?: { domain?: string | null } | null) {
+  return `${appOrigin(ctx.config, org)}/passwort?token=${encodeURIComponent(token)}`;
 }
 
 export async function authRoutes(app: FastifyInstance) {
@@ -58,10 +58,11 @@ export async function authRoutes(app: FastifyInstance) {
     password: true,
     microsoft: oauthClient(ctx, "microsoft") !== null,
     google: oauthClient(ctx, "google") !== null,
+    registration: ctx.config.REGISTRATION_OPEN === "true",
   }));
 
-  /** Public branding so the login page can render in the corporate design. */
-  app.get("/api/branding", async () => (await defaultOrganization(ctx.db))?.settings.branding ?? DEFAULT_BRANDING);
+  /** Public branding so the login page can render in the corporate design (per host, see organizationForHost). */
+  app.get("/api/branding", async (req) => (await organizationForHost(ctx.db, req.headers.host))?.settings.branding ?? DEFAULT_BRANDING);
 
   app.post("/api/auth/login", async (req, reply) => {
     const body = z.object({ username: z.string().trim().min(1).max(254), password: z.string().min(1).max(500) }).parse(req.body);
@@ -81,6 +82,11 @@ export async function authRoutes(app: FastifyInstance) {
       throw new HttpError(401, "Benutzername oder Passwort ist falsch.");
     }
     failures.delete(key);
+    // Strict tenant separation: on an organization's own domain only its users may sign in; inactive organizations are closed.
+    const hostOrg = await organizationForHost(ctx.db, req.headers.host);
+    if (hostOrg?.domain && hostOrg.id !== user.organizationId) throw new HttpError(403, "Dieses Konto gehört zu einer anderen Firma. Bitte die Adresse deiner Firma verwenden.");
+    const [own] = await ctx.db.select({ active: organizations.active }).from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
+    if (own && !own.active) throw new HttpError(403, "Diese Firma ist deaktiviert. Bitte den Betreiber kontaktieren.");
     await startSession(ctx, reply, user.id);
     return { ok: true };
   });
@@ -116,7 +122,8 @@ export async function authRoutes(app: FastifyInstance) {
     const [user] = await ctx.db.select().from(users).where(sql`lower(${users.email}) = ${email.toLowerCase()}`).limit(1);
     if (user?.active) {
       const token = await createPasswordToken(ctx, user.id, "reset");
-      const branding = (await defaultOrganization(ctx.db))?.settings.branding ?? DEFAULT_BRANDING;
+      const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
+      const branding = org?.settings.branding ?? DEFAULT_BRANDING;
       await ctx.mailer.send(
         actionMail(branding, {
           to: user.email,
@@ -124,7 +131,7 @@ export async function authRoutes(app: FastifyInstance) {
           greeting: `Hallo ${user.name}`,
           lines: ["Du hast ein neues Passwort angefordert. Der Link ist eine Stunde gültig."],
           action: "Neues Passwort setzen",
-          url: passwordLink(ctx, token),
+          url: passwordLink(ctx, token, org),
           footer: "Wenn du das nicht warst, kannst du diese E-Mail ignorieren. Dein Passwort bleibt unverändert.",
         }),
       );
@@ -209,9 +216,12 @@ export async function resolveOAuthUser(ctx: AppContext, provider: Provider, subj
   const [byEmail] = await ctx.db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
   let userId = byEmail?.active ? byEmail.id : null;
   if (!byEmail) {
-    const org = await defaultOrganization(ctx.db);
-    const domain = email.split("@")[1];
-    if (!org || !org.settings.ssoAutoProvisionDomains.map((d) => d.toLowerCase()).includes(domain)) return null;
+    // Auto-provisioning: the organization that lists the e-mail domain (exactly one may claim a domain).
+    const domain = email.split("@")[1]!;
+    const all = await ctx.db.select().from(organizations).where(eq(organizations.active, true));
+    const claiming = all.filter((o) => o.settings.ssoAutoProvisionDomains.map((d) => d.toLowerCase()).includes(domain));
+    const org = claiming.length === 1 ? claiming[0]! : null;
+    if (!org) return null;
     userId = randomUUID();
     await ctx.db.insert(users).values({ id: userId, organizationId: org.id, username: email, email, name, role: "employee", trackingStart: todayZurich() });
   }

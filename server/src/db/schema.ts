@@ -90,12 +90,21 @@ export interface OrgSettings {
   fx?: { rates: { EUR?: number; USD?: number }; asOf: string; source?: string; manual?: boolean };
 }
 
-export const organizations = mysqlTable("organizations", {
-  id: id().primaryKey(),
-  name: varchar("name", { length: 200 }).notNull(),
-  settings: json<OrgSettings>("settings").notNull(),
-  createdAt: createdAt(),
-});
+export const organizations = mysqlTable(
+  "organizations",
+  {
+    id: id().primaryKey(),
+    name: varchar("name", { length: 200 }).notNull(),
+    /** Short technical name (a-z, 0-9, -), unique per installation; used for the default subdomain. */
+    slug: varchar("slug", { length: 60 }),
+    /** Own host name (e.g. zeit.firma.ch). Requests on this host show this organization's branding and only accept its users. */
+    domain: varchar("domain", { length: 200 }),
+    active: boolean("active").notNull().default(true),
+    settings: json<OrgSettings>("settings").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("org_slug_uq").on(t.slug), uniqueIndex("org_domain_uq").on(t.domain)],
+);
 
 export const teams = mysqlTable("teams", {
   id: id().primaryKey(),
@@ -137,6 +146,8 @@ export const users = mysqlTable(
     reminder: json<ReminderSettings>("reminder"),
     /** Internal cost per hour in CHF; null = organization default. */
     costRate: decimal("cost_rate", { precision: 7, scale: 2, mode: "number" }),
+    /** Operator of the installation: may create and manage organizations. */
+    platformAdmin: boolean("platform_admin").notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("users_username_uq").on(t.username), uniqueIndex("users_email_uq").on(t.email)],

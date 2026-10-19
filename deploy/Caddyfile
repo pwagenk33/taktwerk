@@ -1,0 +1,28 @@
+# Caddy: automatisches TLS (Let's Encrypt) und Reverse-Proxy auf die App.
+# APP_DOMAIN kommt aus deploy/.env.prod (z. B. zeit.firma.ch).
+
+(sicherheit) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+	encode zstd gzip
+}
+
+# Hauptseite: die ganze App.
+{$APP_DOMAIN} {
+	import sicherheit
+	reverse_proxy app:3000
+}
+
+# Öffentliche Statusseite: nur /status und /api/health werden durchgereicht,
+# alles andere liefert 404. Braucht einen DNS-Eintrag für status.<APP_DOMAIN>.
+status.{$APP_DOMAIN} {
+	import sicherheit
+	@erlaubt path /status /status/* /api/health
+	reverse_proxy @erlaubt app:3000
+	respond 404
+}

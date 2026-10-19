@@ -22,6 +22,7 @@ RUN npm ci --omit=dev --workspace server --include-workspace-root=false
 COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/server/drizzle server/drizzle
 COPY --from=build /app/web/dist web/dist
+COPY CHANGELOG.md ./
 RUN mkdir -p /app/data && chown node:node /app/data
 USER node
 EXPOSE 3000

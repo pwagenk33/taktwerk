@@ -709,3 +709,12 @@ table.plan td:first-child, table.plan th:first-child { position: sticky; left: 0
 table.plan tr.group td:first-child { background: var(--surface-2); }
 table.plan td:first-child a { color: var(--ink); text-decoration: none; font-weight: 600; }
 table.plan td:first-child a:hover { color: var(--accent); }
+.input-inline { width: 100%; min-width: 140px; border: 1px solid transparent; background: transparent; padding: 4px 6px; border-radius: 6px; font: inherit; color: inherit; }
+.input-inline:hover, .input-inline:focus { border-color: var(--line); background: var(--surface); outline: none; }
+.version { cursor: pointer; background: none; border: 0; text-align: left; font: inherit; font-size: 0.68rem; }
+.version .new-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: middle; }
+.changelog h3 { font-size: 0.95rem; margin: 14px 0 4px; }
+.changelog h4 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 10px 0 4px; }
+.changelog ul { margin: 0 0 6px; padding-left: 18px; }
+.changelog li { margin: 3px 0; font-size: 0.88rem; }
+.changelog p { font-size: 0.85rem; color: var(--ink-2); }

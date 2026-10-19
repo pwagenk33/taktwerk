@@ -52,6 +52,7 @@ function Root() {
     api<Branding>("/api/branding").then(setBranding).catch(() => {});
     api<Providers>("/api/auth/providers").then(setProviders).catch(() => {});
     if (location.pathname === "/passwort") setState({ kind: "set-password" });
+    else if (location.pathname === "/registrieren") setState({ kind: "login" });
     else enter();
   }, []);
 

@@ -28,6 +28,8 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: optional,
   GOOGLE_CLIENT_SECRET: optional,
 
+  /** "true": companies can register themselves at /registrieren (SaaS mode). Otherwise only platform admins and the CLI create organizations. */
+  REGISTRATION_OPEN: z.enum(["true", "false"]).default("false"),
   /** Directory with the built web app; served by the API server in production. */
   WEB_DIST: optional,
   /** Where uploaded files (receipts) are stored. */

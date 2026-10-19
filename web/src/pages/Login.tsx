@@ -52,7 +52,9 @@ interface Props {
 
 export function Login({ branding, providers, demo, onLoggedIn }: Props) {
   const ssoError = new URLSearchParams(location.search).get("anmeldung");
-  const [view, setView] = useState<"login" | "forgot" | "sent">("login");
+  const [view, setView] = useState<"login" | "forgot" | "sent" | "register">(location.pathname === "/registrieren" ? "register" : "login");
+  const [company, setCompany] = useState("");
+  const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState(demo ? "anna.keller" : "");
   const [password, setPassword] = useState(demo ? "demo-passwort" : "");
   const [email, setEmail] = useState("");
@@ -88,6 +90,22 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
     setView("sent");
   };
 
+  const register = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (demo) return setError("Im Prototyp gibt es keine Registrierung. Melde dich mit den Beispieldaten an.");
+    setBusy(true);
+    try {
+      await api("/api/orgs/register", { body: { company, name: fullName, email, password } });
+      history.replaceState(null, "", "/");
+      onLoggedIn();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const sso = (provider: "microsoft" | "google") => {
     if (demo) return setError("Im Prototyp ist die Anmeldung mit Microsoft und Google nicht verbunden. Bitte mit Benutzername und Passwort anmelden.");
     location.href = `/api/auth/${provider}`;
@@ -119,6 +137,7 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
           {error && <p className="error" role="alert">{error}</p>}
           <button className="btn primary block" disabled={busy}>{busy ? "Anmelden …" : "Anmelden"}</button>
           <button type="button" className="link" onClick={() => { setView("forgot"); setError(""); }}>Passwort vergessen?</button>
+          {providers.registration && !demo && <button type="button" id="to-register" className="link" onClick={() => { setView("register"); setError(""); }}>Neue Firma registrieren</button>}
           {demo && <p className="notice">Prototyp mit Beispieldaten: Die Felder sind vorausgefüllt, einfach auf «Anmelden» klicken.</p>}
         </form>
       )}
@@ -134,6 +153,21 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
           {error && <p className="error" role="alert">{error}</p>}
           <button className="btn primary block">Link senden</button>
           <button type="button" className="link" onClick={() => setView("login")}>Zurück zur Anmeldung</button>
+        </form>
+      )}
+      {view === "register" && (
+        <form onSubmit={register} className="login-form">
+          <div>
+            <h2>Firma registrieren</h2>
+            <p className="muted">Deine Firma bekommt einen eigenen, getrennten Bereich. Du bist Admin und lädst dein Team selbst ein.</p>
+          </div>
+          <label className="field"><span>Firma</span><input id="r-company" className="input" value={company} onChange={(e) => setCompany(e.target.value)} required minLength={2} /></label>
+          <label className="field"><span>Dein Name</span><input id="r-name" className="input" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required /></label>
+          <label className="field"><span>E-Mail (ist dein Benutzername)</span><input id="r-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+          <label className="field"><span>Passwort (mindestens 10 Zeichen)</span><input id="r-pass" className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} /></label>
+          {error && <p className="error" role="alert">{error}</p>}
+          <button id="r-submit" className="btn primary block" disabled={busy}>{busy ? "Richte ein …" : "Firma anlegen"}</button>
+          <button type="button" className="link" onClick={() => { setView("login"); setError(""); }}>Zurück zur Anmeldung</button>
         </form>
       )}
       {view === "sent" && (

@@ -22,6 +22,20 @@ export interface Me {
   role: Role;
   /** Portal accounts: the customer they belong to. */
   customerId?: string | null;
+  /** Operator of the installation: may manage the companies on it. */
+  platformAdmin?: boolean;
+}
+
+/** A company on this installation (operator view). */
+export interface PlatformOrg {
+  id: string;
+  name: string;
+  slug: string | null;
+  domain: string | null;
+  active: boolean;
+  appName: string;
+  users: number;
+  createdAt: string;
 }
 
 /** A customer's portal account (role "customer"), managed on the customer page. */
@@ -49,6 +63,8 @@ export interface Providers {
   password: boolean;
   microsoft: boolean;
   google: boolean;
+  /** Companies may register themselves (REGISTRATION_OPEN). */
+  registration?: boolean;
 }
 
 export interface BillingSettings {

@@ -1,0 +1,107 @@
+# Produktions-Stack für TrackInsight auf einer Schweizer Cloud-VM (Infomaniak Public Cloud oder Exoscale).
+# Start:   docker compose -f deploy/docker-compose.prod.yml up -d --build
+# Anleitung: docs/BETRIEB.md
+#
+# Alle Werte kommen aus deploy/.env.prod (Vorlage: deploy/.env.prod.example).
+# Die Datei .env.prod liegt nicht im Git und enthält Passwörter – nie weitergeben.
+
+name: trackinsight
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file: .env.prod
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    restart: unless-stopped
+    expose: ["3000"]
+    volumes:
+      - data:/app/data            # hochgeladene Belege und Logo (DATA_DIR)
+      - backups:/backups:ro       # nur lesen: die App zeigt auf /status den letzten Backup-Stand (latest.json)
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # node ist im Image vorhanden, curl/wget nicht.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    env_file: .env.prod     # liefert MARIADB_ROOT_PASSWORD und MARIADB_PASSWORD
+    environment:
+      MARIADB_DATABASE: taktwerk
+      MARIADB_USER: taktwerk
+      MARIADB_AUTO_UPGRADE: "1"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=512M
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    env_file: .env.prod     # liefert APP_DOMAIN für das Caddyfile
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"       # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data    # Let's-Encrypt-Zertifikate (werden automatisch erneuert)
+      - caddy_config:/config
+    depends_on:
+      - app
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  backup:
+    image: mariadb:11.4
+    restart: unless-stopped
+    env_file: .env.prod     # liefert MARIADB_PASSWORD und optional BACKUP_*
+    environment:
+      TZ: Europe/Zurich
+      BACKUP_TIME: "02:30"
+      BACKUP_KEEP_DAYS: "30"
+      DB_HOST: db
+      DB_NAME: taktwerk
+      DB_USER: taktwerk
+    entrypoint: ["bash", "/backup.sh"]
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  db:
+  data:
+  backups:
+  caddy_data:
+  caddy_config:

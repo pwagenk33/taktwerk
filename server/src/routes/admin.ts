@@ -206,7 +206,7 @@ export async function adminRoutes(app: FastifyInstance) {
           "Setze über den Link ein Passwort. Alternativ kannst du dich mit deinem Microsoft- oder Google-Konto anmelden, wenn es diese E-Mail-Adresse verwendet.",
         ],
         action: "Passwort festlegen",
-        url: passwordLink(ctx, token),
+        url: passwordLink(ctx, token, org),
         footer: "Der Link ist sieben Tage gültig.",
       }),
     );

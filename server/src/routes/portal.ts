@@ -127,7 +127,7 @@ export async function portalRoutes(app: FastifyInstance) {
           `Ihr Benutzername ist Ihre E-Mail-Adresse «${body.email}». Legen Sie über den Link ein Passwort fest.`,
         ],
         action: "Passwort festlegen",
-        url: passwordLink(ctx, token),
+        url: passwordLink(ctx, token, org),
         footer: "Der Link ist sieben Tage gültig. Bei Fragen antworten Sie einfach auf diese E-Mail.",
       }),
     );

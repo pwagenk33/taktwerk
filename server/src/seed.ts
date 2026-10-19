@@ -22,12 +22,23 @@ const slug = (name: string) =>
   name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]+/g, ".").replace(/^\.|\.$/g, "");
 
 /** Creates the organization and its first admin. Returns the ids. */
-export async function createOrganization(db: Db, o: { orgName: string; name: string; email: string; username: string; passwordHash?: string }) {
+export const slugOf = (name: string) =>
+  name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "firma";
+
+/** A slug that is free in the database: the proposal, else proposal-2, -3, … */
+export async function freeSlug(db: Db, proposal: string) {
+  const taken = new Set((await db.select({ slug: organizations.slug }).from(organizations)).map((o) => o.slug));
+  if (!taken.has(proposal)) return proposal;
+  for (let i = 2; ; i++) if (!taken.has(`${proposal}-${i}`)) return `${proposal}-${i}`;
+}
+
+export async function createOrganization(db: Db, o: { orgName: string; name: string; email: string; username: string; passwordHash?: string; slug?: string; domain?: string; platformAdmin?: boolean }) {
   const orgId = randomUUID();
   const userId = randomUUID();
-  await db.insert(organizations).values({ id: orgId, name: o.orgName, settings: { branding: DEFAULT_BRANDING, ssoAutoProvisionDomains: [] } });
-  await db.insert(users).values({ id: userId, organizationId: orgId, name: o.name, email: o.email, username: o.username, role: "admin", passwordHash: o.passwordHash ?? null, trackingStart: todayZurich() });
-  return { orgId, userId };
+  const slug = await freeSlug(db, o.slug ?? slugOf(o.orgName));
+  await db.insert(organizations).values({ id: orgId, name: o.orgName, slug, domain: o.domain ?? null, settings: { branding: { ...DEFAULT_BRANDING, appName: DEFAULT_BRANDING.appName }, ssoAutoProvisionDomains: [] } });
+  await db.insert(users).values({ id: userId, organizationId: orgId, name: o.name, email: o.email, username: o.username, role: "admin", passwordHash: o.passwordHash ?? null, trackingStart: todayZurich(), platformAdmin: o.platformAdmin ?? false });
+  return { orgId, userId, slug };
 }
 
 /** Loads the example dataset (4 customers, 11 months) into an empty database. Every sample user gets `password`. */
@@ -41,6 +52,7 @@ export async function seedSample(db: Db, password: string) {
   await db.insert(organizations).values({
     id: orgId,
     name: "Beispiel AG",
+    slug: "beispiel",
     settings: {
       branding: DEFAULT_BRANDING,
       ssoAutoProvisionDomains: [],
@@ -73,6 +85,8 @@ export async function seedSample(db: Db, password: string) {
       trackingStart: e.trackingStart,
       overtimeCarry: e.overtimeCarry,
       vacationCarry: e.vacationCarry,
+      // The first admin of the sample installation is also its operator.
+      platformAdmin: e.id === "e1",
     })),
   );
   await db.insert(absences).values(

@@ -1,6 +1,6 @@
 import { DEFAULT_RATES, EXPORT_ENTITIES, VAT_RATES, defaultHolidays, exportRows, fmt1, fmtCHF2, fmtDate, toCsv, type ExportEntity, type Holiday, type PostalAddress, type Role } from "@taktwerk/domain";
 import { useEffect, useState } from "react";
-import { api, type BillingSettings, type Branding, type ScheduledReport, type Settings as OrgSettings, type UserRow } from "../api";
+import { api, type BillingSettings, type Branding, type PlatformOrg, type ScheduledReport, type Settings as OrgSettings, type UserRow } from "../api";
 import { useStore } from "../store";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
 import { Select } from "../ui/Select";
@@ -564,8 +564,96 @@ function ReportsAndExport() {
   );
 }
 
+/** Operator console: the companies on this installation, each strictly separated by organization. */
+function Operator() {
+  const { mode, notify } = useStore();
+  const [data, setData] = useState<{ registrationOpen: boolean; mainOrigin: string; orgs: PlatformOrg[] } | null>(null);
+  const [form, setForm] = useState({ name: "", domain: "", adminName: "", adminEmail: "" });
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const demoOrgs: PlatformOrg[] = [
+    { id: "o1", name: "Beispiel AG", slug: "beispiel", domain: "zeit.beispiel.ch", active: true, appName: "TrackInsight", users: 7, createdAt: "2026-01-05" },
+    { id: "o2", name: "Zweite GmbH", slug: "zweite-gmbh", domain: null, active: true, appName: "ZweiteZeit", users: 12, createdAt: "2026-06-12" },
+    { id: "o3", name: "Alte AG", slug: "alte-ag", domain: null, active: false, appName: "TrackInsight", users: 3, createdAt: "2025-11-20" },
+  ];
+  const load = () => (mode === "api" ? api<typeof data>("/api/platform/orgs").then(setData).catch((e: Error) => setError(e.message)) : Promise.resolve(setData({ registrationOpen: false, mainOrigin: "https://app.trackinsight.ch", orgs: demoOrgs })));
+  useEffect(() => { void load(); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  const create = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      if (mode === "api") await api("/api/platform/orgs", { body: { name: form.name, domain: form.domain || undefined, adminName: form.adminName, adminEmail: form.adminEmail } });
+      else setData((d) => d && { ...d, orgs: [...d.orgs, { id: `o${d.orgs.length + 1}`, name: form.name, slug: form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), domain: form.domain || null, active: true, appName: "TrackInsight", users: 1, createdAt: new Date().toISOString() }] });
+      notify(`${form.name} angelegt, Einladung an ${form.adminEmail} geschickt`);
+      setForm({ name: "", domain: "", adminName: "", adminEmail: "" });
+      setOpen(false);
+      if (mode === "api") await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const patch = async (o: PlatformOrg, body: Partial<Pick<PlatformOrg, "active" | "domain">>) => {
+    if (body.active === false && !confirm(`${o.name} deaktivieren? Alle Personen werden sofort abgemeldet und können sich nicht mehr anmelden.`)) return;
+    if (mode === "api") await api(`/api/platform/orgs/${o.id}`, { method: "PATCH", body });
+    setData((d) => d && { ...d, orgs: d.orgs.map((x) => (x.id === o.id ? { ...x, ...body } : x)) });
+    notify(body.active === false ? `${o.name} deaktiviert` : body.active === true ? `${o.name} aktiviert` : "Domain gespeichert");
+  };
+  if (!data) return <p className="muted">{error || "Lade …"}</p>;
+  return (
+    <div className="stack">
+      <section className="card">
+        <div className="card-head">
+          <h2>Firmen auf dieser Installation</h2>
+          <button id="org-add" className="btn small" onClick={() => setOpen((o) => !o)}>+ Firma</button>
+        </div>
+        <div className="card-pad" style={{ paddingTop: 10 }}>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Jede Firma ist strikt getrennt: eigene Benutzer, Kunden, Daten und Design. Mit eigener Domain (DNS-Eintrag auf diesen Server) erscheint ihr Design schon auf der Anmeldeseite, und nur ihre Benutzer können sich dort anmelden.
+            {" "}Selbstregistrierung unter {data.mainOrigin}/registrieren ist {data.registrationOpen ? "offen" : "geschlossen"} (Umgebungsvariable REGISTRATION_OPEN).
+          </p>
+          {open && (
+            <form className="form-grid" style={{ marginBottom: 14 }} onSubmit={(e) => { e.preventDefault(); void create(); }}>
+              <label className="field"><span>Firma</span><input id="org-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></label>
+              <label className="field"><span>Eigene Domain (optional)</span><input id="org-domain" value={form.domain} onChange={(e) => setForm({ ...form, domain: e.target.value })} placeholder="zeit.firma.ch" /></label>
+              <label className="field"><span>Admin, Name</span><input id="org-admin" value={form.adminName} onChange={(e) => setForm({ ...form, adminName: e.target.value })} required /></label>
+              <label className="field"><span>Admin, E-Mail</span><input id="org-email" type="email" value={form.adminEmail} onChange={(e) => setForm({ ...form, adminEmail: e.target.value })} required /></label>
+              <div className="field"><span>&nbsp;</span><button id="org-create" className="btn primary" disabled={busy}>Anlegen und einladen</button></div>
+              {error && <p className="error" style={{ gridColumn: "1 / -1" }}>{error}</p>}
+            </form>
+          )}
+          <div className="table-wrap">
+            <table className="data" id="org-table">
+              <thead><tr><th>Firma</th><th>Kürzel</th><th>Domain</th><th className="r">Benutzer</th><th>Status</th><th /></tr></thead>
+              <tbody>
+                {data.orgs.map((o) => (
+                  <tr key={o.id} className={o.active ? "" : "muted"}>
+                    <td><strong>{o.name}</strong><div className="muted" style={{ fontSize: "0.78rem" }}>{o.appName} · seit {fmtDate(o.createdAt.slice(0, 10))}</div></td>
+                    <td className="mono">{o.slug ?? "–"}</td>
+                    <td>
+                      <input className="input-inline" defaultValue={o.domain ?? ""} placeholder="zeit.firma.ch" aria-label={`Domain von ${o.name}`} onBlur={(e) => { const v = e.target.value.trim().toLowerCase(); if (v !== (o.domain ?? "")) void patch(o, { domain: v || null }).catch((err: Error) => { setError(err.message); e.target.value = o.domain ?? ""; }); }} />
+                    </td>
+                    <td className="r num">{o.users}</td>
+                    <td><span className={`pill ${o.active ? "ok" : "neutral"}`}>{o.active ? "Aktiv" : "Deaktiviert"}</span></td>
+                    <td className="r"><button className="btn small ghost" onClick={() => void patch(o, { active: !o.active })}>{o.active ? "Deaktivieren" : "Aktivieren"}</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {error && !open && <p className="error">{error}</p>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function Settings() {
-  const [tab, setTab] = useState<"look" | "users" | "signin" | "work" | "billing" | "reports">("look");
+  const { me, mode } = useStore();
+  const operator = mode === "demo" || !!me?.platformAdmin;
+  const [tab, setTab] = useState<"look" | "users" | "signin" | "work" | "billing" | "reports" | "operator">("look");
   return (
     <>
       <div className="page-head">
@@ -581,6 +669,7 @@ export function Settings() {
         <button role="tab" className={tab === "work" ? "on" : ""} onClick={() => setTab("work")}>Arbeitszeit</button>
         <button role="tab" className={tab === "billing" ? "on" : ""} onClick={() => setTab("billing")}>Rechnung</button>
         <button role="tab" className={tab === "reports" ? "on" : ""} onClick={() => setTab("reports")}>Berichte & Export</button>
+        {operator && <button role="tab" id="tab-operator" className={tab === "operator" ? "on" : ""} onClick={() => setTab("operator")}>Betreiber</button>}
       </div>
       {tab === "look" && <Appearance />}
       {tab === "users" && <Users />}
@@ -588,6 +677,7 @@ export function Settings() {
       {tab === "work" && <WorkSettings />}
       {tab === "billing" && <Billing />}
       {tab === "reports" && <ReportsAndExport />}
+      {tab === "operator" && operator && <Operator />}
     </>
   );
 }
