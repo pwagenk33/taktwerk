@@ -90,6 +90,14 @@ Die Buttons erscheinen auf der Anmeldeseite, sobald die Werte gesetzt sind.
 
 `npm run build:single -w web` erzeugt `web/dist-single/artifact.html`, eine Version mit Beispieldaten ohne Server.
 
+## Rollen, Datenschutz und Arbeitsrecht
+
+- **Rollen:** Admin und Consultant sehen alles. Mitarbeitende sehen Eigenes, ausser sie leiten ein Projekt (Projektseite → Projektleitung) oder ein Team (Einstellungen → Benutzer → Teams). Rolle «Treuhand» sieht alles und kann nichts ändern.
+- **Sicherheit:** Zwei-Faktor mit Authenticator-App, Passkeys, Geräteübersicht (Profil → Sicherheit); Admins setzen den zweiten Faktor zurück.
+- **Datenschutz:** Auskunft unter Profil → Meine Daten, Anonymisieren in der Benutzerliste, Fristen und Ablauf in [docs/DATENSCHUTZ.md](docs/DATENSCHUTZ.md).
+- **Arbeitszeitmodell** (Einstellungen → Arbeitszeit): vereinfacht nach Art. 73b ArGV 1 oder Kommen/Gehen mit Pausen; bei Kommen/Gehen erscheint in der Zeiterfassung die Stempelleiste.
+- **Lasttest:** `npm run loadtest -w server`, Ergebnisse in [docs/LASTTEST.md](docs/LASTTEST.md).
+
 ## Betrieb in der Schweiz
 
 Produktionsbetrieb auf einer Schweizer Cloud-VM (Infomaniak Public Cloud oder Exoscale) mit Docker Compose, automatischem TLS und nächtlichen Backups:
