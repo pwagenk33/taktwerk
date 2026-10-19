@@ -40,7 +40,7 @@ export interface Branding {
   logoMime?: string;
 }
 
-export const DEFAULT_BRANDING: Branding = { appName: "Taktwerk", primaryColor: "#D52B1E", showMotif: true };
+export const DEFAULT_BRANDING: Branding = { appName: "TrackInsight", primaryColor: "#D52B1E", showMotif: true };
 
 export interface PostalAddress {
   name: string;

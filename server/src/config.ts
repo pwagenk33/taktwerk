@@ -19,7 +19,7 @@ const schema = z.object({
   SMTP_SECURE: z.enum(["true", "false"]).default("false"),
   SMTP_USER: optional,
   SMTP_PASSWORD: optional,
-  SMTP_FROM: z.string().default("Taktwerk <no-reply@localhost>"),
+  SMTP_FROM: z.string().default("TrackInsight <no-reply@localhost>"),
 
   MICROSOFT_CLIENT_ID: optional,
   MICROSOFT_CLIENT_SECRET: optional,

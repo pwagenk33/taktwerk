@@ -1,4 +1,4 @@
-# Konzept: Zeiterfassung & Reporting (Arbeitstitel «Taktwerk»)
+# Konzept: Zeiterfassung & Reporting («TrackInsight»)
 
 Stand 18.10.2026 · Konzept freigegeben, Meilenstein 1 sowie die Pakete «Abrechnung» und «Arbeitszeit & Absenzen» umgesetzt. Berechnungslogik in `packages/domain/src/calc.ts`.
 

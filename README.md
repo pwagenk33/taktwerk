@@ -1,4 +1,4 @@
-# Taktwerk (Arbeitstitel)
+# TrackInsight
 
 Zeiterfassung und Kunden-Reporting mit JIRA-basiertem Forecast. Konzept: [docs/KONZEPT.md](docs/KONZEPT.md).
 

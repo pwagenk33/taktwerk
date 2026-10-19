@@ -99,7 +99,7 @@ describe("work model administration", () => {
     const s = (await send("PUT", "/api/settings", admin, { weeklyHours: 40, holidays })).json();
     expect(s.weeklyHours).toBe(40);
     expect(s.holidays.map((h: { date: string }) => h.date)).toEqual(["2026-01-01", "2026-05-01"]);
-    expect(s.branding.appName).toBe("Taktwerk");
+    expect(s.branding.appName).toBe("TrackInsight");
     expect((await send("PUT", "/api/settings", admin, { holidays: [{ date: "2026-05-01", name: "X", fraction: 0.3 }] })).statusCode).toBe(400);
     expect((await get("/api/dataset", lea)).json().workModel.weeklyHours).toBe(40);
   });

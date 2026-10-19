@@ -1,10 +1,10 @@
-# Taktwerk: Aufbau, Abhängigkeiten, Datenablage
+# TrackInsight: Aufbau, Abhängigkeiten, Datenablage
 
 Stand: Oktober 2026. Dieses Dokument erklärt, aus welchen Teilen die Anwendung besteht, welche Fremdbibliotheken sie nutzt und wozu, wo Daten liegen und wie man an sie herankommt.
 
 ## 1. Überblick
 
-Taktwerk ist eine Web-Anwendung aus drei Teilen in einem Repository (npm-Workspaces):
+TrackInsight ist eine Web-Anwendung aus drei Teilen in einem Repository (npm-Workspaces):
 
 | Teil | Ordner | Technik | Aufgabe |
 |---|---|---|---|
@@ -162,4 +162,4 @@ Befehle für Entwicklung: `npm run dev:server` (Server mit Neustart bei Änderun
 
 Ja. React ist nach wie vor das meistgenutzte Oberflächen-Framework; Next.js (etwa bei kubabonus.com) ist ein Aufsatz auf React. Für eine Anwendung hinter einer Anmeldung bringt Next.js (Server-Rendering, SEO) keinen Vorteil, dafür mehr Betriebsaufwand.
 
-Beim Styling setzt Taktwerk auf eigenes CSS mit Design-Tokens (Farben, Abstände, Schrift als CSS-Variablen), damit Hauptfarbe, Logo und Hell/Dunkel ohne Umbau konfigurierbar bleiben. Für Bedienelemente, die der Browser schlecht gestaltbar macht (Dropdowns, später Dialoge, Tooltips, Datumswahl), kommen Radix-UI-Primitives dazu: unsichtbar in der Logik, barrierefrei, komplett in unserem Design. Das ist derselbe Weg, den moderne Komponenten-Bibliotheken wie shadcn/ui gehen. Ein Wechsel auf Tailwind oder eine fertige Komponenten-Bibliothek ist möglich, aber kein Gewinn an Funktion, sondern nur an Geschmack; er würde bestehende Seiten neu schreiben.
+Beim Styling setzt TrackInsight auf eigenes CSS mit Design-Tokens (Farben, Abstände, Schrift als CSS-Variablen), damit Hauptfarbe, Logo und Hell/Dunkel ohne Umbau konfigurierbar bleiben. Für Bedienelemente, die der Browser schlecht gestaltbar macht (Dropdowns, später Dialoge, Tooltips, Datumswahl), kommen Radix-UI-Primitives dazu: unsichtbar in der Logik, barrierefrei, komplett in unserem Design. Das ist derselbe Weg, den moderne Komponenten-Bibliotheken wie shadcn/ui gehen. Ein Wechsel auf Tailwind oder eine fertige Komponenten-Bibliothek ist möglich, aber kein Gewinn an Funktion, sondern nur an Geschmack; er würde bestehende Seiten neu schreiben.
