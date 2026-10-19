@@ -46,6 +46,7 @@ export interface Settings {
   kmRate?: number;
   vatRate?: number;
   hoursReminder?: boolean;
+  closingReminder?: boolean;
   billing?: BillingSettings;
 }
 

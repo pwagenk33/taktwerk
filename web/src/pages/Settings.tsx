@@ -245,9 +245,14 @@ function WorkSettings() {
   const model = data.workModel ?? { weeklyHours: 42, holidays: [] };
   const [reminder, setReminder] = useState(true);
   const [reminderSaved, setReminderSaved] = useState(true);
+  const [closingRem, setClosingRem] = useState(true);
+  const [closingRemSaved, setClosingRemSaved] = useState(true);
   useEffect(() => {
     if (mode === "demo") return;
-    api<OrgSettings>("/api/settings").then((s) => { setReminder(s.hoursReminder ?? true); setReminderSaved(s.hoursReminder ?? true); }).catch(() => {});
+    api<OrgSettings>("/api/settings").then((s) => {
+      setReminder(s.hoursReminder ?? true); setReminderSaved(s.hoursReminder ?? true);
+      setClosingRem(s.closingReminder ?? true); setClosingRemSaved(s.closingReminder ?? true);
+    }).catch(() => {});
   }, [mode]);
   const [weeklyHours, setWeeklyHours] = useState(String(model.weeklyHours));
   const [holidays, setHolidays] = useState<Holiday[]>(model.holidays);
@@ -255,7 +260,7 @@ function WorkSettings() {
   const [draft, setDraft] = useState<Holiday>({ date: `${year}-05-01`, name: "", fraction: 1 });
   const [error, setError] = useState("");
   const ofYear = holidays.filter((h) => h.date.startsWith(String(year))).sort((a, b) => a.date.localeCompare(b.date));
-  const changed = Number(weeklyHours) !== model.weeklyHours || JSON.stringify(holidays) !== JSON.stringify(model.holidays) || reminder !== reminderSaved;
+  const changed = Number(weeklyHours) !== model.weeklyHours || JSON.stringify(holidays) !== JSON.stringify(model.holidays) || reminder !== reminderSaved || closingRem !== closingRemSaved;
 
   const upsert = (list: Holiday[]) => {
     const map = new Map(holidays.map((h) => [h.date, h]));
@@ -264,8 +269,9 @@ function WorkSettings() {
   };
   const save = async () => {
     try {
-      await setWorkSettings({ weeklyHours: Number(weeklyHours), holidays, hoursReminder: reminder });
+      await setWorkSettings({ weeklyHours: Number(weeklyHours), holidays, hoursReminder: reminder, closingReminder: closingRem });
       setReminderSaved(reminder);
+      setClosingRemSaved(closingRem);
       setError("");
       notify("Arbeitszeitmodell gespeichert");
     } catch (e) {
@@ -285,6 +291,8 @@ function WorkSettings() {
         <h3>Erinnerung</h3>
         <label className="check"><input id="w-reminder" type="checkbox" checked={reminder} onChange={(e) => setReminder(e.target.checked)} />Montags per E-Mail erinnern, wenn in der Vorwoche mehr als zwei Stunden fehlen</label>
         <p className="muted" style={{ fontSize: "0.82rem" }}>Die Erinnerung geht ab 09:00 Uhr an die betroffene Person und nennt die fehlenden Stunden. Bei Ferien und Krankheit zählen die gutgeschriebenen Stunden mit.</p>
+        <label className="check"><input id="w-closing-reminder" type="checkbox" checked={closingRem} onChange={(e) => setClosingRem(e.target.checked)} />Am 1. per E-Mail an den Monatsabschluss erinnern</label>
+        <p className="muted" style={{ fontSize: "0.82rem" }}>Wer den Vormonat noch nicht eingereicht hat, bekommt am 1. ab 09:00 Uhr eine Mail. Am 5. erhalten Admins und Consultants eine Übersicht, wer fehlt und was auf Freigabe wartet.</p>
         {error && <p className="error">{error}</p>}
         <div className="toolbar"><button className="btn primary" disabled={!changed} onClick={save}>Speichern</button></div>
       </section>

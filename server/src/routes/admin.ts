@@ -71,6 +71,7 @@ export async function adminRoutes(app: FastifyInstance) {
         kmRate: z.number().min(0).max(5).optional(),
         vatRate: z.number().refine((v) => (VAT_RATES as readonly number[]).includes(v), "Ungültiger MwSt-Satz").optional(),
         hoursReminder: z.boolean().optional(),
+        closingReminder: z.boolean().optional(),
         billing: z
           .object({
             address: postalAddress,
@@ -97,6 +98,7 @@ export async function adminRoutes(app: FastifyInstance) {
       kmRate: body.kmRate ?? org.settings.kmRate,
       vatRate: body.vatRate ?? org.settings.vatRate,
       hoursReminder: body.hoursReminder ?? org.settings.hoursReminder,
+      closingReminder: body.closingReminder ?? org.settings.closingReminder,
       billing: body.billing ?? org.settings.billing,
     };
     await ctx.db.update(organizations).set({ name: body.name ?? org.name, settings }).where(eq(organizations.id, org.id));

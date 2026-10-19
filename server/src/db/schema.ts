@@ -79,6 +79,8 @@ export interface OrgSettings {
   vatRate?: number;
   /** Monday e-mail to people whose previous week is short of hours. Default on. */
   hoursReminder?: boolean;
+  /** E-mail on the 1st to people whose previous month is not submitted, digest to leads on the 5th. Default on. */
+  closingReminder?: boolean;
   billing?: BillingSettings;
 }
 

@@ -98,7 +98,7 @@ function Status({ s }: { s: ClosingStatus }) {
 }
 
 export function Closing() {
-  const { data, closings, closeMonth, role, currentUserId, notify } = useStore();
+  const { data, closings, closeMonth, approveSubmitted, remindClosing, role, currentUserId, notify, mode } = useStore();
   const current = monthOf(data.today);
   const months = [0, 1, 2, 3, 4, 5].map((n) => addMonths(current, -n));
   const [month, setMonth] = useState(addMonths(current, -1));
@@ -129,9 +129,26 @@ export function Closing() {
     }
   };
 
-  const people = data.employees;
+  const ORDER: Record<ClosingStatus, number> = { submitted: 0, open: 1, approved: 2 };
+  const people = [...data.employees].sort((a, b) => ORDER[statusOf(a.id, month)] - ORDER[statusOf(b.id, month)] || a.name.localeCompare(b.name));
   const counts = { open: 0, submitted: 0, approved: 0 };
   for (const p of people) counts[statusOf(p.id, month)]++;
+  const approveAll = async () => {
+    try {
+      const n = await approveSubmitted(month);
+      notify(n === 0 ? "Nichts zum Freigeben" : `${n} ${n === 1 ? "Monat" : "Monate"} freigegeben`);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const remind = async (p: { id: string; name: string }) => {
+    try {
+      await remindClosing(month, p.id);
+      notify(mode === "api" ? `${p.name} erinnert` : `${p.name} würde jetzt eine Erinnerung erhalten (Demo)`);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   return (
     <>
@@ -196,6 +213,7 @@ export function Closing() {
               <span className="muted" style={{ fontSize: "0.8rem" }}>
                 {counts.approved} freigegeben · {counts.submitted} eingereicht · {counts.open} offen
               </span>
+              {counts.submitted > 0 && <button id="c-approve-all" className="btn small" onClick={approveAll}>Alle {counts.submitted} eingereichten freigeben</button>}
               <Select id="c-month" small ariaLabel="Monat" value={month} onChange={setMonth} options={months.map((m) => ({ value: m, label: fmtMonthLong(m) }))} />
             </div>
           </div>
@@ -210,7 +228,10 @@ export function Closing() {
                   const s = statusOf(p.id, month);
                   return (
                     <tr key={p.id}>
-                      <td>{p.name}</td>
+                      <td>
+                        {p.name}
+                        {s !== "approved" && f.due !== null && f.due - f.hours > 2 && <div className="muted" style={{ fontSize: "0.74rem" }}>fehlen {fmt1(f.due - f.hours)} h</div>}
+                      </td>
                       <td className="r num">{f.count}</td>
                       <td className="r num">{f.due === null ? "–" : `${fmt1(f.due)} h`}</td>
                       <td className="r num">{fmt1(f.hours)} h</td>
@@ -225,6 +246,9 @@ export function Closing() {
                           )}
                           {s === "submitted" && (
                             <button className="btn small ghost" onClick={() => act("reopen", month, p.id, `${p.name}: zur Korrektur zurückgegeben`)}>Zurückweisen</button>
+                          )}
+                          {s === "open" && month !== current && (
+                            <button className="btn small ghost" title="Per E-Mail an den Monatsabschluss erinnern" onClick={() => remind(p)}>Erinnern</button>
                           )}
                           {s === "approved" && role === "admin" && (
                             <button className="btn small ghost" onClick={() => act("reopen", month, p.id, `${p.name}: ${fmtMonthLong(month)} wieder geöffnet`)}>Wieder öffnen</button>

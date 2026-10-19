@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { Responsive, WidthProvider, type Layout, type Layouts } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
-import { fmtMonthLong, monthOf } from "@taktwerk/domain";
+import { addMonths, fmtMonthLong, monthOf } from "@taktwerk/domain";
 import { loadLocal, saveLocal, useStore } from "../store";
 import { Icon } from "../ui/components";
 import { WIDGETS, type WidgetConfig } from "../widgets/registry";
@@ -76,8 +76,11 @@ function greeting(): string {
 }
 
 export function Dashboard({ firstName }: { firstName: string }) {
-  const { role, data, mode } = useStore();
+  const { role, data, mode, closings, currentUserId } = useStore();
   const employee = role === "employee";
+  const lastMonth = addMonths(monthOf(data.today), -1);
+  const myLastOpen = !closings.some((c) => c.userId === currentUserId && c.month === lastMonth);
+  const waiting = employee ? 0 : closings.filter((c) => c.month === lastMonth && c.status === "submitted").length;
   const key = `rt.dashboard.${employee ? "employee" : "lead"}`;
   const [state, setStateRaw] = useState<DashboardState>(() => loadLocal(key, defaults(employee)));
   const [editing, setEditing] = useState(false);
@@ -121,6 +124,12 @@ export function Dashboard({ firstName }: { firstName: string }) {
 
   return (
     <>
+      {(myLastOpen || waiting > 0) && (
+        <div className="todo-strip">
+          {myLastOpen && <a href="#abschluss" className="todo"><span className="pill risk">Offen</span>{fmtMonthLong(lastMonth)} noch nicht eingereicht<span className="todo-go">Einreichen →</span></a>}
+          {waiting > 0 && <a href="#abschluss" className="todo"><span className="pill risk">{waiting}</span>{waiting === 1 ? "Monat wartet" : "Monate warten"} auf deine Freigabe<span className="todo-go">Prüfen →</span></a>}
+        </div>
+      )}
       <div className="page-head">
         <div>
           <h1>{greeting()}, {firstName}</h1>

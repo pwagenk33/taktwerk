@@ -10,6 +10,7 @@ export interface WorkSettingsPatch {
   kmRate?: number;
   vatRate?: number;
   hoursReminder?: boolean;
+  closingReminder?: boolean;
 }
 
 export type WorkModelPatch = Partial<Pick<Employee, "workload" | "vacationDays" | "trackingStart" | "overtimeCarry" | "vacationCarry">>;
@@ -90,6 +91,10 @@ interface Store {
   /** Why the current user may not change a booking of `ownerId` on `date`, or null if allowed. */
   lockOf: (ownerId: string, date: string) => string | null;
   closeMonth: (action: "submit" | "approve" | "reopen", month: string, userId: string) => Promise<void>;
+  /** Leads: approve every submitted month at once. Returns how many. */
+  approveSubmitted: (month: string) => Promise<number>;
+  /** Leads: e-mail one person that the month is still open. */
+  remindClosing: (month: string, userId: string) => Promise<void>;
   addAbsence: (a: Omit<Absence, "id" | "status">) => Promise<Absence["status"]>;
   decideAbsence: (id: string, approve: boolean) => Promise<void>;
   deleteAbsence: (id: string) => Promise<void>;
@@ -256,6 +261,21 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
       const next = action === "reopen" ? rest : [...rest, { userId, month, status: action === "submit" ? ("submitted" as const) : ("approved" as const) }];
       setClosings(next);
       saveLocal("rt.closings", next);
+    },
+    approveSubmitted: async (month) => {
+      if (mode === "api") {
+        const res = await api<{ approved: number }>(`/api/months/${month}/approve-all`, { body: {} });
+        await loadClosings();
+        return res.approved;
+      }
+      const hit = closings.filter((c) => c.month === month && c.status === "submitted");
+      const next = closings.map((c) => (c.month === month && c.status === "submitted" ? { ...c, status: "approved" as const } : c));
+      setClosings(next);
+      saveLocal("rt.closings", next);
+      return hit.length;
+    },
+    remindClosing: async (month, userId) => {
+      if (mode === "api") await api(`/api/months/${month}/remind`, { body: { userId } });
     },
     addAbsence: async (a) => {
       if (mode === "api") {

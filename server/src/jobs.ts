@@ -1,7 +1,7 @@
-import { WorkCalendar, addMonths, fmtCHF, fmtDate, projectReports } from "@taktwerk/domain";
+import { WorkCalendar, addMonths, fmtCHF, fmtDate, fmtMonthLong, projectReports } from "@taktwerk/domain";
 import { and, eq, inArray } from "drizzle-orm";
 import type { AppContext } from "./app";
-import { budgetAlerts, customers, jobRuns, organizations, users } from "./db/schema";
+import { budgetAlerts, customers, jobRuns, monthClosings, organizations, users, type OrgSettings } from "./db/schema";
 import { actionMail } from "./mail/mailer";
 import { sendCustomerReport } from "./reports/export";
 import { loadDataset } from "./routes/data";
@@ -164,6 +164,73 @@ export async function sendHoursReminders(ctx: AppContext, now = new Date()) {
   return sent;
 }
 
+/** The mail asking one person to submit a month; also sent on demand by leads from the closing page. */
+export function closingReminderMail(settings: OrgSettings, user: { name: string; email: string }, month: string, appUrl: string) {
+  return actionMail(settings.branding, {
+    to: user.email,
+    subject: `${settings.branding.appName}: Bitte ${fmtMonthLong(month)} einreichen`,
+    greeting: `Hallo ${user.name.split(" ")[0]}`,
+    lines: [
+      `Dein Monat ${fmtMonthLong(month)} ist noch nicht eingereicht. Bitte prüfe deine Buchungen und reiche den Monat ein, damit er freigegeben und abgerechnet werden kann.`,
+      "Fehlt noch etwas, trage es vorher nach. Nach dem Einreichen sind die Buchungen gesperrt.",
+    ],
+    action: "Monat einreichen",
+    url: new URL("/#abschluss", appUrl).toString(),
+    footer: "Admins können diese Erinnerung unter Einstellungen → Arbeitszeit ausschalten.",
+  });
+}
+
+/**
+ * Month closing reminders. From the 1st 09:00 Zurich: everyone whose previous month is still open gets one mail.
+ * From the 5th 09:00: admins and consultants get one digest listing who has not submitted and what waits for approval.
+ */
+export async function sendClosingReminders(ctx: AppContext, now = new Date()) {
+  const z = zurich(now);
+  if (z.day === 1 && z.hour < 9) return [];
+  const month = addMonths(z.month, -1);
+  const sent: { kind: "person" | "digest"; to: string; month: string }[] = [];
+  for (const org of await ctx.db.select().from(organizations)) {
+    if (org.settings.closingReminder === false) continue;
+    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, org.id), eq(users.active, true)));
+    const rows = await ctx.db.select().from(monthClosings).where(and(eq(monthClosings.organizationId, org.id), eq(monthClosings.month, month)));
+    const data = await loadDataset(ctx, { id: "", organizationId: org.id, name: "", username: "", email: "", role: "admin" });
+    const status = (id: string) => rows.find((r) => r.userId === id)?.status ?? "open";
+    const relevant = people.filter((u) => {
+      const emp = data.employees.find((e) => e.id === u.id);
+      return emp && (emp.trackingStart ?? "") <= `${month}-31`;
+    });
+    for (const u of relevant) {
+      if (status(u.id) !== "open") continue;
+      if (!(await claim(ctx, `closing-reminder:${u.id}`, month))) continue;
+      await ctx.mailer.send(closingReminderMail(org.settings, u, month, ctx.config.APP_URL));
+      sent.push({ kind: "person", to: u.email, month });
+    }
+    if (z.day < 5 || (z.day === 5 && z.hour < 9)) continue;
+    const open = relevant.filter((u) => status(u.id) === "open");
+    const submitted = relevant.filter((u) => status(u.id) === "submitted");
+    if (open.length + submitted.length === 0) continue;
+    if (!(await claim(ctx, `closing-digest:${org.id}`, month))) continue;
+    for (const lead of people.filter((u) => u.role === "admin" || u.role === "consultant")) {
+      await ctx.mailer.send(
+        actionMail(org.settings.branding, {
+          to: lead.email,
+          subject: `${org.settings.branding.appName}: Monatsabschluss ${fmtMonthLong(month)}, ${open.length} offen, ${submitted.length} zur Freigabe`,
+          greeting: `Hallo ${lead.name.split(" ")[0]}`,
+          lines: [
+            open.length ? `Noch nicht eingereicht: ${open.map((u) => u.name).join(", ")}.` : "Alle haben eingereicht.",
+            submitted.length ? `Warten auf deine Freigabe: ${submitted.map((u) => u.name).join(", ")}.` : "Nichts wartet auf Freigabe.",
+          ],
+          action: "Monatsabschluss öffnen",
+          url: new URL("/#abschluss", ctx.config.APP_URL).toString(),
+          footer: "Diese Übersicht kommt einmal pro Monat ab dem 5. Admins können sie unter Einstellungen → Arbeitszeit ausschalten.",
+        }),
+      );
+      sent.push({ kind: "digest", to: lead.email, month });
+    }
+  }
+  return sent;
+}
+
 const addDaysIso = (iso: string, n: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -175,6 +242,7 @@ export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: stri
     ["Monatsreport", () => sendMonthlyReports(ctx, now)],
     ["Budget-Alarm", () => checkBudgetAlerts(ctx)],
     ["Stunden-Erinnerung", () => sendHoursReminders(ctx, now)],
+    ["Abschluss-Erinnerung", () => sendClosingReminders(ctx, now)],
   ] as const) {
     try {
       await job();

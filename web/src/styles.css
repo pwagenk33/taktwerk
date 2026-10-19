@@ -544,3 +544,9 @@ table.data .btn.ghost { color: var(--ink-2); }
   .cal-block { font-size: 0.8rem; padding: 5px 8px 4px; }
   .cal .card-pad:last-of-type { display: none; }
 }
+
+/* ---------- to-do strip on the overview ---------- */
+.todo-strip { display: flex; gap: 10px; flex-wrap: wrap; order: -1; }
+.todo { display: inline-flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.86rem; font-weight: 500; box-shadow: var(--shadow); }
+.todo:hover { border-color: var(--accent); }
+.todo-go { color: var(--accent); font-weight: 600; margin-left: 4px; }

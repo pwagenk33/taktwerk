@@ -6,6 +6,7 @@ import { z } from "zod";
 import { HttpError, requireRole, requireUser, type AppContext, type SessionUser } from "../app";
 import { auditLog, customerRates, customers, expenses, monthClosings, organizations, projects, subProjects, timeEntries, users } from "../db/schema";
 import { reportFile, sendCustomerReport } from "../reports/export";
+import { closingReminderMail } from "../jobs";
 
 const monthParam = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Monat im Format JJJJ-MM");
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT");
@@ -220,6 +221,34 @@ export async function billingRoutes(app: FastifyInstance) {
     await ctx.db.delete(monthClosings).where(and(eq(monthClosings.userId, userId), eq(monthClosings.month, month), eq(monthClosings.organizationId, lead.organizationId)));
     await audit(ctx, lead, "month", `${userId}:${month}`, "reopen", { status }, { status: "open" });
     return { status: "open" };
+  });
+
+  /** Leads: approve every submitted month of the organization in one go. */
+  app.post("/api/months/:month/approve-all", async (req) => {
+    const lead = requireRole(req, "admin", "consultant");
+    const month = monthParam.parse((req.params as { month: string }).month);
+    const rows = await ctx.db
+      .select()
+      .from(monthClosings)
+      .where(and(eq(monthClosings.organizationId, lead.organizationId), eq(monthClosings.month, month), eq(monthClosings.status, "submitted")));
+    for (const r of rows) {
+      await ctx.db.update(monthClosings).set({ status: "approved", approvedBy: lead.id, approvedAt: new Date() }).where(and(eq(monthClosings.userId, r.userId), eq(monthClosings.month, month), eq(monthClosings.organizationId, lead.organizationId)));
+      await audit(ctx, lead, "month", `${r.userId}:${month}`, "approve", { status: "submitted" }, { status: "approved" });
+    }
+    return { approved: rows.length };
+  });
+
+  /** Leads: send the «please submit» mail to one person right now. */
+  app.post("/api/months/:month/remind", async (req) => {
+    const lead = requireRole(req, "admin", "consultant");
+    const month = monthParam.parse((req.params as { month: string }).month);
+    const { userId } = z.object({ userId: z.string() }).parse(req.body);
+    const [person] = await ctx.db.select().from(users).where(and(eq(users.id, userId), eq(users.organizationId, lead.organizationId))).limit(1);
+    if (!person) throw new HttpError(404, "Person nicht gefunden.");
+    if ((await monthStatus(ctx, userId, month)) !== null) throw new HttpError(409, "Dieser Monat ist bereits eingereicht.");
+    const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, lead.organizationId)).limit(1);
+    await ctx.mailer.send(closingReminderMail(org.settings, person, month, ctx.config.APP_URL));
+    return { sent: true, to: person.email };
   });
 
   // ---------- customer reports ----------

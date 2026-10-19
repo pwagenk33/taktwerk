@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { checkBudgetAlerts, sendMonthlyReports } from "../src/jobs";
+import { checkBudgetAlerts, sendClosingReminders, sendMonthlyReports } from "../src/jobs";
 import { login, setup } from "./helpers";
 
 let t: Awaited<ReturnType<typeof setup>>;
@@ -149,6 +149,38 @@ describe("scheduled jobs", () => {
     // December report run: 4 Dec is before day 5, 5 Dec 07:00 sends November.
     expect(await sendMonthlyReports(t.app.ctx, new Date("2026-12-04T09:00:00Z"))).toEqual([]);
     expect((await sendMonthlyReports(t.app.ctx, new Date("2026-12-05T06:00:00Z")))[0]).toMatchObject({ month: "2026-11" });
+  });
+
+  it("reminds people on the 1st and leads on the 5th, once per month", async () => {
+    t.mailer.outbox.length = 0;
+    // 1 Nov 2026 08:30 Zurich (CET): too early.
+    expect(await sendClosingReminders(t.app.ctx, new Date("2026-11-01T07:30:00Z"))).toEqual([]);
+    const first = await sendClosingReminders(t.app.ctx, new Date("2026-11-01T08:30:00Z"));
+    expect(first.every((x) => x.kind === "person" && x.month === "2026-10")).toBe(true);
+    expect(first.map((x) => x.to)).toContain("lea.meier@beispiel.ch");
+    expect(t.mailer.outbox[0].subject).toContain("Oktober 2026 einreichen");
+    // Nothing twice; the digest only from the 5th and then once.
+    expect(await sendClosingReminders(t.app.ctx, new Date("2026-11-02T10:00:00Z"))).toEqual([]);
+    const digest = await sendClosingReminders(t.app.ctx, new Date("2026-11-05T09:00:00Z"));
+    expect(digest.every((x) => x.kind === "digest")).toBe(true);
+    expect(digest.map((x) => x.to)).toContain("anna.keller@beispiel.ch");
+    expect(digest.map((x) => x.to)).not.toContain("lea.meier@beispiel.ch");
+    expect(await sendClosingReminders(t.app.ctx, new Date("2026-11-06T09:00:00Z"))).toEqual([]);
+    // Switched off: nothing for the next month.
+    expect((await send("PUT", "/api/settings", admin, { closingReminder: false })).json()).toMatchObject({ closingReminder: false });
+    expect(await sendClosingReminders(t.app.ctx, new Date("2026-12-01T10:00:00Z"))).toEqual([]);
+  });
+
+  it("leads can remind one person now and approve all submitted months at once", async () => {
+    t.mailer.outbox.length = 0;
+    expect((await send("POST", "/api/months/2026-08/remind", lea, { userId: leaId })).statusCode).toBe(403);
+    expect((await send("POST", "/api/months/2026-08/remind", lead, { userId: leaId })).json()).toMatchObject({ sent: true, to: "lea.meier@beispiel.ch" });
+    expect(t.mailer.outbox).toHaveLength(1);
+    expect((await send("POST", "/api/months/2026-08/submit", lea)).statusCode).toBe(200);
+    expect((await send("POST", "/api/months/2026-08/remind", lead, { userId: leaId })).statusCode).toBe(409);
+    expect((await send("POST", "/api/months/2026-08/approve-all", lead)).json()).toEqual({ approved: 1 });
+    expect((await get("/api/months/2026-08", lead)).json().find((p: { userId: string }) => p.userId === leaId).status).toBe("approved");
+    expect((await send("POST", "/api/months/2026-08/approve-all", lead)).json()).toEqual({ approved: 0 });
   });
 
   it("raises each budget threshold once", async () => {
