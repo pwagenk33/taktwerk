@@ -1,6 +1,6 @@
-import { DEFAULT_RATES, VAT_RATES, defaultHolidays, fmt1, fmtCHF2, fmtDate, type Holiday, type PostalAddress, type Role } from "@taktwerk/domain";
+import { DEFAULT_RATES, EXPORT_ENTITIES, VAT_RATES, defaultHolidays, exportRows, fmt1, fmtCHF2, fmtDate, toCsv, type ExportEntity, type Holiday, type PostalAddress, type Role } from "@taktwerk/domain";
 import { useEffect, useState } from "react";
-import { api, type BillingSettings, type Branding, type Settings as OrgSettings, type UserRow } from "../api";
+import { api, type BillingSettings, type Branding, type ScheduledReport, type Settings as OrgSettings, type UserRow } from "../api";
 import { useStore } from "../store";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
 import { Select } from "../ui/Select";
@@ -452,14 +452,126 @@ function Billing() {
   );
 }
 
+const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+const newReport = (kind: ScheduledReport["kind"]): ScheduledReport =>
+  kind === "weekly"
+    ? { id: `r${Date.now().toString(36)}`, name: "Wochenmail Projektleitung", kind, dayOfWeek: 1, hour: 7, recipients: [], enabled: true }
+    : { id: `r${Date.now().toString(36)}`, name: "Monatsmail Geschäftsführung", kind, dayOfMonth: 2, hour: 7, recipients: [], enabled: true };
+
+/** Digest mails on a schedule plus the complete data export. */
+function ReportsAndExport() {
+  const { mode, data, notify } = useStore();
+  const [list, setList] = useState<ScheduledReport[]>([]);
+  const [saved, setSaved] = useState("[]");
+  const [error, setError] = useState("");
+  const [entity, setEntity] = useState<ExportEntity | "invoices">("time-entries");
+  const [from, setFrom] = useState(`${data.today.slice(0, 4)}-01-01`);
+  const [to, setTo] = useState(data.today);
+  useEffect(() => {
+    if (mode !== "api") return;
+    api<OrgSettings>("/api/settings").then((s) => { setList(s.scheduledReports ?? []); setSaved(JSON.stringify(s.scheduledReports ?? [])); }).catch((e) => setError((e as Error).message));
+  }, [mode]);
+  const update = (id: string, patch: Partial<ScheduledReport>) => setList(list.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const save = async () => {
+    try {
+      const s = await api<OrgSettings>("/api/settings", { method: "PUT", body: { scheduledReports: list } });
+      setList(s.scheduledReports ?? []);
+      setSaved(JSON.stringify(s.scheduledReports ?? []));
+      setError("");
+      notify("Berichte gespeichert");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const sendNow = async (r: ScheduledReport) => {
+    try {
+      const res = await api<{ to: string }>(`/api/settings/reports/${r.id}/send`, { body: {} });
+      notify(`«${r.name}» an ${res.to} gesendet`);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const download = (format: "csv" | "json") => {
+    if (mode === "api") {
+      const q = new URLSearchParams({ format, ...(entity === "customers" || entity === "projects" || entity === "employees" ? {} : { from, to }) });
+      window.open(`/api/export/${entity}?${q}`, "_blank");
+      return;
+    }
+    if (entity === "invoices") return setError("Rechnungen gibt es nur in der installierten Version.");
+    const rows = exportRows(data, entity, from, to);
+    const blob = new Blob([format === "csv" ? toCsv(rows) : JSON.stringify(rows, null, 2)], { type: format === "csv" ? "text/csv;charset=utf-8" : "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${entity}-${data.today}.${format}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    notify(`${rows.length} Zeilen exportiert`);
+  };
+  const dirty = JSON.stringify(list) !== saved;
+  const rangeApplies = !(entity === "customers" || entity === "projects" || entity === "employees");
+  return (
+    <div className="grid-2" style={{ alignItems: "start" }}>
+      <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <h3>Geplante Berichte</h3>
+        <p className="explain">Die Wochenmail fasst für die Projektleitung Stunden, Risiken, offene Freigaben und fehlende Wochen zusammen. Die Monatsmail zeigt der Geschäftsführung Umsatz, Auslastung, Marge, Top-Kunden und offene Rechnungen.</p>
+        {mode === "demo" ? (
+          <p className="notice">Im Prototyp werden keine E-Mails verschickt. In der installierten Version richtest du hier beliebig viele Berichte mit Empfängern, Wochentag oder Monatstag und Uhrzeit ein.</p>
+        ) : (
+          <>
+            {list.map((r) => (
+              <div key={r.id} className="report-row">
+                <div className="form-grid" style={{ alignItems: "end" }}>
+                  <label className="field"><span>Name</span><input className="input" value={r.name} onChange={(e) => update(r.id, { name: e.target.value })} /></label>
+                  <label className="field"><span>Art</span><Select small value={r.kind} onChange={(v) => update(r.id, v === "weekly" ? { kind: "weekly", dayOfWeek: r.dayOfWeek ?? 1, dayOfMonth: undefined } : { kind: "monthly", dayOfMonth: r.dayOfMonth ?? 2, dayOfWeek: undefined })} options={[{ value: "weekly", label: "Wöchentlich (Projektleitung)" }, { value: "monthly", label: "Monatlich (Geschäftsführung)" }]} /></label>
+                  {r.kind === "weekly" ? (
+                    <label className="field"><span>Wochentag</span><Select small value={String(r.dayOfWeek ?? 1)} onChange={(v) => update(r.id, { dayOfWeek: Number(v) })} options={WEEKDAYS.map((d, i) => ({ value: String(i + 1), label: d }))} /></label>
+                  ) : (
+                    <label className="field"><span>Tag im Monat</span><input className="input num" type="number" min={1} max={28} value={r.dayOfMonth ?? 2} onChange={(e) => update(r.id, { dayOfMonth: Number(e.target.value) })} /></label>
+                  )}
+                  <label className="field"><span>Uhrzeit</span><input className="input num" type="number" min={0} max={23} value={r.hour} onChange={(e) => update(r.id, { hour: Number(e.target.value) })} /></label>
+                </div>
+                <label className="field" style={{ marginTop: 8 }}><span>Empfänger (E-Mails, durch Komma getrennt)</span><input className="input" value={r.recipients.join(", ")} onChange={(e) => update(r.id, { recipients: e.target.value.split(/[\s,;]+/).filter(Boolean) })} placeholder="z. B. gl@firma.ch, pl@firma.ch" /></label>
+                <div className="toolbar" style={{ marginTop: 8, gap: 8, flexWrap: "wrap" }}>
+                  <label className="check"><input type="checkbox" checked={r.enabled} onChange={(e) => update(r.id, { enabled: e.target.checked })} />Aktiv</label>
+                  <button className="btn small ghost" disabled={dirty} title={dirty ? "Zuerst speichern" : "Schickt den Bericht jetzt an dich"} onClick={() => sendNow(r)}>Jetzt an mich senden</button>
+                  <button className="btn small ghost" onClick={() => setList(list.filter((x) => x.id !== r.id))}>Entfernen</button>
+                </div>
+              </div>
+            ))}
+            <div className="toolbar" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button id="rep-add-weekly" className="btn small" onClick={() => setList([...list, newReport("weekly")])}>+ Wochenmail</button>
+              <button id="rep-add-monthly" className="btn small" onClick={() => setList([...list, newReport("monthly")])}>+ Monatsmail</button>
+              <button id="rep-save" className="btn primary" disabled={!dirty} onClick={save}>Speichern</button>
+            </div>
+          </>
+        )}
+        {error && <p className="error">{error}</p>}
+      </section>
+      <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <h3>Datenexport</h3>
+        <p className="explain">Alle Daten als CSV (öffnet direkt in Excel) oder JSON für Power BI und eigene Auswertungen. Mitarbeitende erhalten nur ihre eigenen Buchungen.</p>
+        <div className="form-grid">
+          <label className="field"><span>Daten</span><Select id="ex-entity" value={entity} onChange={(v) => setEntity(v as ExportEntity)} options={[...EXPORT_ENTITIES.map((e) => ({ value: e.id, label: e.label })), ...(mode === "api" ? [{ value: "invoices", label: "Rechnungen" }] : [])]} /></label>
+          <label className="field"><span>Von</span><input id="ex-from" type="date" className="input" value={from} disabled={!rangeApplies} onChange={(e) => setFrom(e.target.value)} /></label>
+          <label className="field"><span>Bis</span><input id="ex-to" type="date" className="input" value={to} disabled={!rangeApplies} onChange={(e) => setTo(e.target.value)} /></label>
+        </div>
+        <div className="toolbar" style={{ gap: 8 }}>
+          <button id="ex-csv" className="btn primary" onClick={() => download("csv")}>CSV herunterladen</button>
+          <button id="ex-json" className="btn" onClick={() => download("json")}>JSON herunterladen</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function Settings() {
-  const [tab, setTab] = useState<"look" | "users" | "signin" | "work" | "billing">("look");
+  const [tab, setTab] = useState<"look" | "users" | "signin" | "work" | "billing" | "reports">("look");
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Einstellungen</h1>
-          <p className="sub">Corporate Design, Benutzer, Anmeldung, Arbeitszeitmodell und Rechnungsstellung.</p>
+          <p className="sub">Corporate Design, Benutzer, Anmeldung, Arbeitszeitmodell, Rechnungsstellung, Berichte und Export.</p>
         </div>
       </div>
       <div className="tabs" role="tablist">
@@ -468,12 +580,14 @@ export function Settings() {
         <button role="tab" className={tab === "signin" ? "on" : ""} onClick={() => setTab("signin")}>Anmeldung & E-Mail</button>
         <button role="tab" className={tab === "work" ? "on" : ""} onClick={() => setTab("work")}>Arbeitszeit</button>
         <button role="tab" className={tab === "billing" ? "on" : ""} onClick={() => setTab("billing")}>Rechnung</button>
+        <button role="tab" className={tab === "reports" ? "on" : ""} onClick={() => setTab("reports")}>Berichte & Export</button>
       </div>
       {tab === "look" && <Appearance />}
       {tab === "users" && <Users />}
       {tab === "signin" && <SignIn />}
       {tab === "work" && <WorkSettings />}
       {tab === "billing" && <Billing />}
+      {tab === "reports" && <ReportsAndExport />}
     </>
   );
 }

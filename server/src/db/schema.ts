@@ -84,6 +84,8 @@ export interface OrgSettings {
   billing?: BillingSettings;
   /** Default internal cost per hour in CHF for people without an own cost rate. Default 95. */
   costRate?: number;
+  /** Digests by mail: weekly to leads, monthly to management. */
+  scheduledReports?: { id: string; name: string; kind: "weekly" | "monthly"; dayOfWeek?: number; dayOfMonth?: number; hour: number; recipients: string[]; enabled: boolean }[];
   /** Exchange rates, CHF per unit (EUR, USD), refreshed daily unless `fx.manual` is set. */
   fx?: { rates: { EUR?: number; USD?: number }; asOf: string; source?: string; manual?: boolean };
 }

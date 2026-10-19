@@ -50,6 +50,18 @@ export interface Settings {
   billing?: BillingSettings;
   costRate?: number;
   fx?: { rates: { EUR?: number; USD?: number }; asOf: string; source?: string; manual?: boolean };
+  scheduledReports?: ScheduledReport[];
+}
+
+export interface ScheduledReport {
+  id: string;
+  name: string;
+  kind: "weekly" | "monthly";
+  dayOfWeek?: number;
+  dayOfMonth?: number;
+  hour: number;
+  recipients: string[];
+  enabled: boolean;
 }
 
 export type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";

@@ -6,6 +6,7 @@ import type { ChatMessage } from "./notify/webhooks";
 import { actionMail } from "./mail/mailer";
 import { sendCustomerReport } from "./reports/export";
 import { refreshFxRates } from "./fx";
+import { digestMail } from "./reports/digest";
 import { loadDataset } from "./routes/data";
 
 const THRESHOLDS = ["80", "95", "100"] as const;
@@ -318,6 +319,30 @@ export async function sendDailyReminders(ctx: AppContext, now = new Date()) {
   return sent;
 }
 
+/** Sends every enabled scheduled report whose day and hour have come, once per period (ISO week or month). */
+export async function sendScheduledReports(ctx: AppContext, now = new Date()) {
+  const z = zurichClock(now);
+  const sent: { id: string; period: string; to: string[] }[] = [];
+  for (const org of await ctx.db.select().from(organizations)) {
+    for (const r of org.settings.scheduledReports ?? []) {
+      if (!r.enabled || r.recipients.length === 0) continue;
+      const dueDay = r.kind === "weekly" ? z.weekday === (r.dayOfWeek ?? 1) : Number(z.date.slice(8, 10)) === (r.dayOfMonth ?? 1);
+      if (!dueDay || Number(z.time.slice(0, 2)) < r.hour) continue;
+      const { mail, period } = await digestMail(ctx, org.id, org.settings, r, z.date);
+      const job = `scheduled-report:${r.id}`;
+      if (!(await claim(ctx, job, period))) continue;
+      try {
+        await ctx.mailer.send({ ...mail, to: r.recipients.join(", ") });
+        sent.push({ id: r.id, period, to: r.recipients });
+      } catch (err) {
+        await ctx.db.delete(jobRuns).where(and(eq(jobRuns.job, job), eq(jobRuns.period, period)));
+        throw err;
+      }
+    }
+  }
+  return sent;
+}
+
 export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: string, err?: unknown) => void = console.error) {
   for (const [name, job] of [
     ["Monatsreport", () => sendMonthlyReports(ctx, now)],
@@ -326,6 +351,7 @@ export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: stri
     ["Abschluss-Erinnerung", () => sendClosingReminders(ctx, now)],
     ["Tages-Erinnerung", () => sendDailyReminders(ctx, now)],
     ["Wechselkurse", () => refreshFxRates(ctx)],
+    ["Geplante Berichte", () => sendScheduledReports(ctx, now)],
   ] as const) {
     try {
       await job();

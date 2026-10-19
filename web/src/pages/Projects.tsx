@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { CURRENCIES, PROJECT_KINDS, currencyOf, fmt1, fmtCHF, fmtMoney, fmtMonth, fmtNum, rateOn, type BudgetStatus, type Currency, type Customer, type Project, type ProjectKind, type SubProject } from "@taktwerk/domain";
+import { CURRENCIES, PROJECT_KINDS, currencyOf, fmt1, fmtCHF, fmtMoney, fmtMonth, fmtNum, rateOn, scenario, scenarioBand, type BudgetStatus, type Currency, type Customer, type Project, type ProjectKind, type ProjectReport, type SubProject } from "@taktwerk/domain";
 import { Select } from "../ui/Select";
 import { useStore } from "../store";
 import { BurnUpChart, Icon, Money, StatusPill } from "../ui/components";
@@ -65,6 +65,63 @@ function EditableHead({ item, kind, currency = "CHF", onSave }: { item: Project 
       {project && <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>{PROJECT_KINDS.find((k) => k.id === pk)?.hint}</p>}
       {error && <p className="error">{error}</p>}
     </div>
+  );
+}
+
+/** What-if on one project: the velocity band plus sliders for velocity, rate, scope, budget and team size. */
+function ScenarioCard({ report, currency }: { report: ProjectReport; currency: Currency }) {
+  const { data, factor } = useStore();
+  const [f, setF] = useState<number | null>(null);
+  const [rate, setRate] = useState(100);
+  const [sp, setSp] = useState(0);
+  const [budget, setBudget] = useState(0);
+  const [cap, setCap] = useState(100);
+  const m = (v: number) => fmtMoney(v, currency);
+  const band = useMemo(() => scenarioBand(data, report, factor), [data, report, factor]);
+  const current = factor?.current ?? 0;
+  const mine = useMemo(() => scenario(data, report, factor, { factor: f ?? current, rateFactor: rate / 100, spDelta: sp, budgetDelta: budget, capacityFactor: cap / 100 }, "Dein Szenario"), [data, report, factor, f, current, rate, sp, budget, cap]);
+  if (!factor || report.spOpen === 0) return null;
+  const lo = Math.max(0.5, Math.floor(factor.low * 0.6 * 2) / 2);
+  const hi = Math.ceil(factor.high * 1.4 * 2) / 2;
+  const reset = () => { setF(null); setRate(100); setSp(0); setBudget(0); setCap(100); };
+  const changed = f !== null || rate !== 100 || sp !== 0 || budget !== 0 || cap !== 100;
+  const rows = [...band, mine];
+  return (
+    <section className="card" style={{ marginTop: 16 }}>
+      <div className="card-head" style={{ paddingBottom: 8, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h2>Forecast-Szenarien</h2>
+          <span className="muted" style={{ fontSize: "0.8rem" }}>Velocity-Band aus den letzten {factor ? "Monaten" : ""} und ein Was-wäre-wenn für Nachträge</span>
+        </div>
+        {changed && <button className="btn small ghost" onClick={reset}>Zurücksetzen</button>}
+      </div>
+      <div className="table-wrap">
+        <table className="data">
+          <thead><tr><th>Szenario</th><th className="r">h/SP</th><th className="r">Restaufwand</th><th className="r">Forecast</th><th className="r">Budget</th><th className="r">Abweichung</th><th>Fertig ca.</th><th>Status</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.label} className={r.label === "Dein Szenario" ? "group" : ""}>
+                <td>{r.label}</td>
+                <td className="r num">{fmt1(r.factor)}</td>
+                <td className="r num">{fmtNum(r.remainingHours)} h</td>
+                <td className="r num">{m(r.forecastCost)}</td>
+                <td className="r num">{m(r.budget)}</td>
+                <td className="r"><Money v={r.variance} signed currency={currency} /></td>
+                <td>{r.completionMonth ? fmtMonth(r.completionMonth) : "offen"}</td>
+                <td><StatusPill status={r.status} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="scenario-knobs">
+        <label className="knob"><span>Velocity <strong className="num">{fmt1(f ?? current)} h/SP</strong></span><input id="sc-factor" type="range" min={lo} max={hi} step={0.1} value={f ?? current} onChange={(e) => setF(Number(e.target.value))} /><small>Band {fmt1(factor.low)} – {fmt1(factor.high)}</small></label>
+        <label className="knob"><span>Stundensatz <strong className="num">{rate} %</strong></span><input id="sc-rate" type="range" min={70} max={130} step={5} value={rate} onChange={(e) => setRate(Number(e.target.value))} /><small>{m(rateOn(report.customer, data.today) * rate / 100)}/h für den Rest</small></label>
+        <label className="knob"><span>Umfang <strong className="num">{sp >= 0 ? "+" : ""}{sp} SP</strong></span><input id="sc-scope" type="range" min={-Math.min(50, report.spOpen)} max={100} step={5} value={sp} onChange={(e) => setSp(Number(e.target.value))} /><small>{fmtNum(report.spOpen + sp)} SP offen</small></label>
+        <label className="knob"><span>Budget <strong className="num">{budget >= 0 ? "+" : ""}{m(budget)}</strong></span><input id="sc-budget" type="range" min={-Math.round(report.budget / 2 / 1000) * 1000} max={Math.max(10000, Math.round(report.budget / 2 / 1000) * 1000)} step={1000} value={budget} onChange={(e) => setBudget(Number(e.target.value))} /><small>Nachtrag oder Kürzung</small></label>
+        <label className="knob"><span>Team <strong className="num">{cap} %</strong></span><input id="sc-cap" type="range" min={50} max={200} step={10} value={cap} onChange={(e) => setCap(Number(e.target.value))} /><small>Kapazität für den Fertigstellungstermin</small></label>
+      </div>
+    </section>
   );
 }
 
@@ -171,6 +228,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
           </table>
         </div>
       </section>
+      {r && !r.retainer && <ScenarioCard report={r} currency={cur} />}
       {r && (
         <section className="card" style={{ display: "flex", flexDirection: "column", minHeight: 320, marginTop: 16 }}>
           <div className="card-head"><h2>Burn-up</h2></div>

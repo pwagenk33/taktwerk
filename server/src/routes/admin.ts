@@ -9,6 +9,7 @@ import { customers, organizations, sessions, users, type OrgSettings } from "../
 import { actionMail } from "../mail/mailer";
 import { createPasswordToken, passwordLink } from "./auth";
 import { fetchFxRates } from "../fx";
+import { digestMail } from "../reports/digest";
 
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Farbe als Hex-Wert, z. B. #D52B1E");
 
@@ -74,6 +75,21 @@ export async function adminRoutes(app: FastifyInstance) {
         hoursReminder: z.boolean().optional(),
         closingReminder: z.boolean().optional(),
         costRate: z.number().min(0).max(1000).optional(),
+        scheduledReports: z
+          .array(
+            z.object({
+              id: z.string().min(1).max(40),
+              name: z.string().trim().min(1).max(80),
+              kind: z.enum(["weekly", "monthly"]),
+              dayOfWeek: z.number().int().min(1).max(7).optional(),
+              dayOfMonth: z.number().int().min(1).max(28).optional(),
+              hour: z.number().int().min(0).max(23),
+              recipients: z.array(z.string().trim().email()).max(50),
+              enabled: z.boolean(),
+            }),
+          )
+          .max(20)
+          .optional(),
         fx: z.object({ rates: z.object({ EUR: z.number().positive().max(100).optional(), USD: z.number().positive().max(100).optional() }), manual: z.boolean().optional() }).optional(),
         billing: z
           .object({
@@ -104,10 +120,23 @@ export async function adminRoutes(app: FastifyInstance) {
       closingReminder: body.closingReminder ?? org.settings.closingReminder,
       billing: body.billing ?? org.settings.billing,
       costRate: body.costRate ?? org.settings.costRate,
+      scheduledReports: body.scheduledReports ?? org.settings.scheduledReports,
       fx: body.fx ? { rates: { ...org.settings.fx?.rates, ...body.fx.rates }, asOf: todayZurich(), source: "manuell", manual: body.fx.manual ?? true } : org.settings.fx,
     };
     await ctx.db.update(organizations).set({ name: body.name ?? org.name, settings }).where(eq(organizations.id, org.id));
     return { name: body.name ?? org.name, ...settings };
+  });
+
+  /** Sends one scheduled report now to the requesting admin, to check its content. */
+  app.post("/api/settings/reports/:id/send", async (req) => {
+    const user = requireRole(req, "admin");
+    const { id } = req.params as { id: string };
+    const org = await orgOf(user.organizationId);
+    const r = org.settings.scheduledReports?.find((x) => x.id === id);
+    if (!r) throw new HttpError(404, "Bericht nicht gefunden.");
+    const { mail } = await digestMail(ctx, org.id, org.settings, r, todayZurich());
+    await ctx.mailer.send({ ...mail, to: user.email });
+    return { ok: true, to: user.email };
   });
 
   /** Pulls today's ECB rates now and switches back to automatic daily updates. */

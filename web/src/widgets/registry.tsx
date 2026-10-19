@@ -1,5 +1,7 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { addMonths, fmt1, fmtCHF, fmtDay, fmtH, monthOf, vacationSummary, workBalance } from "@taktwerk/domain";
+import { addMonths, currencyOf, fmt1, fmtCHF, fmtDate, fmtDay, fmtH, fmtMonth, monthOf, toChf, upcomingAbsences, utilization, vacationSummary, workBalance } from "@taktwerk/domain";
+import { useEffect, useState } from "react";
+import { api, type Invoice } from "../api";
 import type { TimeEntry } from "@taktwerk/domain";
 import { useStore, useThemeColors } from "../store";
 import { BulletBars, BurnUpChart, ChartTip, HBar, StatusPill, VelocityChart, reportToBullet } from "../ui/components";
@@ -301,6 +303,92 @@ function KpiVacation() {
   );
 }
 
+function Utilization() {
+  const { data, role, currentUserId } = useStore();
+  const month = monthOf(data.today);
+  const people = role === "employee" ? data.employees.filter((e) => e.id === currentUserId) : data.employees;
+  const rows = utilization(data, month, people).filter((u) => u.due > 0).sort((a, b) => (b.utilization ?? 0) - (a.utilization ?? 0));
+  const total = rows.reduce((t, u) => ({ due: t.due + u.due, billable: t.billable + u.billable }), { due: 0, billable: 0 });
+  return (
+    <div className="util">
+      <div className="util-head"><strong className="num">{total.due ? Math.round((total.billable / total.due) * 100) : 0} %</strong><span className="muted">verrechenbar von der Sollzeit · {fmtMonth(month)}</span></div>
+      {rows.map((u) => {
+        const pct = Math.min(100, Math.round((u.utilization ?? 0) * 100));
+        const cls = pct >= 70 ? "ok" : pct >= 50 ? "risk" : "over";
+        return (
+          <div className="util-row" key={u.employeeId} title={`${fmt1(u.billable)} h verrechenbar von ${fmt1(u.due)} h Soll · ${fmt1(u.worked)} h gebucht`}>
+            <span className="util-name">{u.name}</span>
+            <span className="util-bar"><span className={`util-fill ${cls}`} style={{ width: `${pct}%` }} /></span>
+            <span className="num util-pct">{pct} %</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function OpenInvoices() {
+  const { data, mode } = useStore();
+  const [list, setList] = useState<Invoice[] | null>(null);
+  useEffect(() => {
+    if (mode !== "api") return;
+    api<{ invoices: Invoice[] }>("/api/invoices").then((r) => setList(r.invoices)).catch(() => setList([]));
+  }, [mode]);
+  if (mode !== "api") return <p className="muted" style={{ padding: "0 16px" }}>Im Prototyp gibt es keine Rechnungen. In der installierten Version stehen hier die versandten, noch offenen Rechnungen mit Fälligkeit.</p>;
+  const open = (list ?? []).filter((i) => i.status === "sent").sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const sum = open.reduce((s, i) => s + i.gross, 0);
+  const overdue = open.filter((i) => i.dueDate < data.today);
+  return (
+    <div>
+      <div className="util-head" style={{ padding: "0 16px 8px" }}><strong className="num">{fmtCHF(sum)}</strong><span className="muted">{open.length} offen{overdue.length ? ` · ${overdue.length} überfällig` : ""}</span></div>
+      {open.slice(0, 8).map((i) => (
+        <div className="entry" key={i.id}>
+          <div className="what">
+            <div>{data.customers.find((c) => c.id === i.customerId)?.name ?? "–"} · {i.number}</div>
+            <div className={`meta ${i.dueDate < data.today ? "neg" : ""}`}>{i.dueDate < data.today ? "überfällig seit" : "fällig am"} {fmtDate(i.dueDate)}</div>
+          </div>
+          <strong className="num">{fmtCHF(i.gross)}</strong>
+        </div>
+      ))}
+      {list && open.length === 0 && <p className="muted" style={{ padding: "0 16px" }}>Keine offenen Rechnungen.</p>}
+    </div>
+  );
+}
+
+function VacationPlan() {
+  const { data } = useStore();
+  const rows = upcomingAbsences(data, 8).slice(0, 14);
+  if (rows.length === 0) return <p className="muted" style={{ padding: "0 16px" }}>Keine Absenzen in den nächsten acht Wochen.</p>;
+  return (
+    <div>
+      {rows.map((a) => (
+        <div className="entry" key={a.id}>
+          <span className="who">{data.employees.find((e) => e.id === a.employeeId)?.initials}</span>
+          <div className="what">
+            <div>{a.name} · {a.type}{a.status === "requested" ? " (beantragt)" : ""}</div>
+            <div className="meta">{a.startDate === a.endDate ? fmtDay(a.startDate) : `${fmtDay(a.startDate)} – ${fmtDay(a.endDate)}`}{a.halfDay ? " · halbe Tage" : ""}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TopCustomers() {
+  const { data } = useStore();
+  const from = addMonths(monthOf(data.today), -11);
+  const subToCustomer = new Map(data.subProjects.map((s) => [s.id, data.projects.find((p) => p.id === s.projectId)?.customerId ?? ""]));
+  const sums = new Map<string, number>();
+  for (const e of data.timeEntries) {
+    if (!e.billable || monthOf(e.date) < from) continue;
+    const cid = subToCustomer.get(e.subProjectId) ?? "";
+    const c = data.customers.find((x) => x.id === cid);
+    sums.set(cid, (sums.get(cid) ?? 0) + toChf(e.hours * e.hourlyRate, currencyOf(c), data.fx));
+  }
+  const rows = [...sums.entries()].map(([cid, value]) => ({ name: data.customers.find((c) => c.id === cid)?.name ?? "–", value })).filter((r) => r.value > 0).sort((a, b) => b.value - a.value).slice(0, 8);
+  return <HBar rows={rows} format={(v) => fmtCHF(v)} color={useThemeColors().s1} />;
+}
+
 export const WIDGETS: Record<string, WidgetDef> = {
   "kpi-overtime": { title: "Mein Überzeit-Saldo", description: "Ist minus Soll seit Erfassungsbeginn", w: 3, h: 3, minW: 2, minH: 3, Body: KpiOvertime },
   "kpi-vacation": { title: "Meine Ferien übrig", description: "Ferientage im laufenden Jahr", w: 3, h: 3, minW: 2, minH: 3, Body: KpiVacation },
@@ -315,6 +403,10 @@ export const WIDGETS: Record<string, WidgetDef> = {
   "hours-week": { title: "Stunden pro Woche nach Kunde", description: "Gestapelt, letzte 8 Kalenderwochen", w: 7, h: 7, minW: 4, minH: 5, Body: HoursByWeek },
   "team-load": { title: "Stunden pro Person (Monat)", description: "Erfasste Stunden je Mitarbeitende", w: 5, h: 7, minW: 3, minH: 4, Body: TeamLoad },
   "hours-customer": { title: "Stunden nach Kunde (Monat)", description: "Verteilung im laufenden Monat", w: 5, h: 6, minW: 3, minH: 4, Body: HoursByCustomer },
+  utilization: { title: "Auslastung", description: "Verrechenbare Stunden im Verhältnis zur Sollzeit, laufender Monat", w: 5, h: 7, minW: 3, minH: 4, Body: Utilization, scroll: true },
+  "open-invoices": { title: "Offene Rechnungen", description: "Versandte Rechnungen, die noch nicht bezahlt sind", w: 5, h: 6, minW: 3, minH: 4, restricted: true, Body: OpenInvoices, scroll: true },
+  "vacation-plan": { title: "Ferienplan", description: "Absenzen im Team in den nächsten acht Wochen", w: 5, h: 7, minW: 3, minH: 4, Body: VacationPlan, scroll: true },
+  "top-customers": { title: "Top-Kunden", description: "Verrechenbarer Umsatz der letzten zwölf Monate in CHF", w: 5, h: 6, minW: 3, minH: 4, restricted: true, Body: TopCustomers },
   "sub-status": { title: "Subprojekte nach Abweichung", description: "Sortiert nach Budget minus Forecast", w: 5, h: 8, minW: 3, minH: 4, restricted: true, Body: SubStatus, scroll: true },
 };
 

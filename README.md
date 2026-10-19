@@ -47,6 +47,10 @@ Schema ändern: `server/src/db/schema.ts` anpassen, dann `npm run db:generate -w
 - Wochenfreigabe: «Woche einreichen» im Kalender, Leads sehen unter Monatsabschluss pro Person und Woche, was eingereicht ist und wo Stunden fehlen.
 - Persönliche Erinnerung «Heute noch nichts gebucht» per E-Mail, Microsoft Teams oder Slack (Incoming Webhook), Uhrzeit und Wochentage im Profil wählbar; kommt nur an Arbeitstagen ohne Buchung.
 - Beleg-OCR: Beleg mit der Handykamera fotografieren, Betrag, Datum, MwSt-Satz, Kategorie und Händler werden vorgeschlagen (Texterkennung läuft im Browser, das Foto bleibt auf dem Gerät).
+- Projektarten Zeit und Material, Fixpreis und Retainer (Stundenkontingent pro Monat mit Auslastung), Profitabilität pro Projekt und Kunde (Umsatz gegen Stunden × Kostensatz plus Spesen), Kunden in CHF, EUR oder USD mit täglichem EZB-Kurs (manuell übersteuerbar).
+- Forecast-Szenarien im Projekt: Velocity-Band optimistisch bis pessimistisch und Was-wäre-wenn mit Velocity, Stundensatz, Umfang, Budget und Teamgrösse.
+- Geplante Berichte: Wochenmail an die Projektleitung, Monatsmail an die Geschäftsführung, frei konfigurierbar (Einstellungen → Berichte & Export). Kompletter Datenexport als CSV oder JSON.
+- Dashboard-Widgets Auslastung, offene Rechnungen, Ferienplan und Top-Kunden.
 
 ## Arbeitszeit & Absenzen
 
