@@ -97,6 +97,15 @@ export const teams = mysqlTable("teams", {
   name: varchar("name", { length: 120 }).notNull(),
 });
 
+/** Personal reminder when nothing is booked on a work day: channel, time and weekdays (1 = Monday). */
+export interface ReminderSettings {
+  channel: "off" | "mail" | "teams" | "slack";
+  time: string; // HH:MM, Zurich time
+  days: number[];
+  /** Incoming-webhook URL of the person's Teams or Slack channel/DM. */
+  webhookUrl?: string;
+}
+
 export const users = mysqlTable(
   "users",
   {
@@ -117,6 +126,7 @@ export const users = mysqlTable(
     overtimeCarry: decimal("overtime_carry", { precision: 7, scale: 2, mode: "number" }).notNull().default(0),
     vacationCarry: decimal("vacation_carry", { precision: 4, scale: 1, mode: "number" }).notNull().default(0),
     lastLoginAt: datetime("last_login_at", { mode: "date" }),
+    reminder: json<ReminderSettings>("reminder"),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("users_username_uq").on(t.username), uniqueIndex("users_email_uq").on(t.email)],

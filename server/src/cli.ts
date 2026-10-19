@@ -8,6 +8,7 @@ import { createDb, runMigrations } from "./db/client";
 import { organizations } from "./db/schema";
 import { createOrganization, seedSample } from "./seed";
 import { createMailer, actionMail } from "./mail/mailer";
+import { createWebhookSender } from "./notify/webhooks";
 import { DEFAULT_BRANDING } from "./db/schema";
 import { createPasswordToken, passwordLink } from "./routes/auth";
 
@@ -30,7 +31,7 @@ try {
       const [orgName, name, email, username] = args;
       if (!orgName || !name || !email || !username) throw new Error('Aufruf: init "<Firma>" "<Name>" <email> <username>');
       const { userId } = await createOrganization(db, { orgName, name, email: email.toLowerCase(), username });
-      const ctx = { config, db, mailer: createMailer(config) };
+      const ctx = { config, db, mailer: createMailer(config), webhooks: createWebhookSender(false) };
       const link = passwordLink(ctx, await createPasswordToken(ctx, userId, "invite"));
       await ctx.mailer.send(actionMail(DEFAULT_BRANDING, { to: email, subject: "Dein Admin-Zugang", greeting: `Hallo ${name}`, lines: [`Die Installation für ${orgName} ist bereit.`], action: "Passwort festlegen", url: link, footer: "Der Link ist sieben Tage gültig." }));
       console.log(`Organisation angelegt. Einladungslink für ${username}: ${link}`);

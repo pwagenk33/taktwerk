@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Role } from "@taktwerk/domain";
 import { api } from "../api";
-import { useStore } from "../store";
+import { loadLocal, saveLocal, useStore } from "../store";
+import { Select } from "../ui/Select";
 import { useTheme, type Theme } from "../theme";
 import { Icon } from "../ui/components";
 import { useFavorites, useLabels } from "./TimeTracking";
@@ -47,6 +48,100 @@ function PasswordCard() {
       <p className="muted" style={{ fontSize: "0.82rem" }}>Mindestens 10 Zeichen. Wer sich mit Microsoft oder Google anmeldet, braucht kein Passwort.</p>
       {error && <p className="error">{error}</p>}
       <div className="toolbar"><button id="p-save" className="btn primary" disabled={busy || !current || !next} onClick={save}>Passwort speichern</button></div>
+    </section>
+  );
+}
+
+interface Reminder {
+  channel: "off" | "mail" | "teams" | "slack";
+  time: string;
+  days: number[];
+  webhookUrl?: string;
+}
+const DEFAULT_REMINDER: Reminder = { channel: "off", time: "17:00", days: [1, 2, 3, 4, 5] };
+const DAY_LABELS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const CHANNELS = [
+  { value: "off", label: "Aus" },
+  { value: "mail", label: "E-Mail" },
+  { value: "teams", label: "Microsoft Teams" },
+  { value: "slack", label: "Slack" },
+];
+
+/** «Heute noch nichts gebucht»: each person picks channel, time and weekdays; Teams and Slack via an incoming webhook. */
+function ReminderCard() {
+  const { notify, mode } = useStore();
+  const [r, setR] = useState<Reminder>(() => (mode === "api" ? DEFAULT_REMINDER : loadLocal<Reminder>("rt.reminder", DEFAULT_REMINDER)));
+  const [saved, setSaved] = useState<Reminder>(r);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (mode !== "api") return;
+    api<Reminder>("/api/me/reminder").then((x) => { setR(x); setSaved(x); }).catch(() => {});
+  }, [mode]);
+  const chat = r.channel === "teams" || r.channel === "slack";
+  const dirty = JSON.stringify(r) !== JSON.stringify(saved);
+  const toggleDay = (d: number) => setR({ ...r, days: r.days.includes(d) ? r.days.filter((x) => x !== d) : [...r.days, d].sort() });
+  const save = async () => {
+    setBusy(true);
+    try {
+      if (mode === "api") {
+        const next = await api<Reminder>("/api/me/reminder", { method: "PUT", body: r });
+        setR(next);
+        setSaved(next);
+      } else {
+        if (chat && !r.webhookUrl) throw new Error("Für Teams oder Slack brauchst du die Webhook-URL deines Kanals.");
+        saveLocal("rt.reminder", r);
+        setSaved(r);
+      }
+      setError("");
+      notify(r.channel === "off" ? "Erinnerung ausgeschaltet" : `Erinnerung gespeichert: ${CHANNELS.find((c) => c.value === r.channel)?.label} um ${r.time}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const test = async () => {
+    try {
+      if (mode === "api") await api("/api/me/reminder/test", { body: {} });
+      setError("");
+      notify(mode === "api" ? "Testnachricht gesendet" : "In der installierten Version geht jetzt eine Testnachricht raus (Demo)");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <h2>Erinnerung «Heute noch nichts gebucht»</h2>
+      <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>An deinen Arbeitstagen zur gewählten Uhrzeit, aber nur, wenn bis dahin noch keine Zeit erfasst ist. Bei Ferien und Feiertagen bleibt es still.</p>
+      <div className="form-grid">
+        <label className="field"><span>Kanal</span><Select id="r-channel" ariaLabel="Kanal" value={r.channel} onChange={(v) => setR({ ...r, channel: v as Reminder["channel"] })} options={CHANNELS} /></label>
+        <label className="field"><span>Uhrzeit</span><input id="r-time" type="time" className="input" value={r.time} disabled={r.channel === "off"} onChange={(e) => setR({ ...r, time: e.target.value })} /></label>
+      </div>
+      <div className="field">
+        <span>Tage</span>
+        <div className="day-pick" role="group" aria-label="Wochentage">
+          {DAY_LABELS.map((l, i) => (
+            <button key={l} type="button" aria-pressed={r.days.includes(i + 1)} className={`day ${r.days.includes(i + 1) ? "on" : ""}`} disabled={r.channel === "off"} onClick={() => toggleDay(i + 1)}>{l}</button>
+          ))}
+        </div>
+      </div>
+      {chat && (
+        <label className="field">
+          <span>Webhook-URL deines {r.channel === "teams" ? "Teams-Kanals" : "Slack-Kanals"}</span>
+          <input id="r-webhook" type="url" className="input" placeholder={r.channel === "teams" ? "https://….webhook.office.com/… oder https://….logic.azure.com/…" : "https://hooks.slack.com/services/…"} value={r.webhookUrl ?? ""} onChange={(e) => setR({ ...r, webhookUrl: e.target.value })} />
+          <span className="muted" style={{ fontWeight: 400 }}>
+            {r.channel === "teams"
+              ? "In Teams: Kanal → ··· → Workflows → «Bei Empfang einer Webhookanforderung in einem Kanal posten», die erzeugte URL hier einfügen. Für eine Nachricht nur an dich einen privaten Kanal verwenden."
+              : "In Slack: Apps → Incoming Webhooks → Kanal oder deine Direktnachricht wählen, die erzeugte URL hier einfügen."}
+          </span>
+        </label>
+      )}
+      {error && <p className="error">{error}</p>}
+      <div className="toolbar" style={{ gap: 8 }}>
+        <button id="r-save" className="btn primary" disabled={busy || !dirty} onClick={save}>Speichern</button>
+        {saved.channel !== "off" && <button id="r-test" className="btn ghost" disabled={busy || dirty} onClick={test}>Testnachricht senden</button>}
+      </div>
     </section>
   );
 }
@@ -98,6 +193,7 @@ export function Profile() {
           </div>
           <p className="muted" style={{ fontSize: "0.82rem" }}>Gilt für diesen Browser. Das Logo und die Hauptfarbe legen Admins unter Einstellungen → Erscheinungsbild fest.</p>
         </section>
+        <ReminderCard />
         {mode === "api" ? <PasswordCard /> : (
           <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <h2>Passwort ändern</h2>

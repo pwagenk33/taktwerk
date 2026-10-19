@@ -608,3 +608,9 @@ table.wk th.wk-now, table.wk td.wk-now { background: color-mix(in srgb, var(--ac
 .wk-missing { color: var(--crit-ink); font-weight: 600; }
 .wk-open { color: var(--warn-ink); }
 .wk-none, .wk-now { color: var(--ink-3); }
+
+/* Reminder weekday picker ------------------------------------------------ */
+.day-pick { display: flex; gap: 4px; flex-wrap: wrap; }
+.day-pick .day { min-width: 40px; padding: 6px 8px; border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius-s); font-size: 0.82rem; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.day-pick .day.on { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent); }
+.day-pick .day:disabled { opacity: 0.5; cursor: default; }

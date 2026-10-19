@@ -9,6 +9,7 @@ import type { Config } from "./config";
 import type { Db } from "./db/client";
 import { organizations, sessions, users } from "./db/schema";
 import type { Mailer } from "./mail/mailer";
+import type { WebhookSender } from "./notify/webhooks";
 import { adminRoutes } from "./routes/admin";
 import { authRoutes } from "./routes/auth";
 import { billingRoutes } from "./routes/billing";
@@ -16,6 +17,7 @@ import { dataRoutes } from "./routes/data";
 import { brandingRoutes } from "./routes/branding";
 import { commentRoutes } from "./routes/comments";
 import { weekRoutes } from "./routes/weeks";
+import { reminderRoutes } from "./routes/reminders";
 import { expenseRoutes } from "./routes/expenses";
 import { invoiceRoutes } from "./routes/invoices";
 import { worktimeRoutes } from "./routes/worktime";
@@ -44,6 +46,7 @@ export interface AppContext {
   config: Config;
   db: Db;
   mailer: Mailer;
+  webhooks: WebhookSender;
 }
 
 export const SESSION_COOKIE = "tw_session";
@@ -123,6 +126,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(brandingRoutes);
   await app.register(commentRoutes);
   await app.register(weekRoutes);
+  await app.register(reminderRoutes);
   await app.register(invoiceRoutes);
 
   // Production: serve the built web app with SPA fallback.

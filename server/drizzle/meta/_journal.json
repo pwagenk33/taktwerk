@@ -57,6 +57,13 @@
       "when": 1792423688677,
       "tag": "0007_week_submissions",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1792424232984,
+      "tag": "0008_user_reminder",
+      "breakpoints": true
     }
   ]
 }

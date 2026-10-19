@@ -1,7 +1,8 @@
 import { WorkCalendar, addMonths, fmtCHF, fmtDate, fmtMonthLong, projectReports } from "@taktwerk/domain";
 import { and, eq, inArray } from "drizzle-orm";
 import type { AppContext } from "./app";
-import { budgetAlerts, customers, jobRuns, monthClosings, organizations, users, type OrgSettings } from "./db/schema";
+import { budgetAlerts, customers, jobRuns, monthClosings, organizations, users, type OrgSettings, type ReminderSettings } from "./db/schema";
+import type { ChatMessage } from "./notify/webhooks";
 import { actionMail } from "./mail/mailer";
 import { sendCustomerReport } from "./reports/export";
 import { loadDataset } from "./routes/data";
@@ -237,12 +238,92 @@ const addDaysIso = (iso: string, n: number) => {
   return d.toISOString().slice(0, 10);
 };
 
+type ReminderUser = { id: string; name: string; email: string; reminder: ReminderSettings | null };
+
+/** Zurich date (YYYY-MM-DD), ISO weekday (1 = Monday) and HH:MM of an instant. */
+function zurichClock(now: Date) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Zurich", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(now)
+      .map((x) => [x.type, x.value]),
+  );
+  const date = `${p.year}-${p.month}-${p.day}`;
+  return { date, weekday: new Date(`${date}T00:00:00Z`).getUTCDay() || 7, time: `${p.hour}:${p.minute}` };
+}
+
+/** The text of the personal reminder; `test` marks a message sent on request from the profile page. */
+export function reminderMessage(settings: OrgSettings, user: { name: string }, worked: number, appUrl: string, test = false): ChatMessage {
+  const first = user.name.split(" ")[0];
+  const url = new URL("/#zeit", appUrl).toString();
+  if (test) return { title: `${settings.branding.appName}: Testnachricht`, text: `Hallo ${first}, so sieht deine Erinnerung aus. Sie kommt nur an Tagen, an denen bis zur gewählten Uhrzeit nichts gebucht ist.`, action: { label: "Zeit erfassen", url } };
+  return {
+    title: `${settings.branding.appName}: Heute noch nichts gebucht`,
+    text: worked > 0 ? `Hallo ${first}, heute sind erst ${worked.toFixed(1).replace(".", ",")} Stunden erfasst. Kurz nachtragen, solange es frisch ist?` : `Hallo ${first}, für heute ist noch keine Zeit erfasst. Kurz nachtragen, solange es frisch ist?`,
+    action: { label: "Zeit erfassen", url },
+  };
+}
+
+/** Delivers one reminder over the channel the person chose. */
+export async function sendReminderTo(ctx: AppContext, settings: OrgSettings, user: ReminderUser, msg: ChatMessage) {
+  const r = user.reminder;
+  if (!r || r.channel === "off") return;
+  if (r.channel === "mail") {
+    await ctx.mailer.send(
+      actionMail(settings.branding, {
+        to: user.email,
+        subject: msg.title,
+        greeting: msg.text.split(", ")[0] ?? "Hallo",
+        lines: [msg.text.slice(msg.text.indexOf(", ") + 2)],
+        action: msg.action?.label,
+        url: msg.action?.url,
+        footer: "Uhrzeit, Tage und Kanal dieser Erinnerung änderst du in deinem Profil.",
+      }),
+    );
+    return;
+  }
+  if (!r.webhookUrl) return;
+  await ctx.webhooks.post(r.channel, r.webhookUrl, msg);
+}
+
+/**
+ * Personal reminder: at the person's chosen time on their chosen weekdays, when it is a work day for them
+ * (target hours, not absent) and nothing is booked yet. Once per person and day; late server starts still catch up the same day.
+ */
+export async function sendDailyReminders(ctx: AppContext, now = new Date()) {
+  const z = zurichClock(now);
+  const sent: { userId: string; channel: string }[] = [];
+  for (const org of await ctx.db.select().from(organizations)) {
+    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, org.id), eq(users.active, true)));
+    const due = people.filter((u) => u.reminder && u.reminder.channel !== "off" && u.reminder.days.includes(z.weekday) && u.reminder.time <= z.time);
+    if (due.length === 0) continue;
+    const data = await loadDataset(ctx, { id: "", organizationId: org.id, name: "", username: "", email: "", role: "admin" });
+    for (const u of due) {
+      const emp = data.employees.find((e) => e.id === u.id);
+      if (!emp) continue;
+      const cal = new WorkCalendar(data, emp);
+      if (cal.target(z.date) - cal.credit(z.date) <= 0) continue;
+      const worked = cal.workedOn(z.date);
+      if (worked > 0) continue;
+      if (!(await claim(ctx, `daily-reminder:${u.id}`, z.date))) continue;
+      try {
+        await sendReminderTo(ctx, org.settings, u, reminderMessage(org.settings, u, worked, ctx.config.APP_URL));
+        sent.push({ userId: u.id, channel: u.reminder!.channel });
+      } catch (err) {
+        await ctx.db.delete(jobRuns).where(and(eq(jobRuns.job, `daily-reminder:${u.id}`), eq(jobRuns.period, z.date)));
+        throw err;
+      }
+    }
+  }
+  return sent;
+}
+
 export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: string, err?: unknown) => void = console.error) {
   for (const [name, job] of [
     ["Monatsreport", () => sendMonthlyReports(ctx, now)],
     ["Budget-Alarm", () => checkBudgetAlerts(ctx)],
     ["Stunden-Erinnerung", () => sendHoursReminders(ctx, now)],
     ["Abschluss-Erinnerung", () => sendClosingReminders(ctx, now)],
+    ["Tages-Erinnerung", () => sendDailyReminders(ctx, now)],
   ] as const) {
     try {
       await job();

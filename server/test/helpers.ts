@@ -3,6 +3,7 @@ import { buildApp } from "../src/app";
 import { loadConfig } from "../src/config";
 import { createDb, runMigrations } from "../src/db/client";
 import { createMailer } from "../src/mail/mailer";
+import { createWebhookSender } from "../src/notify/webhooks";
 import { seedSample } from "../src/seed";
 
 export const PASSWORD = "test-passwort-123";
@@ -19,8 +20,9 @@ export async function setup(env: Record<string, string> = {}) {
   await runMigrations(db);
   await seedSample(db, PASSWORD);
   const mailer = createMailer(config, () => {});
-  const app = await buildApp({ config, db, mailer });
-  return { app, db, pool, mailer, config };
+  const webhooks = createWebhookSender(false, () => {});
+  const app = await buildApp({ config, db, mailer, webhooks });
+  return { app, db, pool, mailer, webhooks, config };
 }
 
 export async function login(app: Awaited<ReturnType<typeof setup>>["app"], username: string, password = PASSWORD) {
