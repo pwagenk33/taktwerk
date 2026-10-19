@@ -234,6 +234,12 @@ function Users() {
                   <td className="r" style={{ whiteSpace: "nowrap" }}>
                     <button className="btn small ghost" title="Zweiten Faktor und Passkeys entfernen, alle Geräte abmelden" onClick={() => { if (confirm(`Zweiten Faktor von ${u.name} zurücksetzen? Alle Geräte werden abgemeldet.`)) void api(`/api/users/${u.id}/security/reset`, { body: {} }).then(() => notify("Zweiter Faktor zurückgesetzt")).catch((e: Error) => setError(e.message)); }}>2FA zurücksetzen</button>
                     <button className="btn small ghost" onClick={() => patch(u.id, { active: !u.active })}>{u.active ? "Deaktivieren" : "Aktivieren"}</button>
+                    {!u.active && !u.username.startsWith("ehemalig-") && (
+                      <>
+                        <a className="btn small ghost" href={`/api/users/${u.id}/export`} download title="Auskunft nach DSG als Datei">Auskunft</a>
+                        <button className="btn small ghost" title="Name, E-Mail, Zugänge und Erinnerungen entfernen; Buchungen bleiben anonym erhalten" onClick={() => { const pw = prompt(`${u.name} anonymisieren? Das lässt sich nicht rückgängig machen.\nZur Bestätigung dein Passwort:`); if (pw) void api(`/api/users/${u.id}/anonymize`, { body: { password: pw } }).then(() => { notify("Person anonymisiert"); reload(); }).catch((e: Error) => setError(e.message)); }}>Anonymisieren</button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

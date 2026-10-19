@@ -4,6 +4,7 @@
 //   tsx src/cli.ts init "<Firma>" "<Name>" <email> <username>   empty installation, invitation link for the admin (platform admin)
 //   tsx src/cli.ts org "<Firma>" "<Name>" <email> [domain]     another company on the same installation
 //   tsx src/cli.ts platform-admin <username> [off]              grant (or revoke) operator rights
+//   tsx src/cli.ts org-remove <slug> LOESCHEN                   delete a company with all its data (irreversible)
 import { randomBytes } from "node:crypto";
 import { loadConfig } from "./config";
 import { createDb, runMigrations } from "./db/client";
@@ -53,8 +54,16 @@ try {
     const res = await db.update(users).set({ platformAdmin: off !== "off" }).where(eq(users.username, username));
     if (!res[0].affectedRows) throw new Error(`Benutzer ${username} nicht gefunden.`);
     console.log(`${username} ist jetzt ${off === "off" ? "kein" : ""} Betreiber.`.replace("  ", " "));
+  } else if (cmd === "org-remove") {
+    const [slug, confirm] = args;
+    if (!slug || confirm !== "LOESCHEN") throw new Error("Aufruf: org-remove <slug> LOESCHEN  (löscht die Firma mit allen Daten, unwiderruflich)");
+    const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug)).limit(1);
+    if (!org) throw new Error(`Firma ${slug} nicht gefunden.`);
+    if (org.active) throw new Error(`Firma ${slug} ist noch aktiv. Zuerst unter Einstellungen → Betreiber deaktivieren.`);
+    await db.delete(organizations).where(eq(organizations.id, org.id));
+    console.log(`Firma «${org.name}» mit allen Daten gelöscht. Belege unter DATA_DIR/receipts und Backups älter als 30 Tage bitte separat prüfen.`);
   } else {
-    console.log("Befehle: migrate | seed [passwort] | init <Firma> <Name> <email> <username> | org <Firma> <Name> <email> [domain] | platform-admin <username> [off]");
+    console.log("Befehle: migrate | seed [passwort] | init <Firma> <Name> <email> <username> | org <Firma> <Name> <email> [domain] | platform-admin <username> [off] | org-remove <slug> LOESCHEN");
     process.exitCode = 1;
   }
 } catch (e) {

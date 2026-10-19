@@ -1,6 +1,7 @@
 import { WorkCalendar, addMonths, fmtCHF, fmtDate, fmtMonthLong, projectReports } from "@taktwerk/domain";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import type { AppContext } from "./app";
+import { purgeExpired } from "./routes/privacy";
 import { budgetAlerts, customers, jobRuns, monthClosings, organizations, users, type OrgSettings, type ReminderSettings } from "./db/schema";
 import type { ChatMessage } from "./notify/webhooks";
 import { actionMail } from "./mail/mailer";
@@ -352,6 +353,7 @@ export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: stri
     ["Tages-Erinnerung", () => sendDailyReminders(ctx, now)],
     ["Wechselkurse", () => refreshFxRates(ctx)],
     ["Geplante Berichte", () => sendScheduledReports(ctx, now)],
+    ["Aufräumen", () => purgeExpired(ctx, now)],
   ] as const) {
     try {
       await job();

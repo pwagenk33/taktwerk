@@ -365,6 +365,20 @@ Die Logs sind auf 5 Dateien à 20 MB pro Dienst begrenzt und füllen die Platte 
 - **Microsoft-/Google-Anmeldung (optional):** Wenn eingeschaltet, erhält Microsoft bzw. Google beim Login Name und E-Mail der Person; die App selbst überträgt keine weiteren Daten dorthin.
 - **Auftragsbearbeitung:** Mit jeder Kundenfirma, deren Mitarbeitende in der App erfasst werden, gehört eine Vereinbarung zur Auftragsbearbeitung abgeschlossen – Vorlage in [docs/AVV-Vorlage.md](AVV-Vorlage.md). Mit dem Cloud-Anbieter und dem Mailanbieter bestehen entsprechende Verträge (Unterauftragsbearbeiter), die bei den Anbietern abrufbar sind.
 
+### Firma entfernen
+
+Wenn eine Firma die Installation verlässt und alle Aufbewahrungsfristen abgelaufen sind (siehe [docs/DATENSCHUTZ.md](DATENSCHUTZ.md)):
+
+1. Unter Einstellungen → Betreiber die Firma **deaktivieren** (niemand kann sich mehr anmelden).
+2. Auf Wunsch der Firma alle Daten exportieren (Berichte & Export, als Admin der Firma).
+3. Auf der VM:
+
+```bash
+docker compose -f deploy/docker-compose.prod.yml run --rm app node server/dist/cli.js org-remove <slug> LOESCHEN
+```
+
+Das löscht die Firma mit allen Personen, Buchungen, Rechnungen und Protokollen. Belege unter `data/receipts` gehören zu Spesen-IDs und werden mit dem nächsten Backup-Lauf nicht mehr gebraucht; Backups der letzten 30 Tage enthalten die Daten noch.
+
 ## 15. Kurzreferenz
 
 | Aufgabe | Befehl (im Ordner `~/trackinsight`) |

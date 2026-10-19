@@ -101,7 +101,7 @@ describe("auditor (Treuhand)", () => {
     const set = await post("/api/auth/password/set", { token: decodeURIComponent(link[1]), password: "revision-passwort-2026" });
     auditor = `tw_session=${set.cookies.find((c) => c.name === "tw_session")!.value}`;
     const d = (await get("/api/dataset", auditor)).json();
-    expect(d.projects.every((p: { budget: number }) => p.budget > 0 || p.name === "Interne Arbeit")).toBe(true);
+    expect(d.projects.every((p: { budget: number; name: string }) => p.budget > 0 || p.name === "Interne Arbeit")).toBe(true);
     expect(d.employees.some((e: { role: string }) => e.role === "auditor")).toBe(false);
     expect((await get("/api/reports", auditor)).json().length).toBeGreaterThan(1);
     expect((await get("/api/closings", auditor)).statusCode).toBe(200);

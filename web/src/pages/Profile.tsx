@@ -324,6 +324,15 @@ export function Profile() {
         </section>
         <ReminderCard />
         {mode === "api" && <SecurityCard />}
+        <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }} id="my-data">
+          <h2>Meine Daten</h2>
+          <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>Alles, was über dich gespeichert ist, als Datei (Auskunftsrecht nach Datenschutzgesetz): Profil, Buchungen, Spesen, Absenzen, Abschlüsse, Geräte. Buchungen bleiben als Geschäftsunterlagen 10 Jahre aufbewahrt, auch nach einem Austritt.</p>
+          {mode === "api" ? (
+            <div className="toolbar"><a id="data-export" className="btn small" href="/api/me/export" download>Auskunft herunterladen (JSON)</a></div>
+          ) : (
+            <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>In der installierten Version lädst du die Datei hier herunter.</p>
+          )}
+        </section>
         {mode === "demo" && (
           <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <h2><Icon.shield /> Sicherheit</h2>
