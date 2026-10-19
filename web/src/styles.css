@@ -432,7 +432,8 @@ table.week tfoot tr.muted td { font-weight: 400; border-top: 0; }
 
 /* ---- week calendar ---- */
 .cal-scroll { overflow-x: auto; }
-.cal-head, .cal-grid { display: grid; grid-template-columns: 52px repeat(7, minmax(92px, 1fr)); min-width: 720px; }
+.cal-head, .cal-grid { display: grid; grid-template-columns: 52px repeat(var(--cal-cols, 7), minmax(92px, 1fr)); min-width: calc(52px + var(--cal-cols, 7) * 96px); }
+.cal-toolbar { flex-wrap: wrap; gap: 10px; }
 .cal-head { border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); z-index: 2; }
 .cal-grid { position: relative; max-height: 560px; overflow-y: auto; overflow-x: hidden; }
 .cal-gutter { position: relative; }
@@ -527,3 +528,19 @@ table.data tr.cust td { padding-block: 11px; }
 .fav-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
 .fav-list li:last-child { border-bottom: 0; }
 .logo-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+/* ---------- «Klar»: one primary action per page, neutral actions in tables and card heads ---------- */
+table.data .btn.primary, .card-head .btn.primary { background: var(--surface); border-color: var(--line); color: var(--ink); }
+table.data .btn.primary:hover, .card-head .btn.primary:hover { border-color: var(--accent); color: var(--accent); }
+table.data .btn.ghost { color: var(--ink-2); }
+.empty { padding: 36px 20px; text-align: center; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.empty strong { color: var(--ink-2); font-weight: 600; }
+@media (max-width: 700px) {
+  .cal-grid { max-height: none; }
+  .cal-week-sum { font-size: 0.76rem; }
+  .tiles { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .tile { padding: 12px; }
+  .tile .value { font-size: 1.2rem; }
+  .cal-block { font-size: 0.8rem; padding: 5px 8px 4px; }
+  .cal .card-pad:last-of-type { display: none; }
+}

@@ -862,11 +862,41 @@ type Drag =
   | { kind: "move"; entry: TimeEntry; date: string; start: number; offset: number; moved: boolean }
   | { kind: "resize"; entry: TimeEntry; date: string; end: number };
 
+/** True below 700 px; the calendar then shows one day at a time. */
+function usePhone() {
+  const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 700px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 700px)");
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return phone;
+}
+
 /** Week calendar: columns are days, the vertical axis is the time of day. Drag on empty space to book. */
 function WeekCalendar() {
   const { data, currentUserId, updateTimeEntry, lockOf, notify } = useStore();
   const labels = useLabels();
   const [monday, setMonday] = useState(() => mondayOf(data.today));
+  const phone = usePhone();
+  // On phones the calendar shows one day; `dayIdx` is the weekday offset inside the current week.
+  const [dayIdx, setDayIdx] = useState(() => Math.max(0, Math.min(6, Math.round((new Date(data.today).getTime() - new Date(mondayOf(data.today)).getTime()) / 86400000))));
+  const stepDay = (delta: number) => {
+    const next = dayIdx + delta;
+    if (next < 0) { setMonday(addDays(monday, -7)); setDayIdx(6); }
+    else if (next > 6) { setMonday(addDays(monday, 7)); setDayIdx(0); }
+    else setDayIdx(next);
+  };
+  const goToday = () => { setMonday(mondayOf(data.today)); setDayIdx(Math.round((new Date(data.today).getTime() - new Date(mondayOf(data.today)).getTime()) / 86400000)); };
+  const swipe = useRef<number | null>(null);
+  const onTouchStart = (ev: React.TouchEvent) => { swipe.current = ev.touches[0].clientX; };
+  const onTouchEnd = (ev: React.TouchEvent) => {
+    if (swipe.current === null) return;
+    const dx = ev.changedTouches[0].clientX - swipe.current;
+    swipe.current = null;
+    if (Math.abs(dx) > 60) stepDay(dx < 0 ? 1 : -1);
+  };
   const [dialog, setDialog] = useState<DialogState | null>(null);
   useEffect(() => {
     const open = () => setDialog({ date: days.includes(data.today) ? data.today : days[0], hours: 1 });
@@ -876,20 +906,21 @@ function WeekCalendar() {
   const [drag, setDrag] = useState<Drag | null>(null);
   const [error, setError] = useState("");
   const gridRef = useRef<HTMLDivElement>(null);
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(monday, i)), [monday]);
+  const week = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(monday, i)), [monday]);
+  const days = useMemo(() => (phone ? [week[dayIdx]] : week), [week, phone, dayIdx]);
   const employee = data.employees.find((e) => e.id === currentUserId);
   const cal = useMemo(() => (employee ? new WorkCalendar(data, employee) : null), [data, employee]);
   const byDay = useMemo(() => {
-    const m = new Map<string, TimeEntry[]>(days.map((d) => [d, []]));
+    const m = new Map<string, TimeEntry[]>(week.map((d) => [d, []]));
     for (const e of data.timeEntries) if (e.employeeId === currentUserId && m.has(e.date)) m.get(e.date)!.push(e);
     return m;
-  }, [data, currentUserId, days]);
+  }, [data, currentUserId, week]);
   const hoursOf = (d: string) => (byDay.get(d) ?? []).reduce((s, e) => s + e.hours, 0);
   const targetOf = (d: string) => (cal ? Math.max(0, cal.target(d) - cal.credit(d)) : 0);
   const absenceOn = (d: string) => (data.absences ?? []).find((a) => a.employeeId === currentUserId && a.status !== "rejected" && a.startDate <= d && a.endDate >= d);
   const holidayOn = (d: string) => cal?.holidays.get(d);
-  const weekWorked = days.reduce((s, d) => s + hoursOf(d), 0);
-  const weekTarget = days.reduce((s, d) => s + targetOf(d), 0);
+  const weekWorked = week.reduce((s, d) => s + hoursOf(d), 0);
+  const weekTarget = week.reduce((s, d) => s + targetOf(d), 0);
   const height = (DAY_END - DAY_START) * PX_PER_MIN;
   const colorOf = (subId: string) => {
     const c = labels.customerOf(subId);
@@ -1016,21 +1047,30 @@ function WeekCalendar() {
 
   return (
     <section className="card cal">
-      <div className="card-head" style={{ flexWrap: "wrap", gap: 10 }}>
-        <div className="tree-row" style={{ gap: 8 }}>
-          <button className="btn small ghost" aria-label="Vorherige Woche" onClick={() => setMonday(addDays(monday, -7))}>‹</button>
-          <h2 style={{ margin: 0 }}>KW {isoWeek(monday)} · {fmtDay(days[0]).split(",")[1]?.trim()} – {fmtDay(days[6]).split(",")[1]?.trim()}</h2>
-          <button className="btn small ghost" aria-label="Nächste Woche" onClick={() => setMonday(addDays(monday, 7))}>›</button>
-          {monday !== mondayOf(data.today) && <button className="btn small ghost" onClick={() => setMonday(mondayOf(data.today))}>Heute</button>}
-        </div>
+      <div className="card-head cal-toolbar">
+        {phone ? (
+          <div className="tree-row" style={{ gap: 6 }}>
+            <button className="btn small ghost" aria-label="Vorheriger Tag" onClick={() => stepDay(-1)}>‹</button>
+            <h2 style={{ margin: 0 }}>{fmtDay(days[0])}</h2>
+            <button className="btn small ghost" aria-label="Nächster Tag" onClick={() => stepDay(1)}>›</button>
+            {days[0] !== data.today && <button className="btn small ghost" onClick={goToday}>Heute</button>}
+          </div>
+        ) : (
+          <div className="tree-row" style={{ gap: 8 }}>
+            <button className="btn small ghost" aria-label="Vorherige Woche" onClick={() => setMonday(addDays(monday, -7))}>‹</button>
+            <h2 style={{ margin: 0 }}>KW {isoWeek(monday)} · {fmtDay(week[0]).split(",")[1]?.trim()} – {fmtDay(week[6]).split(",")[1]?.trim()}</h2>
+            <button className="btn small ghost" aria-label="Nächste Woche" onClick={() => setMonday(addDays(monday, 7))}>›</button>
+            {monday !== mondayOf(data.today) && <button className="btn small ghost" onClick={() => setMonday(mondayOf(data.today))}>Heute</button>}
+          </div>
+        )}
         <div className="tree-row" style={{ gap: 12 }}>
-          <span className="muted" style={{ fontSize: "0.82rem" }}>
-            {fmt1(weekWorked)} h von {fmt1(weekTarget)} h Soll · Saldo <strong className={weekWorked - weekTarget < 0 ? "neg" : ""}>{signedH(weekWorked - weekTarget)}</strong>
+          <span className="muted cal-week-sum" style={{ fontSize: "0.82rem" }}>
+            {phone ? "Woche" : `${fmt1(weekWorked)} h von ${fmt1(weekTarget)} h Soll`} · Saldo <strong className={weekWorked - weekTarget < 0 ? "neg" : ""}>{signedH(weekWorked - weekTarget)}</strong>
           </span>
-          <button id="cal-new" className="btn small primary" onClick={() => setDialog({ date: days.includes(data.today) ? data.today : days[0], hours: 1 })}>+ Eintrag</button>
+          <button id="cal-new" className="btn small" onClick={() => setDialog({ date: days.includes(data.today) ? data.today : days[0], hours: 1 })}>+ Eintrag</button>
         </div>
       </div>
-      <div className="cal-scroll">
+      <div className="cal-scroll" style={{ "--cal-cols": days.length } as React.CSSProperties} onTouchStart={phone ? onTouchStart : undefined} onTouchEnd={phone ? onTouchEnd : undefined}>
         <div className="cal-head">
           <div className="cal-gutter" />
           {days.map((d, i) => {
@@ -1038,7 +1078,7 @@ function WeekCalendar() {
             const lock = lockOf(currentUserId, d);
             return (
               <div key={d} className={`cal-day-head ${d === data.today ? "today" : ""} ${off ? "off" : ""}`}>
-                <div className="cal-day-name">{WEEKDAYS[i]} <span>{d.slice(8, 10)}.{d.slice(5, 7)}.</span>{lock && <span className="lock" title={lock}><Icon.lock /></span>}</div>
+                <div className="cal-day-name">{WEEKDAYS[phone ? dayIdx : i]} <span>{d.slice(8, 10)}.{d.slice(5, 7)}.</span>{lock && <span className="lock" title={lock}><Icon.lock /></span>}</div>
                 <div className="cal-day-sum num">{fmt1(hoursOf(d))} / {fmt1(targetOf(d))} h</div>
                 <div className="cal-allday">
                   {holidayOn(d) && <span className="cal-chip holiday" title="Feiertag">{holidayOn(d)!.name}</span>}
@@ -1112,7 +1152,7 @@ export function TimeTracking() {
       <div className="page-head">
         <div>
           <h1>Zeiterfassung</h1>
-          <p className="sub">Zeit und Spesen auf Kunde, Projekt und Subprojekt buchen. Alle gebuchten Stunden zählen als Arbeitszeit, Ferien und Absenzen werden gutgeschrieben.</p>
+          <p className="sub">Zeit und Spesen auf Kunde, Projekt und Subprojekt buchen.</p>
         </div>
         <div className="seg" role="tablist" aria-label="Ansicht">
           <button id="view-week" className={view === "week" ? "on" : ""} onClick={() => switchTo("week")}>Kalender</button>
