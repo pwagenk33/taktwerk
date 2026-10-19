@@ -1,7 +1,7 @@
-import { Fragment, useState } from "react";
-import { fmt1, fmtCHF, fmtMonth, fmtNum, rateOn, type Project, type SubProject } from "@taktwerk/domain";
+import { Fragment, useMemo, useState } from "react";
+import { fmt1, fmtCHF, fmtMonth, fmtNum, rateOn, type BudgetStatus, type Customer, type Project, type SubProject } from "@taktwerk/domain";
 import { useStore } from "../store";
-import { BurnUpChart, Money, StatusPill } from "../ui/components";
+import { BurnUpChart, Icon, Money, StatusPill } from "../ui/components";
 
 /** Name, budget and JIRA key of a project or sub-project, editable in place by leads. */
 function EditableHead({ item, kind, onSave }: { item: Project | SubProject; kind: "project" | "sub"; onSave: (p: { name: string; budget: number; jira: string }) => Promise<void> }) {
@@ -68,7 +68,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
     <>
       <div className="page-head">
         <div>
-          <button className="btn small ghost" onClick={onBack}>‹ Alle Kunden & Projekte</button>
+          <button className="btn small ghost back-btn" onClick={onBack}><Icon.back />{customer?.name ?? "Kunden"}</button>
           <h1 style={{ marginTop: 8 }}>{project.name}</h1>
           <p className="sub">{customer?.name} · {fmtCHF(customer ? rateOn(customer, data.today) : 0)}/h</p>
         </div>
@@ -201,76 +201,184 @@ function NewItemForm({ draft, onClose }: { draft: NonNullable<Draft>; onClose: (
   );
 }
 
-export function Projects() {
+const RANK: Record<BudgetStatus, number> = { ok: 0, risk: 1, over: 2 };
+const worst = (a: BudgetStatus, b: BudgetStatus) => (RANK[a] >= RANK[b] ? a : b);
+const PAGE = 50;
+
+/** Searchable customer list: one row per customer with budget, spend, forecast and the worst project status. */
+function CustomerList({ onOpen }: { onOpen: (id: string) => void }) {
   const { data, reports } = useStore();
+  const [q, setQ] = useState("");
+  const [limit, setLimit] = useState(PAGE);
   const [draft, setDraft] = useState<Draft>(null);
-  const [openProject, setOpenProject] = useState<string | null>(null);
-  if (openProject && data.projects.some((p) => p.id === openProject)) return <ProjectDetail projectId={openProject} onBack={() => setOpenProject(null)} />;
-  const subReport = new Map(reports.flatMap((r) => r.subs.map((s) => [s.subProject.id, s] as const)));
-  const projReport = new Map(reports.map((r) => [r.project.id, r]));
+  const rows = useMemo(() => {
+    const byCustomer = new Map<string, typeof reports>();
+    for (const r of reports) {
+      const list = byCustomer.get(r.project.customerId) ?? [];
+      list.push(r);
+      byCustomer.set(r.project.customerId, list);
+    }
+    return [...data.customers]
+      .sort((a, b) => a.name.localeCompare(b.name, "de"))
+      .map((c) => {
+        const projects = data.projects.filter((p) => p.customerId === c.id);
+        const rs = byCustomer.get(c.id) ?? [];
+        const budget = projects.reduce((s, p) => s + p.budget, 0);
+        const actual = rs.reduce((s, r) => s + r.actualCost, 0);
+        const forecast = rs.reduce((s, r) => s + r.forecastCost, 0);
+        const status = rs.reduce<BudgetStatus>((s, r) => worst(s, r.status), "ok");
+        const haystack = [c.name, ...projects.map((p) => `${p.name} ${p.jiraProjectKey ?? ""}`)].join(" ").toLowerCase();
+        return { c, projects, budget, actual, forecast, status, haystack };
+      });
+  }, [data, reports]);
+  const needle = q.trim().toLowerCase();
+  const hits = needle ? rows.filter((r) => r.haystack.includes(needle)) : rows;
+  const shown = hits.slice(0, limit);
+  const attention = rows.filter((r) => r.status !== "ok").length;
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Kunden & Projekte</h1>
-          <p className="sub">Projekt anklicken für Budget, Forecast, Subprojekte und JIRA-Tickets. Jeder Kunde hat einen eigenen Stundensatz mit Gültigkeitsdatum.</p>
+          <p className="sub">{rows.length} Kunden · {data.projects.length} Projekte{attention > 0 ? ` · ${attention} mit knappem oder überschrittenem Budget` : ""}</p>
         </div>
         <button className="btn primary" onClick={() => setDraft({ kind: "customer" })}>+ Kunde</button>
       </div>
       {draft && <NewItemForm key={JSON.stringify(draft)} draft={draft} onClose={() => setDraft(null)} />}
       <section className="card">
-        {data.customers.map((c) => {
-          const projects = data.projects.filter((p) => p.customerId === c.id);
-          const history = [...c.rates].sort((a, b) => a.validFrom.localeCompare(b.validFrom));
-          return (
-            <div className="tree-customer" key={c.id}>
-              <div className="tree-row">
-                <div>
-                  <h2>{c.name}</h2>
-                  <div className="muted" style={{ fontSize: "0.82rem" }}>
-                    {fmtCHF(rateOn(c, data.today))}/h
-                    {history.length > 1 && ` · seit ${history.at(-1)!.validFrom.split("-").reverse().join(".")}, vorher ${fmtCHF(history.at(-2)!.hourlyRate)}/h`}
-                  </div>
-                </div>
-                <button className="btn small" onClick={() => setDraft({ kind: "project", customerId: c.id })}>+ Projekt</button>
-              </div>
-              {projects.map((p) => {
-                const r = projReport.get(p.id);
-                const subs = data.subProjects.filter((s) => s.projectId === p.id);
-                const allocated = subs.reduce((s, x) => s + x.budget, 0);
+        <div className="card-head" style={{ paddingBottom: 10, flexWrap: "wrap" }}>
+          <div className="search">
+            <span className="pick-icon"><Icon.search /></span>
+            <input id="cust-search" className="input" placeholder="Kunde, Projekt oder JIRA-Schlüssel suchen …" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
+          </div>
+          <span className="muted" style={{ fontSize: "0.82rem" }}>{needle ? `${hits.length} von ${rows.length} Kunden` : "Zeile anklicken für Projekte und Budgets"}</span>
+        </div>
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr><th>Kunde</th><th className="r">Stundensatz</th><th className="r">Budget</th><th className="r">Verbraucht</th><th>Auslastung</th><th className="r">Forecast</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {shown.map(({ c, projects, budget, actual, forecast, status }) => {
+                const share = budget > 0 ? Math.min(1, actual / budget) : 0;
                 return (
-                  <div className="tree-project" key={p.id}>
-                    <div className="tree-row">
-                      <div>
-                        <button className="link-btn" onClick={() => setOpenProject(p.id)}><strong>{p.name}</strong></button> {p.jiraProjectKey && <span className="pill neutral mono">{p.jiraProjectKey}</span>}
-                        <div className="muted num" style={{ fontSize: "0.8rem" }}>
-                          Budget {fmtCHF(p.budget)} · davon verteilt {fmtCHF(allocated)} · Reserve {fmtCHF(p.budget - allocated)}
-                        </div>
-                      </div>
-                      <div className="toolbar">
-                        {r && <StatusPill status={r.status} />}
-                        <button className="btn small ghost" onClick={() => setDraft({ kind: "sub", projectId: p.id })}>+ Subprojekt</button>
-                      </div>
-                    </div>
-                    {subs.map((s) => {
-                      const sr = subReport.get(s.id);
-                      return (
-                        <div className="tree-sub clickable" key={s.id} onClick={() => setOpenProject(p.id)}>
-                          <span>{s.name} {s.jiraEpicKey && <span className="mono muted">{s.jiraEpicKey}</span>}</span>
-                          <span className="num">
-                            {fmtCHF(s.budget)}{sr ? ` · ${sr.spOpen} SP offen` : ""}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <tr key={c.id} className="clickable cust" onClick={() => onOpen(c.id)}>
+                    <td>
+                      <div className="cust-name">{c.name}</div>
+                      <div className="cust-sub">{projects.length === 0 ? "Noch kein Projekt" : projects.length === 1 ? projects[0].name : `${projects.length} Projekte · ${projects.map((p) => p.name).slice(0, 3).join(", ")}${projects.length > 3 ? " …" : ""}`}</div>
+                    </td>
+                    <td className="r num">{fmtCHF(rateOn(c, data.today))}/h</td>
+                    <td className="r num">{budget > 0 ? fmtCHF(budget) : "–"}</td>
+                    <td className="r num">{projects.length ? fmtCHF(actual) : "–"}</td>
+                    <td>{budget > 0 && <div className={`bar ${status}`} title={`${fmt1(share * 100)} % des Budgets verbraucht`}><span style={{ width: `${share * 100}%` }} /></div>}</td>
+                    <td className="r num">{projects.length ? fmtCHF(forecast) : "–"}</td>
+                    <td>{projects.length > 0 && budget > 0 && <StatusPill status={status} />}</td>
+                  </tr>
                 );
               })}
+              {shown.length === 0 && <tr><td colSpan={7} className="muted">Kein Kunde passt zu «{q}».</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {hits.length > limit && (
+          <div className="card-pad" style={{ paddingTop: 10, textAlign: "center" }}>
+            <button className="btn small" onClick={() => setLimit(limit + PAGE)}>Weitere {Math.min(PAGE, hits.length - limit)} Kunden anzeigen</button>
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+/** One customer: rate, figures and the project tree with sub-projects. */
+function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Customer; onBack: () => void; onOpenProject: (id: string) => void }) {
+  const { data, reports } = useStore();
+  const [draft, setDraft] = useState<Draft>(null);
+  const projects = data.projects.filter((p) => p.customerId === customer.id);
+  const projReport = new Map(reports.map((r) => [r.project.id, r]));
+  const subReport = new Map(reports.flatMap((r) => r.subs.map((s) => [s.subProject.id, s] as const)));
+  const history = [...customer.rates].sort((a, b) => a.validFrom.localeCompare(b.validFrom));
+  const rs = projects.map((p) => projReport.get(p.id)).filter((r): r is NonNullable<typeof r> => !!r);
+  const budget = projects.reduce((s, p) => s + p.budget, 0);
+  const actual = rs.reduce((s, r) => s + r.actualCost, 0);
+  const forecast = rs.reduce((s, r) => s + r.forecastCost, 0);
+  const hours = data.timeEntries.filter((e) => data.subProjects.some((sp) => sp.id === e.subProjectId && projects.some((p) => p.id === sp.projectId))).reduce((s, e) => s + e.hours, 0);
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <button className="btn small ghost back-btn" onClick={onBack}><Icon.back />Alle Kunden</button>
+          <h1 style={{ marginTop: 8 }}>{customer.name}</h1>
+          <p className="sub">
+            {fmtCHF(rateOn(customer, data.today))}/h
+            {history.length > 1 && ` · seit ${history.at(-1)!.validFrom.split("-").reverse().join(".")}, vorher ${fmtCHF(history.at(-2)!.hourlyRate)}/h`}
+            {" · "}{projects.length} {projects.length === 1 ? "Projekt" : "Projekte"}
+          </p>
+        </div>
+        <button className="btn primary" onClick={() => setDraft({ kind: "project", customerId: customer.id })}>+ Projekt</button>
+      </div>
+      {draft && <NewItemForm key={JSON.stringify(draft)} draft={draft} onClose={() => setDraft(null)} />}
+      <div className="tiles">
+        <div className="card tile"><span className="label">Budget</span><span className="value num">{fmtCHF(budget)}</span></div>
+        <div className="card tile"><span className="label">Verbraucht</span><span className="value num">{fmtCHF(actual)}</span><span className="delta num">{budget > 0 ? `${fmt1((actual / budget) * 100)} % des Budgets` : `${fmt1(hours)} h gebucht`}</span></div>
+        <div className="card tile"><span className="label">Forecast</span><span className="value num">{fmtCHF(forecast)}</span><span className="delta">Abweichung <Money v={budget - forecast} signed /></span></div>
+        <div className="card tile"><span className="label">Gebucht</span><span className="value num">{fmt1(hours)} h</span><span className="delta">über alle Projekte</span></div>
+      </div>
+      <section className="card">
+        {projects.length === 0 && <p className="muted card-pad">Noch kein Projekt. Mit «+ Projekt» anlegen.</p>}
+        {projects.map((p) => {
+          const r = projReport.get(p.id);
+          const subs = data.subProjects.filter((s) => s.projectId === p.id);
+          const allocated = subs.reduce((s, x) => s + x.budget, 0);
+          return (
+            <div className="tree-customer" key={p.id}>
+              <div className="tree-row">
+                <div>
+                  <button className="link-btn" onClick={() => onOpenProject(p.id)}><h2 style={{ margin: 0, color: "inherit" }}>{p.name}</h2></button> {p.jiraProjectKey && <span className="pill neutral mono">{p.jiraProjectKey}</span>}
+                  <div className="muted num" style={{ fontSize: "0.8rem" }}>
+                    Budget {fmtCHF(p.budget)} · davon verteilt {fmtCHF(allocated)} · Reserve {fmtCHF(p.budget - allocated)}
+                    {r && ` · verbraucht ${fmtCHF(r.actualCost)} · Forecast ${fmtCHF(r.forecastCost)}`}
+                  </div>
+                </div>
+                <div className="toolbar">
+                  {r && <StatusPill status={r.status} />}
+                  <button className="btn small ghost" onClick={() => setDraft({ kind: "sub", projectId: p.id })}>+ Subprojekt</button>
+                  <button className="btn small" onClick={() => onOpenProject(p.id)}>Öffnen</button>
+                </div>
+              </div>
+              <div className="tree-project">
+                {subs.map((s) => {
+                  const sr = subReport.get(s.id);
+                  return (
+                    <div className="tree-sub clickable" key={s.id} onClick={() => onOpenProject(p.id)}>
+                      <span>{s.name} {s.jiraEpicKey && <span className="mono muted">{s.jiraEpicKey}</span>}</span>
+                      <span className="num">
+                        {fmtCHF(s.budget)}{sr ? ` · ${fmtCHF(sr.actualCost)} verbraucht · ${sr.spOpen} SP offen` : ""}
+                      </span>
+                    </div>
+                  );
+                })}
+                {subs.length === 0 && <span className="muted" style={{ fontSize: "0.85rem" }}>Noch kein Subprojekt.</span>}
+              </div>
             </div>
           );
         })}
       </section>
     </>
   );
+}
+
+type View = { kind: "list" } | { kind: "customer"; id: string } | { kind: "project"; id: string; from?: string };
+
+export function Projects() {
+  const { data } = useStore();
+  const [view, setView] = useState<View>({ kind: "list" });
+  if (view.kind === "project" && data.projects.some((p) => p.id === view.id)) {
+    return <ProjectDetail projectId={view.id} onBack={() => setView(view.from ? { kind: "customer", id: view.from } : { kind: "list" })} />;
+  }
+  const customer = view.kind === "customer" ? data.customers.find((c) => c.id === view.id) : undefined;
+  if (customer) return <CustomerDetail customer={customer} onBack={() => setView({ kind: "list" })} onOpenProject={(id) => setView({ kind: "project", id, from: customer.id })} />;
+  return <CustomerList onOpen={(id) => setView({ kind: "customer", id })} />;
 }

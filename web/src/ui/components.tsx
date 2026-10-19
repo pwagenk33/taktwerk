@@ -247,4 +247,9 @@ export const Icon = {
   download: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>,
   mail: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></svg>,
   close: () => <svg viewBox="0 0 24 24" width="14" height="14" {...P}><path d="M6 6l12 12M18 6L6 18" /></svg>,
+  search: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5" /></svg>,
+  sun: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>,
+  moon: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>,
+  monitor: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></svg>,
+  back: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><path d="M15 5l-7 7 7 7" /></svg>,
 };

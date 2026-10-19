@@ -131,27 +131,95 @@ function useLabels() {
   };
 }
 
-/** Favorites and recently used targets as one-click chips. */
+/** One search field over favourites and recent bookings; a pick fills customer, project, sub-project and activity. */
 function QuickPicks({ userId, onPick, fav }: { userId: string; onPick: (f: Favorite) => void; fav: ReturnType<typeof useFavorites> }) {
   const labels = useLabels();
   const recent = useRecent(userId, fav.favorites);
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (ev: PointerEvent) => {
+      if (!wrapRef.current?.contains(ev.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
+  }, [open]);
   if (fav.favorites.length === 0 && recent.length === 0) return null;
-  const chip = (f: Favorite, star: boolean) => (
-    <span className="chip-wrap" key={`${f.subProjectId}|${f.reason}|${f.jiraIssueKey ?? ""}`}>
-      <button type="button" className="chip" title={`${labels.long(f.subProjectId)} – ${f.reason}`} onClick={() => onPick(f)}>
-        <span className="chip-main">{f.reason}</span>
-        <span className="chip-sub">{labels.short(f.subProjectId)}</span>
-      </button>
-      <button type="button" className={`star ${star ? "on" : ""}`} aria-label={star ? "Favorit entfernen" : "Als Favorit merken"} title={star ? "Favorit entfernen" : "Als Favorit merken"} onClick={() => fav.toggle(f)}>★</button>
-    </span>
-  );
+  const needle = q.trim().toLowerCase();
+  const match = (f: Favorite) => !needle || `${f.reason} ${labels.long(f.subProjectId)} ${f.jiraIssueKey ?? ""}`.toLowerCase().includes(needle);
+  const rows = [...fav.favorites.filter(match).map((f) => ({ f, star: true })), ...recent.filter(match).map((f) => ({ f, star: false }))].slice(0, 8);
+  const choose = (f: Favorite) => {
+    onPick(f);
+    setQ("");
+    setOpen(false);
+  };
+  const onKey = (ev: React.KeyboardEvent<HTMLInputElement>) => {
+    if (ev.key === "ArrowDown") {
+      ev.preventDefault();
+      setOpen(true);
+      setCursor((c) => Math.min(rows.length - 1, c + 1));
+    } else if (ev.key === "ArrowUp") {
+      ev.preventDefault();
+      setCursor((c) => Math.max(0, c - 1));
+    } else if (ev.key === "Enter" && open && rows[cursor]) {
+      ev.preventDefault();
+      choose(rows[cursor].f);
+    } else if (ev.key === "Escape" && open) {
+      ev.stopPropagation();
+      setOpen(false);
+    }
+  };
   return (
-    <div className="quick">
-      {fav.favorites.length > 0 && (
-        <div className="quick-row"><span className="quick-label">Favoriten</span><div className="chips">{fav.favorites.map((f) => chip(f, true))}</div></div>
-      )}
-      {recent.length > 0 && (
-        <div className="quick-row"><span className="quick-label">Zuletzt</span><div className="chips">{recent.map((f) => chip(f, false))}</div></div>
+    <div className="pick" ref={wrapRef}>
+      <span className="pick-icon"><Icon.search /></span>
+      <input
+        id="pick-search"
+        className="input pick-input"
+        placeholder="Schnellwahl: Favoriten und letzte Buchungen durchsuchen …"
+        value={q}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls="pick-list"
+        onChange={(ev) => {
+          setQ(ev.target.value);
+          setOpen(true);
+          setCursor(0);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKey}
+      />
+      {open && (
+        <div className="pick-list" id="pick-list" role="listbox">
+          {rows.length === 0 && <div className="pick-empty">Keine Treffer</div>}
+          {rows.map((r, i) => (
+            <div
+              key={`${r.f.subProjectId}|${r.f.reason}|${r.f.jiraIssueKey ?? ""}`}
+              role="option"
+              aria-selected={i === cursor}
+              className={`pick-row ${i === cursor ? "on" : ""}`}
+              onMouseEnter={() => setCursor(i)}
+              onMouseDown={(ev) => ev.preventDefault()}
+              onClick={() => choose(r.f)}
+            >
+              <button
+                type="button"
+                className={`star ${r.star ? "on" : ""}`}
+                aria-label={r.star ? "Favorit entfernen" : "Als Favorit merken"}
+                title={r.star ? "Favorit entfernen" : "Als Favorit merken"}
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  fav.toggle(r.f);
+                }}
+              >★</button>
+              <span className="pick-main">{r.f.reason}</span>
+              <span className="pick-sub">{labels.short(r.f.subProjectId)}</span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -608,6 +676,8 @@ const DAY_START = 6 * 60;
 const DAY_END = 20 * 60;
 const PX_PER_MIN = 0.8; // 48 px per hour
 const SNAP = 15;
+/** Distinct, calm colours for customers; internal work (no hourly rate) stays grey. */
+const PALETTE = ["#2a78d6", "#1baf7a", "#8b5cf6", "#eda100", "#e05d8a", "#0ea5b7", "#eb6834", "#5b7a99"];
 const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 const toClock = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 const snap = (min: number) => Math.round(min / SNAP) * SNAP;
@@ -696,6 +766,9 @@ function EntryDialog({ state, onClose }: { state: DialogState; onClose: () => vo
     setIssueKey(f.jiraIssueKey ?? "");
     setReason(f.jiraIssueKey && f.reason.startsWith(`${f.jiraIssueKey} `) ? f.reason.slice(f.jiraIssueKey.length + 1) : f.reason);
   };
+  const current: Favorite | null = reason.trim() && target.subProjectId
+    ? { subProjectId: target.subProjectId, reason: issueKey ? `${issueKey} ${reason.trim()}` : reason.trim(), jiraIssueKey: issueKey || undefined }
+    : null;
   const h = Number(String(hours).replace(",", "."));
   const endTime = startTime && h > 0 ? toClock(Math.min(24 * 60 - 1, toMin(startTime) + Math.round(h * 60))) : "";
 
@@ -760,7 +833,12 @@ function EntryDialog({ state, onClose }: { state: DialogState; onClose: () => vo
               </label>
             </div>
             <label className="field">
-              <span>Grund / Tätigkeit</span>
+              <span className="tree-row" style={{ display: "flex" }}>
+                Grund / Tätigkeit
+                <button type="button" id="d-fav" className={`star ${current && fav.isFavorite(current) ? "on" : ""}`} disabled={!current} title="Diese Kombination als Favorit merken" onClick={() => current && fav.toggle(current)}>
+                  ★ <span style={{ fontSize: "0.75rem" }}>{current && fav.isFavorite(current) ? "Favorit" : "Als Favorit merken"}</span>
+                </button>
+              </span>
               <input id="d-reason" className="input" placeholder="z. B. Abnahme-Workshop vorbereitet" value={reason} autoFocus={!e} onChange={(ev) => setReason(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && save()} />
             </label>
             {error && <p className="error">{error}</p>}
@@ -817,6 +895,16 @@ function WeekCalendar() {
   const weekWorked = days.reduce((s, d) => s + hoursOf(d), 0);
   const weekTarget = days.reduce((s, d) => s + targetOf(d), 0);
   const height = (DAY_END - DAY_START) * PX_PER_MIN;
+  const colorOf = (subId: string) => {
+    const c = labels.customerOf(subId);
+    if (!c || rateOn(c, data.today) === 0) return undefined;
+    return PALETTE[Math.max(0, data.customers.findIndex((x) => x.id === c.id)) % PALETTE.length];
+  };
+  const [nowMin, setNowMin] = useState(() => new Date().getHours() * 60 + new Date().getMinutes());
+  useEffect(() => {
+    const t = setInterval(() => setNowMin(new Date().getHours() * 60 + new Date().getMinutes()), 60_000);
+    return () => clearInterval(t);
+  }, []);
   const hoursAxis = Array.from({ length: (DAY_END - DAY_START) / 60 }, (_, i) => DAY_START + i * 60);
 
   // Scroll the day columns to the working hours on first render.
@@ -840,7 +928,7 @@ function WeekCalendar() {
   const startCreate = (ev: React.PointerEvent<HTMLDivElement>, date: string) => {
     if (ev.button !== 0 || (ev.target as HTMLElement).closest(".cal-block") || lockOf(currentUserId, date)) return;
     const from = minutesAt(ev.currentTarget, ev.clientY);
-    setDrag({ kind: "create", date, from, to: from + 60 });
+    setDrag({ kind: "create", date, from, to: from + SNAP });
     ev.currentTarget.setPointerCapture(ev.pointerId);
   };
   const startMove = (ev: React.PointerEvent<HTMLDivElement>, entry: TimeEntry, date: string) => {
@@ -899,18 +987,21 @@ function WeekCalendar() {
     const top = (p.start - DAY_START) * PX_PER_MIN;
     const h = Math.max(18, (p.end - p.start) * PX_PER_MIN);
     const lock = lockOf(currentUserId, date);
+    const color = colorOf(e.subProjectId);
     return (
       <div
         key={preview ? "preview" : e.id}
-        className={`cal-block ${e.billable ? "" : "internal"} ${preview ? "preview" : ""} ${lock ? "locked" : ""}`}
-        style={{ top, height: h, left: `calc(${(p.col / p.cols) * 100}% + 2px)`, width: `calc(${100 / p.cols}% - 4px)` }}
+        className={`cal-block ${color ? "" : "internal"} ${preview ? "preview" : ""} ${lock ? "locked" : ""}`}
+        style={{ top, height: h, left: `calc(${(p.col / p.cols) * 100}% + 2px)`, width: `calc(${100 / p.cols}% - 4px)`, ...(color ? ({ "--ev": color } as React.CSSProperties) : {}) }}
         title={`${e.reason}\n${labels.long(e.subProjectId)} · ${fmt1(e.hours)} h${lock ? `\n${lock}` : ""}`}
         onPointerDown={(ev) => !preview && startMove(ev, e, date)}
       >
         <div className="cal-block-title">{e.reason}</div>
         {h >= 34 && <div className="cal-block-meta">{labels.short(e.subProjectId)}</div>}
         <div className="cal-block-time">{toClock(p.start)}–{toClock(p.end)} · {fmt1((p.end - p.start) / 60)} h</div>
-        {!lock && !preview && <span className="cal-resize" onPointerDown={(ev) => startResize(ev, e, date)} />}
+        {preview && <span className="cal-badge top">{toClock(p.start)}</span>}
+        {preview && <span className="cal-badge bottom">{toClock(p.end)} · {fmt1((p.end - p.start) / 60)} h</span>}
+        {!lock && !preview && <span className="cal-resize" title="Ziehen, um die Dauer zu ändern" onPointerDown={(ev) => startResize(ev, e, date)} />}
       </div>
     );
   };
@@ -978,10 +1069,13 @@ function WeekCalendar() {
                 onPointerCancel={() => setDrag(null)}
               >
                 {hoursAxis.map((m) => <div key={m} className="cal-line" style={{ top: (m - DAY_START) * PX_PER_MIN }} />)}
+                {d === data.today && nowMin >= DAY_START && nowMin <= DAY_END && <div className="cal-now" style={{ top: (nowMin - DAY_START) * PX_PER_MIN }} />}
                 {placed.filter((p) => !(drag && drag.kind !== "create" && drag.entry.id === p.entry.id)).map((p) => block(p, d))}
                 {drag?.kind === "create" && drag.date === d && (
-                  <div className="cal-block preview" style={{ top: (drag.from - DAY_START) * PX_PER_MIN, height: (drag.to - drag.from) * PX_PER_MIN, left: 2, right: 2 }}>
-                    <div className="cal-block-time">{toClock(drag.from)}–{toClock(drag.to)} · {fmt1((drag.to - drag.from) / 60)} h</div>
+                  <div className="cal-block preview creating" style={{ top: (drag.from - DAY_START) * PX_PER_MIN, height: (drag.to - drag.from) * PX_PER_MIN, left: 2, right: 2 }}>
+                    <div className="cal-block-title">Neue Buchung</div>
+                    <span className="cal-badge top">{toClock(drag.from)}</span>
+                    <span className="cal-badge bottom">{toClock(drag.to)} · {fmt1((drag.to - drag.from) / 60)} h</span>
                   </div>
                 )}
                 {drag?.kind === "move" && drag.date === d && block({ entry: drag.entry, start: drag.start, end: drag.start + Math.round(drag.entry.hours * 60), col: 0, cols: 1 }, d, true)}
@@ -992,7 +1086,7 @@ function WeekCalendar() {
         </div>
       </div>
       <div className="card-pad" style={{ paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <span className="muted" style={{ fontSize: "0.78rem" }}>Auf eine freie Stelle klicken oder ziehen, um zu buchen. Blöcke lassen sich verschieben und unten verlängern. Buchungen ohne Uhrzeit stehen oben im Tag.</span>
+        <span className="muted" style={{ fontSize: "0.78rem" }}>Auf eine freie Stelle ziehen, um zu buchen (15-Minuten-Raster). Einträge lassen sich verschieben und am unteren Rand verlängern. Buchungen ohne Uhrzeit stehen oben im Tag.</span>
         {error && <span className="error">{error}</span>}
       </div>
       {dialog && <EntryDialog key={`${dialog.entry?.id ?? "new"}|${dialog.date}|${dialog.startTime ?? ""}`} state={dialog} onClose={() => setDialog(null)} />}

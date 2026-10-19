@@ -8,7 +8,7 @@ import { TimeTracking } from "./pages/TimeTracking";
 import { Settings } from "./pages/Settings";
 import { Velocity } from "./pages/Velocity";
 import { WorkTime } from "./pages/WorkTime";
-import { useStore } from "./store";
+import { loadLocal, saveLocal, useStore } from "./store";
 import { Icon } from "./ui/components";
 import { MatterhornMark, MatterhornRidge } from "./ui/motif";
 
@@ -26,6 +26,24 @@ const PAGES = [
 type PageId = (typeof PAGES)[number]["id"];
 const ROLE_LABEL: Record<Role, string> = { admin: "Admin · Anna Keller", consultant: "Consultant · Marco Brunner", employee: "Mitarbeiterin · Lea Meier" };
 
+type Theme = "system" | "light" | "dark";
+const THEMES: { id: Theme; label: string; icon: () => JSX.Element }[] = [
+  { id: "light", label: "Hell", icon: Icon.sun },
+  { id: "dark", label: "Dunkel", icon: Icon.moon },
+  { id: "system", label: "Wie das System", icon: Icon.monitor },
+];
+
+/** Light, dark or the system setting; kept per browser and applied before the first paint by index.html. */
+function useTheme() {
+  const [theme, setTheme] = useState<Theme>(() => loadLocal<Theme>("rt.theme", "system"));
+  useEffect(() => {
+    if (theme === "system") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    saveLocal("rt.theme", theme);
+  }, [theme]);
+  return [theme, setTheme] as const;
+}
+
 function readHash(): PageId {
   const h = location.hash.replace("#", "");
   return (PAGES.find((p) => p.id === h)?.id ?? "dashboard") as PageId;
@@ -34,6 +52,7 @@ function readHash(): PageId {
 export function App() {
   const { role, setRole, toast, branding, mode, me, logout } = useStore();
   const [page, setPage] = useState<PageId>(readHash);
+  const [theme, setTheme] = useTheme();
   useEffect(() => {
     const onHash = () => setPage(readHash());
     window.addEventListener("hashchange", onHash);
@@ -56,6 +75,11 @@ export function App() {
           ))}
         </nav>
         <div className="rail-foot">
+          <div className="seg theme-seg" role="radiogroup" aria-label="Darstellung">
+            {THEMES.map((t) => (
+              <button key={t.id} id={`theme-${t.id}`} role="radio" aria-checked={theme === t.id} className={theme === t.id ? "on" : ""} title={t.label} aria-label={t.label} onClick={() => setTheme(t.id)}><t.icon /></button>
+            ))}
+          </div>
           {mode === "demo" ? (
             <>
               <span className="label">Ansicht als</span>
