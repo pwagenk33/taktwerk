@@ -11,6 +11,7 @@ import { Velocity } from "./pages/Velocity";
 import { WorkTime } from "./pages/WorkTime";
 import { useStore } from "./store";
 import { useTheme, type Theme } from "./theme";
+import { elapsedOf, fmtTimer, hoursFromSeconds, timer, useTimer } from "./timer";
 import { CommandPalette } from "./ui/CommandPalette";
 import { Icon } from "./ui/components";
 import { BrandMark } from "./ui/motif";
@@ -46,9 +47,40 @@ function readHash(): PageId {
 }
 
 /** Tells the time-tracking page to open the booking dialog; navigates there first if needed. */
-export function requestNewEntry() {
+export interface NewEntryRequest { date?: string; startTime?: string; hours?: number }
+export function requestNewEntry(detail: NewEntryRequest = {}) {
   if (readHash() !== "zeit") location.hash = "#zeit";
-  setTimeout(() => window.dispatchEvent(new CustomEvent("ti:new-entry")), 30);
+  setTimeout(() => window.dispatchEvent(new CustomEvent("ti:new-entry", { detail })), 30);
+}
+
+/** Header stopwatch: start, pause, resume, and stop into a prefilled booking. */
+function HeaderTimer() {
+  const t = useTimer();
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!t?.runningSince) return;
+    const id = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [t?.runningSince]);
+  if (!t) return <button id="timer-start" className="btn timer-btn" title="Stoppuhr starten" onClick={() => timer.start()}><Icon.clock /><span>Timer</span></button>;
+  const sec = elapsedOf(t);
+  const stop = () => {
+    const r = timer.stop();
+    if (!r) return;
+    const d = new Date(r.startedAt);
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    requestNewEntry({ date: local.toISOString().slice(0, 10), startTime: `${String(d.getHours()).padStart(2, "0")}:${String(Math.floor(d.getMinutes() / 15) * 15).padStart(2, "0")}`, hours: hoursFromSeconds(r.seconds) });
+  };
+  return (
+    <div className={`timer-chip ${t.runningSince ? "running" : "paused"}`} role="group" aria-label="Stoppuhr">
+      <span className="timer-dot" />
+      <span className="timer-time num">{fmtTimer(sec)}</span>
+      {t.runningSince
+        ? <button id="timer-pause" className="timer-ctl" title="Pause" aria-label="Pause" onClick={() => timer.pause()}>❚❚</button>
+        : <button id="timer-resume" className="timer-ctl" title="Weiter" aria-label="Weiter" onClick={() => timer.resume()}>▶</button>}
+      <button id="timer-stop" className="timer-ctl stop" title="Stoppen und buchen" aria-label="Stoppen und buchen" onClick={stop}>■</button>
+    </div>
+  );
 }
 
 const isTyping = (el: EventTarget | null) => el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.closest("[role=dialog]") !== null);
@@ -67,6 +99,7 @@ export function App() {
       if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "k") { ev.preventDefault(); setPalette((p) => !p); return; }
       if (ev.metaKey || ev.ctrlKey || ev.altKey || isTyping(ev.target)) return;
       if (ev.key === "n" || ev.key === "N") { ev.preventDefault(); requestNewEntry(); }
+      if (ev.key === "s" || ev.key === "S") { ev.preventDefault(); if (!timer.get()) timer.start(); }
     };
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("hashchange", onHash); window.removeEventListener("keydown", onKey); };
@@ -120,7 +153,8 @@ export function App() {
             <span>Suchen oder Befehl …</span>
             <kbd>⌘K</kbd>
           </button>
-          <button id="topbar-new" className="btn primary new-btn" onClick={requestNewEntry}>
+          <HeaderTimer />
+          <button id="topbar-new" className="btn primary new-btn" onClick={() => requestNewEntry()}>
             <span className="plus">+</span><span>Buchen</span><kbd>N</kbd>
           </button>
           <a href="#profil" className={`avatar-link ${current === "profil" ? "active" : ""}`} title={`${name} · Profil`} aria-label="Profil">

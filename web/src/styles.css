@@ -550,3 +550,26 @@ table.data .btn.ghost { color: var(--ink-2); }
 .todo { display: inline-flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.86rem; font-weight: 500; box-shadow: var(--shadow); }
 .todo:hover { border-color: var(--accent); }
 .todo-go { color: var(--accent); font-weight: 600; margin-left: 4px; }
+
+/* ---------- header stopwatch ---------- */
+.timer-btn { gap: 6px; color: var(--ink-2); }
+.timer-btn svg { width: 15px; height: 15px; }
+.timer-chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius-s); padding: 4px 6px 4px 10px; background: var(--surface); }
+.timer-chip.running { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); }
+.timer-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.timer-chip.running .timer-dot { background: var(--good); box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 20%, transparent); animation: pulse 1.6s infinite; }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent); } 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--good) 8%, transparent); } }
+.timer-time { font-weight: 600; font-size: 0.9rem; min-width: 64px; }
+.timer-ctl { border: 0; background: transparent; cursor: pointer; width: 28px; height: 26px; border-radius: 6px; color: var(--ink-2); font-size: 0.72rem; display: grid; place-items: center; }
+.timer-ctl:hover { background: var(--surface-2); color: var(--ink); }
+.timer-ctl.stop { color: var(--crit-ink); font-size: 0.95rem; }
+@media (max-width: 900px) { .timer-btn span { display: none; } .timer-chip { padding-left: 8px; } }
+
+/* ---------- small dropdown menu (details/summary) ---------- */
+.menu { position: relative; }
+.menu > summary { list-style: none; cursor: pointer; user-select: none; }
+.menu > summary::-webkit-details-marker { display: none; }
+.menu-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; min-width: 240px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-s); box-shadow: var(--shadow-pop); padding: 6px; display: flex; flex-direction: column; animation: rise 0.14s var(--ease); }
+.menu-list button { text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-weight: 500; color: var(--ink); }
+.menu-list button:hover { background: var(--surface-2); }
+.menu-hint { font-size: 0.74rem; color: var(--muted); padding: 6px 10px 4px; }

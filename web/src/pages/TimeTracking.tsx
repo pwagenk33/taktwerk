@@ -876,7 +876,7 @@ function usePhone() {
 
 /** Week calendar: columns are days, the vertical axis is the time of day. Drag on empty space to book. */
 function WeekCalendar() {
-  const { data, currentUserId, updateTimeEntry, lockOf, notify } = useStore();
+  const { data, currentUserId, addTimeEntry, updateTimeEntry, lockOf, notify } = useStore();
   const labels = useLabels();
   const [monday, setMonday] = useState(() => mondayOf(data.today));
   const phone = usePhone();
@@ -898,11 +898,62 @@ function WeekCalendar() {
     if (Math.abs(dx) > 60) stepDay(dx < 0 ? 1 : -1);
   };
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [hover, setHover] = useState<TimeEntry | null>(null);
   useEffect(() => {
-    const open = () => setDialog({ date: days.includes(data.today) ? data.today : days[0], hours: 1 });
+    const open = (ev: Event) => {
+      const d = (ev as CustomEvent<{ date?: string; startTime?: string; hours?: number }>).detail ?? {};
+      if (d.date && !week.includes(d.date)) setMonday(mondayOf(d.date));
+      setDialog({ date: d.date ?? (days.includes(data.today) ? data.today : days[0]), startTime: d.startTime, hours: d.hours ?? 1 });
+    };
     window.addEventListener("ti:new-entry", open);
     return () => window.removeEventListener("ti:new-entry", open);
   }); // re-bound each render so it sees the current week
+
+  /** Copies the person's bookings of `from` to `to` (only when `to` has none and is not locked). */
+  const copyDay = async (from: string, to: string) => {
+    if (lockOf(currentUserId, to) || (byDay.get(to) ?? []).length > 0) return 0;
+    const src = data.timeEntries.filter((e) => e.employeeId === currentUserId && e.date === from);
+    for (const e of src) {
+      const { id: _id, ...rest } = e;
+      await addTimeEntry({ ...rest, date: to });
+    }
+    return src.length;
+  };
+  const copyFromLastWeek = async (scope: "day" | "week") => {
+    const targets = scope === "day" ? [days[0]] : week;
+    let n = 0;
+    try {
+      for (const d of targets) n += await copyDay(addDays(d, -7), d);
+      notify(n === 0 ? "Nichts kopiert: Zieltage sind belegt, gesperrt oder die Vorwoche ist leer." : `${n} ${n === 1 ? "Buchung" : "Buchungen"} von letzter Woche übernommen`);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const duplicate = async (e: TimeEntry) => {
+    if (lockOf(currentUserId, e.date)) return;
+    const { id: _id, startTime, ...rest } = e;
+    const next = startTime ? toClock(Math.min(DAY_END - 15, toMin(startTime) + Math.round(e.hours * 60))) : undefined;
+    try {
+      await addTimeEntry({ ...rest, startTime: next });
+      notify(`${fmt1(e.hours)} h dupliziert`);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  // Keyboard: ← → week (day on phones), T today, D duplicate the booking under the pointer.
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      const el = ev.target as HTMLElement | null;
+      if (dialog || ev.metaKey || ev.ctrlKey || ev.altKey || (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable || el.closest("[role=dialog]")))) return;
+      if (ev.key === "ArrowLeft") { ev.preventDefault(); phone ? stepDay(-1) : setMonday(addDays(monday, -7)); }
+      else if (ev.key === "ArrowRight") { ev.preventDefault(); phone ? stepDay(1) : setMonday(addDays(monday, 7)); }
+      else if (ev.key === "t" || ev.key === "T") { ev.preventDefault(); goToday(); }
+      else if ((ev.key === "d" || ev.key === "D") && hover) { ev.preventDefault(); void duplicate(hover); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   const [drag, setDrag] = useState<Drag | null>(null);
   const [error, setError] = useState("");
   const gridRef = useRef<HTMLDivElement>(null);
@@ -1034,6 +1085,8 @@ function WeekCalendar() {
         style={{ top, height: h, left: `calc(${(p.col / p.cols) * 100}% + 2px)`, width: `calc(${100 / p.cols}% - 4px)`, ...(color ? ({ "--ev": color } as React.CSSProperties) : {}) }}
         title={`${e.reason}\n${labels.long(e.subProjectId)} · ${fmt1(e.hours)} h${lock ? `\n${lock}` : ""}`}
         onPointerDown={(ev) => !preview && startMove(ev, e, date)}
+        onPointerEnter={() => !preview && setHover(e)}
+        onPointerLeave={() => setHover((h) => (h?.id === e.id ? null : h))}
       >
         <div className="cal-block-title">{e.reason}</div>
         {h >= 34 && <div className="cal-block-meta">{labels.short(e.subProjectId)}</div>}
@@ -1067,6 +1120,14 @@ function WeekCalendar() {
           <span className="muted cal-week-sum" style={{ fontSize: "0.82rem" }}>
             {phone ? "Woche" : `${fmt1(weekWorked)} h von ${fmt1(weekTarget)} h Soll`} · Saldo <strong className={weekWorked - weekTarget < 0 ? "neg" : ""}>{signedH(weekWorked - weekTarget)}</strong>
           </span>
+          <details className="menu">
+            <summary className="btn small" title="Buchungen von letzter Woche übernehmen">Kopieren ▾</summary>
+            <div className="menu-list">
+              <button onClick={(ev) => { (ev.currentTarget.closest("details") as HTMLDetailsElement).open = false; void copyFromLastWeek("day"); }}>{phone ? "Diesen Tag" : "Heute"} wie vor einer Woche</button>
+              <button onClick={(ev) => { (ev.currentTarget.closest("details") as HTMLDetailsElement).open = false; void copyFromLastWeek("week"); }}>Ganze Woche wie letzte Woche</button>
+              <span className="menu-hint">Nur leere, nicht gesperrte Tage werden gefüllt.</span>
+            </div>
+          </details>
           <button id="cal-new" className="btn small" onClick={() => setDialog({ date: days.includes(data.today) ? data.today : days[0], hours: 1 })}>+ Eintrag</button>
         </div>
       </div>
@@ -1131,7 +1192,7 @@ function WeekCalendar() {
         </div>
       </div>
       <div className="card-pad" style={{ paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <span className="muted" style={{ fontSize: "0.78rem" }}>Auf eine freie Stelle ziehen, um zu buchen (15-Minuten-Raster). Einträge lassen sich verschieben und am unteren Rand verlängern. Buchungen ohne Uhrzeit stehen oben im Tag.</span>
+        <span className="muted" style={{ fontSize: "0.78rem" }}>Ziehen bucht (15-Minuten-Raster), Einträge lassen sich verschieben und unten verlängern. Tasten: N neu, S Stoppuhr, ← → Woche, T heute, D dupliziert den Eintrag unter der Maus. Buchungen ohne Uhrzeit stehen oben im Tag.</span>
         {error && <span className="error">{error}</span>}
       </div>
       {dialog && <EntryDialog key={`${dialog.entry?.id ?? "new"}|${dialog.date}|${dialog.startTime ?? ""}`} state={dialog} onClose={() => setDialog(null)} />}
