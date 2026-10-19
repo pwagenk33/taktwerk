@@ -1,10 +1,10 @@
-import { WorkCalendar, isoWeekKey, weekFigures } from "@taktwerk/domain";
+import { WorkCalendar, isoWeekKey, weekFigures, weekRange } from "@taktwerk/domain";
 import { and, eq, gte, lte, notInArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { HttpError, managedUserIds, managesPeople, requireUser, seesAll } from "../app";
 import { users, weekSubmissions } from "../db/schema";
-import { loadDataset } from "./data";
+import { detailStart, loadDataset, todayZurich } from "./data";
 
 const weekParam = z.string().regex(/^\d{4}-W\d{2}$/, "Ungültige Woche");
 
@@ -29,7 +29,9 @@ export async function weekRoutes(app: FastifyInstance) {
     const user = requireUser(req);
     if (!managesPeople(user) && !seesAll(user)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
     const q = z.object({ from: weekParam, to: weekParam }).parse(req.query);
-    const data = await loadDataset(ctx, user);
+    const start = weekRange(q.from).from;
+    const window = detailStart(todayZurich());
+    const data = await loadDataset(ctx, user, { detailFrom: start < window ? start : window });
     const scope = await managedUserIds(ctx, user);
     const people = (await ctx.db.select().from(users).where(and(eq(users.organizationId, user.organizationId), eq(users.active, true), notInArray(users.role, ["customer", "auditor"])))).filter((p) => !scope || scope.has(p.id));
     const subs = await ctx.db
@@ -62,7 +64,9 @@ export async function weekRoutes(app: FastifyInstance) {
     const week = weekParam.parse((req.params as { week: string }).week);
     const today = new Date().toISOString().slice(0, 10);
     if (week > isoWeekKey(today)) throw new HttpError(400, "Zukünftige Wochen können nicht eingereicht werden.");
-    const data = await loadDataset(ctx, user);
+    const start = weekRange(week).from;
+    const window = detailStart(todayZurich());
+    const data = await loadDataset(ctx, user, { detailFrom: start < window ? start : window });
     const emp = data.employees.find((e) => e.id === user.id);
     const hours = emp ? weekFigures(new WorkCalendar(data, emp), week).worked : 0;
     await ctx.db

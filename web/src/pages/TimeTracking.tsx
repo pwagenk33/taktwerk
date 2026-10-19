@@ -36,7 +36,7 @@ function useRecent(userId: string, exclude: Favorite[]) {
   return useMemo(() => {
     const since = addDays(data.today, -30);
     const seen: Favorite[] = [];
-    for (const e of [...data.timeEntries].filter((e) => e.employeeId === userId && e.date >= since).sort((a, b) => b.date.localeCompare(a.date))) {
+    for (const e of [...data.timeEntries].filter((e) => !e.summary && e.employeeId === userId && e.date >= since).sort((a, b) => b.date.localeCompare(a.date))) {
       const f: Favorite = { subProjectId: e.subProjectId, reason: e.reason, jiraIssueKey: e.jiraIssueKey };
       if (!seen.some((x) => sameFav(x, f)) && !exclude.some((x) => sameFav(x, f))) seen.push(f);
       if (seen.length >= 6) break;
@@ -474,7 +474,7 @@ function WeekList() {
     const from = new Date(`${data.today}T00:00:00Z`);
     from.setUTCDate(from.getUTCDate() - (mine ? 13 : 6));
     const since = from.toISOString().slice(0, 10);
-    const entries = data.timeEntries.filter((e) => e.date >= since && (!mine || e.employeeId === currentUserId));
+    const entries = data.timeEntries.filter((e) => !e.summary && e.date >= since && (!mine || e.employeeId === currentUserId));
     const expenses = data.expenses.filter((e) => e.date >= since && (!mine || e.employeeId === currentUserId));
     const byDay = new Map<string, { time: typeof entries; exp: typeof expenses }>();
     for (const e of entries) {
@@ -965,7 +965,7 @@ function usePhone() {
 
 /** Week calendar: columns are days, the vertical axis is the time of day. Drag on empty space to book. */
 function WeekCalendar() {
-  const { data, currentUserId, addTimeEntry, updateTimeEntry, lockOf, notify, questions, weeks, submitWeek, withdrawWeek } = useStore();
+  const { data, currentUserId, addTimeEntry, updateTimeEntry, lockOf, notify, questions, weeks, submitWeek, withdrawWeek, loadFrom } = useStore();
   const asked = useMemo(() => new Set(questions.map((q) => q.entryId)), [questions]);
   const labels = useLabels();
   const [monday, setMonday] = useState(() => mondayOf(data.today));
@@ -1065,9 +1065,13 @@ function WeekCalendar() {
   const days = useMemo(() => (phone ? [week[dayIdx]] : week), [week, phone, dayIdx]);
   const employee = data.employees.find((e) => e.id === currentUserId);
   const cal = useMemo(() => (employee ? new WorkCalendar(data, employee) : null), [data, employee]);
+  // Weeks before the loaded window: fetch their single bookings on demand.
+  useEffect(() => {
+    if (data.detailFrom && monday < data.detailFrom) void loadFrom(monday);
+  }, [monday]); // eslint-disable-line react-hooks/exhaustive-deps
   const byDay = useMemo(() => {
     const m = new Map<string, TimeEntry[]>(week.map((d) => [d, []]));
-    for (const e of data.timeEntries) if (e.employeeId === currentUserId && m.has(e.date)) m.get(e.date)!.push(e);
+    for (const e of data.timeEntries) if (!e.summary && e.employeeId === currentUserId && m.has(e.date)) m.get(e.date)!.push(e);
     return m;
   }, [data, currentUserId, week]);
   const hoursOf = (d: string) => (byDay.get(d) ?? []).reduce((s, e) => s + e.hours, 0);

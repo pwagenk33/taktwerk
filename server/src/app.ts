@@ -3,6 +3,7 @@ import fastifyStatic from "@fastify/static";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { existsSync } from "node:fs";
+import { gzipSync } from "node:zlib";
 import { resolve } from "node:path";
 import { sha256 } from "./auth/crypto";
 import type { Config } from "./config";
@@ -214,6 +215,16 @@ export async function buildApp(ctx: AppContext) {
     if (err.statusCode && err.statusCode < 500) return reply.status(err.statusCode).send({ error: err.message });
     req.log.error(err);
     return reply.status(500).send({ error: "Interner Fehler. Bitte später erneut versuchen." });
+  });
+
+  // Large API answers (the dataset) are gzip-compressed when the client accepts it; behind Caddy this
+  // happens there already, the local Docker setup has no proxy.
+  app.addHook("onSend", async (req, reply, payload) => {
+    if (typeof payload !== "string" || payload.length < 32_768 || !req.url.startsWith("/api/") || reply.getHeader("content-encoding")) return payload;
+    if (!/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""))) return payload;
+    reply.header("content-encoding", "gzip").header("vary", "accept-encoding");
+    reply.removeHeader("content-length");
+    return gzipSync(payload, { level: 6 });
   });
 
   app.get("/api/health", async () => ({ ok: true }));

@@ -174,7 +174,17 @@ export async function upload<T>(path: string, file: File): Promise<T> {
   return data as T;
 }
 
-export const loadDataset = () => api<Dataset>("/api/dataset");
+/**
+ * The server sends single bookings of the last months and older ones as monthly totals. When someone browses
+ * further back, `loadOlder` moves the start and every later reload keeps it.
+ */
+let datasetFrom: string | null = null;
+export const loadDataset = () => api<Dataset>(`/api/dataset${datasetFrom ? `?from=${datasetFrom}` : ""}`);
+export async function loadOlder(from: string) {
+  if (datasetFrom && datasetFrom <= from) return null;
+  datasetFrom = from;
+  return loadDataset();
+}
 
 export function applyBranding(b: Branding) {
   document.documentElement.style.setProperty("--brand", b.primaryColor);

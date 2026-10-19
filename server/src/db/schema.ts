@@ -264,7 +264,7 @@ export const timeEntries = mysqlTable(
     startTime: varchar("start_time", { length: 5 }),
     createdAt: createdAt(),
   },
-  (t) => [index("te_org_date_idx").on(t.organizationId, t.date), index("te_sub_idx").on(t.subProjectId), index("te_issue_idx").on(t.jiraIssueKey)],
+  (t) => [index("te_org_date_idx").on(t.organizationId, t.date), index("te_user_date_idx").on(t.userId, t.date), index("te_sub_idx").on(t.subProjectId), index("te_issue_idx").on(t.jiraIssueKey)],
 );
 
 export const expenses = mysqlTable(
@@ -292,7 +292,7 @@ export const expenses = mysqlTable(
     receiptSize: int("receipt_size"),
     createdAt: createdAt(),
   },
-  (t) => [index("ex_org_date_idx").on(t.organizationId, t.date), index("ex_status_idx").on(t.organizationId, t.status)],
+  (t) => [index("ex_org_date_idx").on(t.organizationId, t.date), index("ex_user_date_idx").on(t.userId, t.date), index("ex_status_idx").on(t.organizationId, t.status)],
 );
 
 export const absences = mysqlTable(

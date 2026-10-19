@@ -3,6 +3,7 @@ import { and, desc, eq, notInArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { bookingChanged } from "./data";
 import { HttpError, assertManages, isLead, managedUserIds, managesPeople, managesUser, requireRole, requireUser, type AppContext, type SessionUser } from "../app";
 import { auditLog, customerRates, customers, expenses, monthClosings, organizations, projects, subProjects, timeEntries, users } from "../db/schema";
 import { reportFile, sendCustomerReport } from "../reports/export";
@@ -85,6 +86,7 @@ export async function billingRoutes(app: FastifyInstance) {
     const { id: _id, organizationId: _o, userId: _u, createdAt: _c, ...set } = next;
     if (Object.entries(set).every(([k, v]) => row[k as keyof typeof row] === v)) return row;
     await ctx.db.update(timeEntries).set(set).where(eq(timeEntries.id, id));
+    bookingChanged(user.organizationId, row.date, next.date);
     await audit(ctx, user, "time_entry", id, "update", row, next);
     return next;
   });
@@ -96,6 +98,7 @@ export async function billingRoutes(app: FastifyInstance) {
     if (!row) throw new HttpError(404, "Eintrag nicht gefunden.");
     await assertBookable(ctx, user, row.userId, row.date);
     await ctx.db.delete(timeEntries).where(eq(timeEntries.id, id));
+    bookingChanged(user.organizationId, row.date);
     await audit(ctx, user, "time_entry", id, "delete", row, null);
     return { ok: true };
   });

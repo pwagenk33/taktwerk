@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, lt } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { HttpError, requireRole } from "../app";
@@ -23,14 +23,17 @@ export async function invoiceRoutes(app: FastifyInstance) {
 
   app.get("/api/invoices", async (req) => {
     const user = requireRole(req, "admin", "consultant");
-    const q = z.object({ customerId: z.string().optional() }).parse(req.query);
+    // Paged newest first: `before` is the last invoice number of the previous page.
+    const q = z.object({ customerId: z.string().optional(), limit: z.coerce.number().int().min(1).max(500).default(100), before: z.string().max(40).optional() }).parse(req.query);
     const rows = await ctx.db
       .select()
       .from(invoices)
-      .where(q.customerId ? and(eq(invoices.organizationId, user.organizationId), eq(invoices.customerId, q.customerId)) : eq(invoices.organizationId, user.organizationId))
-      .orderBy(desc(invoices.number));
+      .where(and(eq(invoices.organizationId, user.organizationId), ...(q.customerId ? [eq(invoices.customerId, q.customerId)] : []), ...(q.before ? [lt(invoices.number, q.before)] : [])))
+      .orderBy(desc(invoices.number))
+      .limit(q.limit + 1);
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
-    return { invoices: rows.map(summary), ready: billingProblem(org?.settings.billing) };
+    const page = rows.slice(0, q.limit);
+    return { invoices: page.map(summary), ready: billingProblem(org?.settings.billing), next: rows.length > q.limit ? page.at(-1)!.number : null };
   });
 
   /** What an invoice for this month would contain, before creating it. */

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, loadDataset, upload, type Branding, type Me, type EntryComment, type OpenQuestion, type WeekSubmission, type WeekOverviewRow, type PortalAccount } from "./api";
+import { api, loadDataset, loadOlder, upload, type Branding, type Me, type EntryComment, type OpenQuestion, type WeekSubmission, type WeekOverviewRow, type PortalAccount } from "./api";
 import { currentVelocity, profitability, projectReports, velocityByMonth, type Profitability, type ProjectReport, type VelocityFactor, type VelocityMonth, applyStamp, type PeriodKind, type StampAction, type TimeModel, type WorkPeriod } from "@taktwerk/domain";
 import { NEEDS_APPROVAL, WorkCalendar, absenceProblem, isoWeekKey, monthRange, weekFigures } from "@taktwerk/domain";
 import type { Absence, Customer, Dataset, Employee, Expense, Holiday, Project, Role, SubProject, TimeEntry, VelocitySettings } from "@taktwerk/domain";
@@ -101,6 +101,8 @@ interface Store {
   scope: Scope;
   /** Installed version: fetch the dataset again (after changes made outside the store). */
   reload: () => Promise<void>;
+  /** Installed version: load single bookings back to `date` (older months come as monthly totals). */
+  loadFrom: (date: string) => Promise<void>;
   setRole: (r: Role) => void;
   branding: Branding;
   setBranding: (b: Branding) => Promise<void>;
@@ -317,6 +319,11 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     me,
     scope,
     reload: async () => { if (mode === "api") setData(await loadDataset()); },
+    loadFrom: async (date) => {
+      if (mode !== "api" || !data.detailFrom || date >= data.detailFrom) return;
+      const next = await loadOlder(date);
+      if (next) setData(next);
+    },
     role,
     currentUserId,
     setRole: (r) => {

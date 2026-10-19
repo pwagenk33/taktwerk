@@ -1,5 +1,5 @@
 import { DEFAULT_RATES, DEFAULT_WEEKLY_HOURS, EXPENSE_CATEGORIES, VAT_RATES, defaultHolidays, projectReports, rateOn, type Dataset, type VelocitySettings } from "@taktwerk/domain";
-import { and, eq, inArray, or, type ColumnBaseConfig, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, or, sql, type ColumnBaseConfig, type SQL } from "drizzle-orm";
 import type { MySqlColumn } from "drizzle-orm/mysql-core";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -43,7 +43,49 @@ const initials = (name: string) =>
  * Loads the organization's data in the shape the domain calculations expect.
  * Employees only receive their own bookings and no budgets.
  */
-export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<Dataset> {
+/** Default window of single bookings sent to the browser: the current month and the three before. */
+export const DETAIL_MONTHS = 3;
+
+type SummaryRow = { userId: string; subProjectId: string; month: string; billable: boolean | number; hourlyRate: number | string; jiraIssueKey: string | null; hours: string };
+/**
+ * Monthly totals of older bookings per organization and window start. Computing them scans every older booking,
+ * so they are kept in memory until a booking before the window start changes (rare: those months are usually closed).
+ */
+const summaryCache = new Map<string, SummaryRow[]>();
+export function bookingChanged(orgId: string, ...dates: string[]) {
+  for (const key of summaryCache.keys()) {
+    const [org, from] = key.split("|");
+    if (org === orgId && dates.some((d) => d < from!)) summaryCache.delete(key);
+  }
+}
+
+async function monthlySummaries(ctx: AppContext, orgId: string, detailFrom: string): Promise<SummaryRow[]> {
+  const key = `${orgId}|${detailFrom}`;
+  const hit = summaryCache.get(key);
+  if (hit) return hit;
+  const month = sql<string>`date_format(${timeEntries.date}, '%Y-%m-01')`;
+  const rows = (await ctx.db
+    .select({ userId: timeEntries.userId, subProjectId: timeEntries.subProjectId, month, billable: timeEntries.billable, hourlyRate: timeEntries.hourlyRate, jiraIssueKey: timeEntries.jiraIssueKey, hours: sql<string>`sum(${timeEntries.hours})` })
+    .from(timeEntries)
+    .where(and(eq(timeEntries.organizationId, orgId), lt(timeEntries.date, detailFrom)))
+    .groupBy(timeEntries.userId, timeEntries.subProjectId, month, timeEntries.billable, timeEntries.hourlyRate, timeEntries.jiraIssueKey)) as SummaryRow[];
+  if (summaryCache.size > 200) summaryCache.clear();
+  summaryCache.set(key, rows);
+  return rows;
+}
+export function detailStart(today: string, months = DETAIL_MONTHS) {
+  const [y, m] = today.split("-").map(Number);
+  const d = new Date(Date.UTC(y!, m! - 1 - months, 1));
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Loads the organization's data in the shape the domain calculations expect.
+ * Employees only receive their own bookings and no budgets.
+ * With `detailFrom`, bookings before that date come as monthly totals: every sum (budgets, balances, velocity,
+ * margins) stays exact, but the payload stays small after years of use.
+ */
+export async function loadDataset(ctx: AppContext, user: SessionUser, opts: { detailFrom?: string } = {}): Promise<Dataset> {
   const org = user.organizationId;
   const db = ctx.db;
   const own = user.role === "employee";
@@ -68,14 +110,16 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
     db.select({ r: customerRates }).from(customerRates).innerJoin(customers, eq(customers.id, customerRates.customerId)).where(eq(customers.organizationId, org)),
     db.select().from(projects).where(eq(projects.organizationId, org)),
     db.select().from(subProjects).where(eq(subProjects.organizationId, org)),
-    db.select().from(timeEntries).where(byPersonOrProject(timeEntries)),
+    db.select().from(timeEntries).where(opts.detailFrom ? and(byPersonOrProject(timeEntries), gte(timeEntries.date, opts.detailFrom)) : byPersonOrProject(timeEntries)),
     db.select().from(expenses).where(byPersonOrProject(expenses)),
     db.select().from(jiraIssues).where(eq(jiraIssues.organizationId, org)),
     db.select().from(absences).where(byPerson(absences)),
     db.select().from(organizations).where(eq(organizations.id, org)).limit(1),
     db.select().from(allocations).where(own ? and(eq(allocations.organizationId, org), ledProjects.length ? or(inArray(allocations.userId, scopeIds), inArray(allocations.projectId, ledProjects)) : inArray(allocations.userId, scopeIds)) : eq(allocations.organizationId, org)),
-    db.select().from(workPeriods).where(byPerson(workPeriods)),
+    db.select().from(workPeriods).where(opts.detailFrom ? and(byPerson(workPeriods), gte(workPeriods.date, opts.detailFrom)) : byPerson(workPeriods)),
   ]);
+  const ledSubs = new Set(ledSubIds);
+  const summaryRows = opts.detailFrom ? (await monthlySummaries(ctx, org, opts.detailFrom)).filter((r) => !own || scope!.has(r.userId) || ledSubs.has(r.subProjectId)) : [];
   const seesPerson = (id: string) => !own || scope!.has(id);
   const seesBudget = (projectId: string) => !own || ledProjects.includes(projectId);
   const today = todayZurich();
@@ -107,7 +151,21 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
     })),
     projects: projectRows.map((p) => ({ id: p.id, customerId: p.customerId, name: p.name, budget: seesBudget(p.id) ? p.budget : 0, jiraProjectKey: p.jiraProjectKey ?? undefined, leadUserId: p.leadUserId ?? undefined, kind: p.kind, retainerHours: p.retainerHours ?? undefined })),
     subProjects: subRows.map((s) => ({ id: s.id, projectId: s.projectId, name: s.name, budget: seesBudget(s.projectId) ? s.budget : 0, jiraEpicKey: s.jiraEpicKey ?? undefined })),
-    timeEntries: entryRows.map((e) => ({
+    detailFrom: opts.detailFrom,
+    timeEntries: [
+      ...summaryRows.map((r, i) => ({
+        id: `sum-${i}`,
+        employeeId: r.userId,
+        subProjectId: r.subProjectId,
+        date: r.month,
+        hours: Number(r.hours),
+        reason: "Monatssumme",
+        billable: Boolean(r.billable),
+        hourlyRate: Number(r.hourlyRate),
+        jiraIssueKey: r.jiraIssueKey ?? undefined,
+        summary: true as const,
+      })),
+      ...entryRows.map((e) => ({
       id: e.id,
       employeeId: e.userId,
       subProjectId: e.subProjectId,
@@ -119,6 +177,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
       jiraIssueKey: e.jiraIssueKey ?? undefined,
       startTime: e.startTime ?? undefined,
     })),
+    ],
     expenses: expenseRows.map((x) => ({
       id: x.id,
       employeeId: x.userId,
@@ -190,7 +249,14 @@ async function bookingUser(ctx: AppContext, user: SessionUser, employeeId?: stri
 export async function dataRoutes(app: FastifyInstance) {
   const ctx = app.ctx;
 
-  app.get("/api/dataset", async (req) => loadDataset(ctx, requireUser(req)));
+  /** `?all=1` loads every single booking (slow after years); otherwise older months come as totals. */
+  app.get("/api/dataset", async (req) => {
+    const user = requireUser(req);
+    const q = z.object({ all: z.string().optional(), from: isoDate.optional() }).parse(req.query);
+    const today = todayZurich();
+    const detailFrom = q.all ? undefined : q.from && q.from < detailStart(today) ? q.from : detailStart(today);
+    return loadDataset(ctx, user, { detailFrom });
+  });
 
   /** Project reports: leads and the auditor see all, project leads the projects they lead. */
   app.get("/api/reports", async (req) => {
@@ -201,7 +267,7 @@ export async function dataRoutes(app: FastifyInstance) {
       .object({ customerId: z.string().optional(), method: z.enum(["rolling", "ewma"]).default("rolling"), window: z.coerce.number().int().min(1).max(12).default(3) })
       .parse(req.query);
     const settings: VelocitySettings = { method: q.method, window: q.window };
-    const reports = projectReports(await loadDataset(ctx, user), settings, q.customerId);
+    const reports = projectReports(await loadDataset(ctx, user, { detailFrom: detailStart(todayZurich()) }), settings, q.customerId);
     return seesAll(user) ? reports : reports.filter((r) => led.includes(r.project.id));
   });
 
@@ -238,6 +304,7 @@ export async function dataRoutes(app: FastifyInstance) {
       startTime: body.startTime ?? null,
     };
     await ctx.db.insert(timeEntries).values(row);
+    bookingChanged(user.organizationId, row.date);
     await audit(ctx, user, "time_entry", id, "create", null, row);
     return reply.status(201).send(row);
   });

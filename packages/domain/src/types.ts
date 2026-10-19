@@ -107,6 +107,11 @@ export interface TimeEntry {
   jiraIssueKey?: string;
   /** Start of the booking as HH:MM, if the person placed it in the calendar. */
   startTime?: string;
+  /**
+   * Monthly total of older bookings (one per person, sub-project, issue, rate and billable flag), dated on the 1st.
+   * Sums stay exact; the single bookings of these months are not loaded.
+   */
+  summary?: boolean;
 }
 
 export type ExpenseCategory = "Reise" | "Kilometer" | "Unterkunft" | "Verpflegung" | "Material" | "Lizenzen" | "Sonstiges";
@@ -200,6 +205,8 @@ export interface Dataset {
   /** Absences visible to the viewer (employees: own only). */
   absences?: Absence[];
   workModel?: WorkModel;
+  /** Bookings before this date are loaded as monthly totals (see TimeEntry.summary). */
+  detailFrom?: string;
   /** Come/go periods (time model «full»). */
   workPeriods?: import("./presence").WorkPeriod[];
   rates?: OrgRates;

@@ -28,7 +28,8 @@ export async function exportRoutes(app: FastifyInstance) {
       const known = EXPORT_ENTITIES.find((e) => e.id === entity);
       if (!known) throw new HttpError(404, "Unbekannter Export.");
       if ((entity === "customers" || entity === "projects" || entity === "employees") && user.role === "employee") throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
-      rows = exportRows(await loadDataset(ctx, user), known.id, q.from, q.to);
+      // With a start date only that period needs single bookings; older months come as totals and are filtered out.
+      rows = exportRows(await loadDataset(ctx, user, { detailFrom: q.from }), known.id, q.from, q.to);
     }
     const stamp = new Date().toISOString().slice(0, 10);
     if (q.format === "json") {

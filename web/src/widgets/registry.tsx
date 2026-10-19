@@ -220,7 +220,7 @@ function RecentEntries() {
   const emp = new Map(data.employees.map((e) => [e.id, e]));
   const sub = new Map(data.subProjects.map((s) => [s.id, s]));
   const proj = new Map(data.projects.map((p) => [p.id, p]));
-  const recent = [...entries].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).slice(0, 12);
+  const recent = entries.filter((e) => !e.summary).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).slice(0, 12);
   return (
     <div>
       {recent.map((e) => {
