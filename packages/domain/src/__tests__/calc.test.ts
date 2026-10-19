@@ -86,7 +86,8 @@ describe("profitability and currencies", () => {
     const data = buildDataset();
     const reports = projectReports(data, { method: "rolling", window: 3 });
     const p = profitability(data, reports);
-    expect(p.projects.length).toBe(data.projects.length);
+    expect(p.projects.length).toBe(data.projects.length - 1); // internal work is kept apart
+    expect(p.internal.hours).toBeGreaterThan(0);
     const medtech = p.customers.find((c) => c.name === "Medtech Basel AG")!;
     expect(medtech.currency).toBe("EUR");
     // EUR revenue converted at 0.94 lies below the raw rate × hours.
