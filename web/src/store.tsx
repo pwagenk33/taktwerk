@@ -97,6 +97,10 @@ interface Store {
   remindClosing: (month: string, userId: string) => Promise<void>;
   /** Unanswered questions on bookings the viewer should see (own bookings; leads: all). */
   questions: OpenQuestion[];
+  /** Bookings made offline that still wait to be sent. */
+  pending: number;
+  /** Sends queued bookings; called on reconnect and start. */
+  flushOutbox: () => Promise<void>;
   comments: (entryId: string) => Promise<EntryComment[]>;
   addComment: (entryId: string, text: string, question: boolean) => Promise<void>;
   addAbsence: (a: Omit<Absence, "id" | "status">) => Promise<Absence["status"]>;
@@ -128,6 +132,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     loadLocal<VelocitySettings>("rt.velocity", { method: "rolling", window: 3 }),
   );
   const [toast, setToast] = useState<string | null>(null);
+  const notify = (msg: string) => setToast(msg);
   const [closings, setClosings] = useState<Closing[]>(() => (me ? [] : loadLocal<Closing[]>("rt.closings", [])));
   const loadClosings = async () => setClosings(await api<Closing[]>("/api/closings"));
   const [questions, setQuestions] = useState<OpenQuestion[]>([]);
@@ -158,6 +163,57 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     await api(path, { body });
     setData(await loadDataset());
   };
+  // Offline: bookings are queued in the browser and shown in the calendar at once; they are sent when the network is back.
+  type Queued = { tempId: string; body: Record<string, unknown>; employeeId: string; hourlyRate: number };
+  const [outbox, setOutboxState] = useState<Queued[]>(() => (me ? loadLocal<Queued[]>("rt.outbox", []) : []));
+  const outboxRef = useRef(outbox);
+  const setOutbox = (next: Queued[]) => { outboxRef.current = next; setOutboxState(next); saveLocal("rt.outbox", next); };
+  const isOffline = (e: unknown) => (e instanceof TypeError) || (e instanceof Error && /offline|Failed to fetch|NetworkError|Load failed/i.test(e.message)) || (typeof navigator !== "undefined" && !navigator.onLine);
+  const addEntryRemote = async (item: Omit<TimeEntry, "id">) => {
+    const { hourlyRate, employeeId, ...body } = item;
+    try {
+      await remote("/api/time-entries", body);
+    } catch (e) {
+      if (!isOffline(e)) throw e;
+      const tempId = uid("offline-");
+      setOutbox([...outboxRef.current, { tempId, body: body as Record<string, unknown>, employeeId, hourlyRate }]);
+      setData((d) => ({ ...d, timeEntries: [...d.timeEntries, { ...item, id: tempId }] }));
+      setTimeout(() => notify("Kein Netz: Buchung zwischengespeichert, wird gesendet sobald du online bist"), 60);
+    }
+  };
+  const flushing = useRef(false);
+  const flushOutbox = async () => {
+    if (mode !== "api" || flushing.current || outboxRef.current.length === 0) return;
+    flushing.current = true;
+    try {
+      let sent = 0;
+      for (const q of [...outboxRef.current]) {
+        try {
+          await api("/api/time-entries", { body: q.body });
+          setOutbox(outboxRef.current.filter((x) => x.tempId !== q.tempId));
+          sent++;
+        } catch (e) {
+          if (isOffline(e)) break;
+          // Rejected by the server (e.g. month locked): drop it and tell the person.
+          setOutbox(outboxRef.current.filter((x) => x.tempId !== q.tempId));
+          notify(`Offline-Buchung abgelehnt: ${(e as Error).message}`);
+        }
+      }
+      if (sent > 0) {
+        setData(await loadDataset());
+        notify(`${sent} ${sent === 1 ? "Offline-Buchung" : "Offline-Buchungen"} gesendet`);
+      }
+    } finally {
+      flushing.current = false;
+    }
+  };
+  useEffect(() => {
+    if (mode !== "api") return;
+    void flushOutbox();
+    const on = () => void flushOutbox();
+    window.addEventListener("online", on);
+    return () => window.removeEventListener("online", on);
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
   const send = async (method: "PATCH" | "DELETE", path: string, body?: unknown) => {
     await api(path, { method, body });
     setData(await loadDataset());
@@ -210,7 +266,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     velocity,
     factor,
     reports,
-    addTimeEntry: mode === "api" ? ({ hourlyRate: _rate, ...e }) => remote("/api/time-entries", e) : local("timeEntries", "t"),
+    addTimeEntry: mode === "api" ? addEntryRemote : local("timeEntries", "t"),
     addExpense: mode === "api" ? (e) => remote("/api/expenses", e) : local("expenses", "x"),
     addExpenseWithReceipt: async (e, receipt) => {
       if (mode === "api") {
@@ -289,6 +345,8 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     remindClosing: async (month, userId) => {
       if (mode === "api") await api(`/api/months/${month}/remind`, { body: { userId } });
     },
+    pending: outbox.length,
+    flushOutbox,
     questions:
       mode === "api"
         ? questions

@@ -7,6 +7,11 @@ import { Login, SetPassword } from "./pages/Login";
 import { StoreProvider, loadLocal, saveLocal } from "./store";
 import "./styles.css";
 
+// Installable app: the service worker keeps the shell and the last data available offline (not in the single-file demo).
+if (!DEMO && "serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
+
 type State =
   | { kind: "loading" }
   | { kind: "error"; message: string }

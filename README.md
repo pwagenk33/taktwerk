@@ -43,6 +43,7 @@ Schema ändern: `server/src/db/schema.ts` anpassen, dann `npm run db:generate -w
 - **Monatsabschluss:** Mitarbeitende reichen den Monat ein, Consultants oder Admins geben frei. Eingereicht: nur noch die Freigabe-Person kann korrigieren. Freigegeben: gesperrt, bis eine Admin-Person den Monat wieder öffnet.
 - **Kundenreport** unter Reports → Kunde wählen: PDF und Excel im Corporate Design, «Jetzt senden» an die hinterlegten Empfänger.
 - **Hintergrundjobs** laufen im Server-Prozess alle 15 Minuten: monatlicher Report-Versand (Tag einstellbar, Standard der 3. ab 07:00 Uhr Zürich) und Budget-Alarm an Admins und Consultants bei 80, 95 und 100 % des Forecasts. Jeder Versand wird in der Datenbank vermerkt (`job_runs`, `budget_alerts`) und geht nur einmal raus, auch wenn mehrere Instanzen laufen.
+- Installierbare Handy-App (PWA): Startbildschirm-Icon, App-Hülle und letzte Daten offline, Buchungen ohne Netz werden zwischengespeichert und beim nächsten Kontakt gesendet.
 
 ## Arbeitszeit & Absenzen
 

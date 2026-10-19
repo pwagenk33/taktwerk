@@ -86,7 +86,7 @@ function HeaderTimer() {
 const isTyping = (el: EventTarget | null) => el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.closest("[role=dialog]") !== null);
 
 export function App() {
-  const { role, setRole, toast, branding, mode, me, logout } = useStore();
+  const { role, setRole, toast, branding, mode, me, logout, pending, flushOutbox } = useStore();
   const [page, setPage] = useState<PageId>(readHash);
   const [theme, setTheme] = useTheme();
   const [palette, setPalette] = useState(false);
@@ -153,6 +153,7 @@ export function App() {
             <span>Suchen oder Befehl …</span>
             <kbd>⌘K</kbd>
           </button>
+          {pending > 0 && <button className="btn small offline-chip" title="Buchungen, die auf Netz warten. Klick versucht es erneut." onClick={() => void flushOutbox()}>⇅ {pending} offline</button>}
           <HeaderTimer />
           <button id="topbar-new" className="btn primary new-btn" onClick={() => requestNewEntry()}>
             <span className="plus">+</span><span>Buchen</span><kbd>N</kbd>
