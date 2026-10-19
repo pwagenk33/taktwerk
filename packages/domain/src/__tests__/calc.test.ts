@@ -78,3 +78,25 @@ describe("expenses in reports", () => {
     expect(countsExpense({ ...base, billable: false, status: "approved" })).toBe(false);
   });
 });
+
+describe("profitability and currencies", () => {
+  it("computes margin per project and customer in CHF with FX conversion", async () => {
+    const { buildDataset } = await import("../sample");
+    const { profitability, projectReports, toChf, fmtMoney } = await import("../index");
+    const data = buildDataset();
+    const reports = projectReports(data, { method: "rolling", window: 3 });
+    const p = profitability(data, reports);
+    expect(p.projects.length).toBe(data.projects.length);
+    const medtech = p.customers.find((c) => c.name === "Medtech Basel AG")!;
+    expect(medtech.currency).toBe("EUR");
+    // EUR revenue converted at 0.94 lies below the raw rate × hours.
+    const raw = data.timeEntries.filter((e) => e.billable && data.subProjects.some((s) => s.id === e.subProjectId && data.projects.some((pr) => pr.id === s.projectId && pr.customerId === "c3"))).reduce((s, e) => s + e.hours * e.hourlyRate, 0);
+    expect(medtech.revenue).toBeLessThan(raw);
+    expect(p.total.marginPct).not.toBeNull();
+    expect(toChf(100, "EUR", data.fx)).toBeCloseTo(94);
+    expect(fmtMoney(1234, "EUR")).toContain("1’234");
+    const retainer = reports.find((r) => r.project.id === "p2")!;
+    expect(retainer.kind).toBe("retainer");
+    expect(retainer.retainer?.hoursPerMonth).toBe(120);
+  });
+});

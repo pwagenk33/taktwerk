@@ -1,23 +1,32 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { fmt1, fmtCHF, fmtMonth, fmtNum, rateOn, type BudgetStatus, type Customer, type Project, type SubProject } from "@taktwerk/domain";
+import { CURRENCIES, PROJECT_KINDS, currencyOf, fmt1, fmtCHF, fmtMoney, fmtMonth, fmtNum, rateOn, type BudgetStatus, type Currency, type Customer, type Project, type ProjectKind, type SubProject } from "@taktwerk/domain";
+import { Select } from "../ui/Select";
 import { useStore } from "../store";
 import { BurnUpChart, Icon, Money, StatusPill } from "../ui/components";
 
 /** Name, budget and JIRA key of a project or sub-project, editable in place by leads. */
-function EditableHead({ item, kind, onSave }: { item: Project | SubProject; kind: "project" | "sub"; onSave: (p: { name: string; budget: number; jira: string }) => Promise<void> }) {
+export interface HeadPatch { name: string; budget: number; jira: string; kind?: ProjectKind; retainerHours?: number }
+
+const kindLabel = (k: ProjectKind | undefined) => PROJECT_KINDS.find((x) => x.id === (k ?? "tm"))!.label;
+
+function EditableHead({ item, kind, currency = "CHF", onSave }: { item: Project | SubProject; kind: "project" | "sub"; currency?: Currency; onSave: (p: HeadPatch) => Promise<void> }) {
   const { role } = useStore();
   const jiraKey = kind === "project" ? (item as Project).jiraProjectKey : (item as SubProject).jiraEpicKey;
+  const project = kind === "project" ? (item as Project) : null;
   const [edit, setEdit] = useState(false);
   const [name, setName] = useState(item.name);
   const [budget, setBudget] = useState(String(item.budget));
   const [jira, setJira] = useState(jiraKey ?? "");
+  const [pk, setPk] = useState<ProjectKind>(project?.kind ?? "tm");
+  const [retainer, setRetainer] = useState(String(project?.retainerHours ?? ""));
   const [error, setError] = useState("");
   const save = async () => {
     const n = Number(budget);
     if (!name.trim()) return setError("Bitte einen Namen eingeben.");
     if (!(n >= 0)) return setError("Budget muss 0 oder grösser sein.");
+    if (project && pk === "retainer" && !(Number(retainer) > 0)) return setError("Bitte das monatliche Stundenkontingent eingeben.");
     try {
-      await onSave({ name: name.trim(), budget: n, jira: jira.trim().toUpperCase() });
+      await onSave({ name: name.trim(), budget: n, jira: jira.trim().toUpperCase(), ...(project ? { kind: pk, retainerHours: pk === "retainer" ? Number(retainer) : undefined } : {}) });
       setEdit(false);
       setError("");
     } catch (e) {
@@ -29,7 +38,8 @@ function EditableHead({ item, kind, onSave }: { item: Project | SubProject; kind
       <div className="tree-row" style={{ gap: 10, flexWrap: "wrap" }}>
         <div>
           {kind === "project" ? <h2 style={{ margin: 0 }}>{item.name}</h2> : <strong>{item.name}</strong>} {jiraKey && <span className="pill neutral mono">{jiraKey}</span>}
-          <div className="muted num" style={{ fontSize: "0.82rem" }}>Budget {fmtCHF(item.budget)}</div>
+          {project && <span className="pill neutral" style={{ marginLeft: 6 }}>{kindLabel(project.kind)}{project.kind === "retainer" && project.retainerHours ? ` · ${fmtNum(project.retainerHours)} h/Monat` : ""}</span>}
+          <div className="muted num" style={{ fontSize: "0.82rem" }}>{project?.kind === "fixed" ? "Fixpreis" : "Budget"} {fmtMoney(item.budget, currency)}</div>
         </div>
         {role !== "employee" && <button className="btn small" onClick={() => setEdit(true)}>Bearbeiten</button>}
       </div>
@@ -39,13 +49,20 @@ function EditableHead({ item, kind, onSave }: { item: Project | SubProject; kind
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div className="form-grid" style={{ alignItems: "end" }}>
         <label className="field"><span>Name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></label>
-        <label className="field"><span>Budget (CHF)</span><input className="input num" type="number" min={0} step={1000} value={budget} onChange={(e) => setBudget(e.target.value)} /></label>
+        {project && (
+          <label className="field"><span>Projektart</span><Select id="p-kind" value={pk} onChange={(v) => setPk(v as ProjectKind)} options={PROJECT_KINDS.map((k) => ({ value: k.id, label: k.label }))} /></label>
+        )}
+        {project && pk === "retainer" && (
+          <label className="field"><span>Kontingent (h pro Monat)</span><input id="p-retainer" className="input num" type="number" min={0} step={5} value={retainer} onChange={(e) => setRetainer(e.target.value)} /></label>
+        )}
+        <label className="field"><span>{pk === "fixed" && project ? `Fixpreis (${currency})` : `Budget (${currency})`}</span><input className="input num" type="number" min={0} step={1000} value={budget} onChange={(e) => setBudget(e.target.value)} /></label>
         <label className="field"><span>{kind === "project" ? "JIRA-Projektschlüssel" : "JIRA-Epic"}</span><input className="input mono" value={jira} onChange={(e) => setJira(e.target.value)} /></label>
         <div className="toolbar">
           <button className="btn small primary" onClick={save}>Speichern</button>
           <button className="btn small ghost" onClick={() => setEdit(false)}>Abbrechen</button>
         </div>
       </div>
+      {project && <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>{PROJECT_KINDS.find((k) => k.id === pk)?.hint}</p>}
       {error && <p className="error">{error}</p>}
     </div>
   );
@@ -63,6 +80,8 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
   const hoursByIssue = new Map<string, number>();
   for (const e of data.timeEntries) if (e.jiraIssueKey) hoursByIssue.set(e.jiraIssueKey, (hoursByIssue.get(e.jiraIssueKey) ?? 0) + e.hours);
   const allocated = subs.reduce((s, x) => s + x.budget, 0);
+  const cur = currencyOf(customer);
+  const m = (v: number) => fmtMoney(v, cur);
 
   return (
     <>
@@ -70,19 +89,27 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
         <div>
           <button className="btn small ghost back-btn" onClick={onBack}><Icon.back />{customer?.name ?? "Kunden"}</button>
           <h1 style={{ marginTop: 8 }}>{project.name}</h1>
-          <p className="sub">{customer?.name} · {fmtCHF(customer ? rateOn(customer, data.today) : 0)}/h</p>
+          <p className="sub">{customer?.name} · {m(customer ? rateOn(customer, data.today) : 0)}/h · {kindLabel(project.kind)}</p>
         </div>
         {r && <StatusPill status={r.status} />}
       </div>
       <section className="card card-pad" style={{ marginBottom: 16 }}>
-        <EditableHead item={project} kind="project" onSave={async (p) => { await updateProject(project.id, { name: p.name, budget: p.budget, jiraProjectKey: p.jira || undefined }); notify("Projekt gespeichert"); }} />
-        <p className="muted num" style={{ fontSize: "0.82rem", margin: "8px 0 0" }}>Auf Subprojekte verteilt {fmtCHF(allocated)} · Reserve <Money v={project.budget - allocated} signed={project.budget - allocated < 0} /></p>
+        <EditableHead item={project} kind="project" currency={cur} onSave={async (p) => { await updateProject(project.id, { name: p.name, budget: p.budget, jiraProjectKey: p.jira || undefined, kind: p.kind, retainerHours: p.retainerHours }); notify("Projekt gespeichert"); }} />
+        <p className="muted num" style={{ fontSize: "0.82rem", margin: "8px 0 0" }}>Auf Subprojekte verteilt {m(allocated)} · Reserve <Money v={project.budget - allocated} signed={project.budget - allocated < 0} currency={cur} /></p>
       </section>
-      {r && (
+      {r?.retainer && (
         <div className="tiles">
-          <div className="card tile"><span className="label">Budget</span><span className="value num">{fmtCHF(r.budget)}</span></div>
-          <div className="card tile"><span className="label">Verbraucht</span><span className="value num">{fmtCHF(r.actualCost)}</span><span className="delta num">{fmt1((r.actualCost / Math.max(1, r.budget)) * 100)} % des Budgets</span></div>
-          <div className="card tile"><span className="label">Forecast</span><span className="value num">{fmtCHF(r.forecastCost)}</span><span className="delta">Abweichung <Money v={r.variance} signed /></span></div>
+          <div className="card tile"><span className="label">Kontingent {fmtMonth(r.retainer.month)}</span><span className="value num">{fmt1(r.retainer.used)} / {fmtNum(r.retainer.hoursPerMonth)} h</span><span className="delta num">{fmt1((r.retainer.used / Math.max(1, r.retainer.hoursPerMonth)) * 100)} % genutzt</span></div>
+          <div className="card tile"><span className="label">Schnitt letzte 3 Monate</span><span className="value num">{fmt1(r.retainer.avg3)} h</span><span className="delta">{r.retainer.avg3 > r.retainer.hoursPerMonth ? "über dem Kontingent" : "innerhalb des Kontingents"}</span></div>
+          <div className="card tile"><span className="label">Monatsbetrag</span><span className="value num">{m(r.retainer.hoursPerMonth * (customer ? rateOn(customer, data.today) : 0))}</span><span className="delta">{fmtNum(r.retainer.hoursPerMonth)} h × {m(customer ? rateOn(customer, data.today) : 0)}</span></div>
+          <div className="card tile"><span className="label">Offen</span><span className="value num">{fmtNum(r.spOpen)} SP</span><span className="delta">{fmtNum(r.remainingHours)} h Restaufwand</span></div>
+        </div>
+      )}
+      {r && !r.retainer && (
+        <div className="tiles">
+          <div className="card tile"><span className="label">{r.kind === "fixed" ? "Fixpreis" : "Budget"}</span><span className="value num">{m(r.budget)}</span></div>
+          <div className="card tile"><span className="label">{r.kind === "fixed" ? "Aufwand zum Kundensatz" : "Verbraucht"}</span><span className="value num">{m(r.actualCost)}</span><span className="delta num">{fmt1((r.actualCost / Math.max(1, r.budget)) * 100)} % {r.kind === "fixed" ? "des Fixpreises" : "des Budgets"}</span></div>
+          <div className="card tile"><span className="label">Forecast</span><span className="value num">{m(r.forecastCost)}</span><span className="delta">Abweichung <Money v={r.variance} signed currency={cur} /></span></div>
           <div className="card tile"><span className="label">Offen</span><span className="value num">{fmtNum(r.spOpen)} SP</span><span className="delta">{fmtNum(r.remainingHours)} h Restaufwand · fertig ca. {r.completionMonth ? fmtMonth(r.completionMonth) : "offen"}</span></div>
         </div>
       )}
@@ -102,18 +129,18 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
                   <Fragment key={s.id}>
                     <tr className="group clickable" onClick={() => setOpen(isOpen ? null : s.id)}>
                       <td><span className={`caret ${isOpen ? "open" : ""}`}>▸</span>{s.name} {s.jiraEpicKey && <span className="mono muted">{s.jiraEpicKey}</span>}</td>
-                      <td className="r num">{fmtCHF(s.budget)}</td>
-                      <td className="r num">{sr ? fmtCHF(sr.actualCost) : "–"}</td>
-                      <td className="r num">{sr ? <Money v={sr.remainingBudget} signed={sr.remainingBudget < 0} /> : "–"}</td>
+                      <td className="r num">{m(s.budget)}</td>
+                      <td className="r num">{sr ? m(sr.actualCost) : "–"}</td>
+                      <td className="r num">{sr ? <Money v={sr.remainingBudget} signed={sr.remainingBudget < 0} currency={cur} /> : "–"}</td>
                       <td className="r num">{sr ? fmtNum(sr.spOpen) : "–"}</td>
-                      <td className="r num">{sr ? fmtCHF(sr.forecastCost) : "–"}</td>
+                      <td className="r num">{sr ? m(sr.forecastCost) : "–"}</td>
                       <td>{sr && <StatusPill status={sr.status} />}</td>
                     </tr>
                     {isOpen && (
                       <tr className="child">
                         <td colSpan={7} style={{ padding: "10px 16px 14px 28px" }}>
                           <div style={{ marginBottom: 10 }}>
-                            <EditableHead item={s} kind="sub" onSave={async (p) => { await updateSubProject(s.id, { name: p.name, budget: p.budget, jiraEpicKey: p.jira || undefined }); notify("Subprojekt gespeichert"); }} />
+                            <EditableHead item={s} kind="sub" currency={cur} onSave={async (p) => { await updateSubProject(s.id, { name: p.name, budget: p.budget, jiraEpicKey: p.jira || undefined }); notify("Subprojekt gespeichert"); }} />
                           </div>
                           {issues.length === 0 ? (
                             <p className="muted" style={{ margin: 0 }}>Keine JIRA-Tickets verknüpft{s.jiraEpicKey ? "" : " (kein Epic hinterlegt)"}.</p>
@@ -161,10 +188,11 @@ function NewItemForm({ draft, onClose }: { draft: NonNullable<Draft>; onClose: (
   const [name, setName] = useState("");
   const [num, setNum] = useState("");
   const [jira, setJira] = useState("");
+  const [cur, setCur] = useState<Currency>("CHF");
   const [error, setError] = useState("");
 
   const labels = {
-    customer: { title: "Neuer Kunde", num: "Stundensatz (CHF)", jira: null },
+    customer: { title: "Neuer Kunde", num: `Stundensatz (${cur})`, jira: null },
     project: { title: "Neues Projekt", num: "Budget (CHF)", jira: "JIRA-Projektschlüssel" },
     sub: { title: "Neues Subprojekt", num: "Budget (CHF)", jira: "JIRA-Epic" },
   }[draft.kind];
@@ -174,7 +202,7 @@ function NewItemForm({ draft, onClose }: { draft: NonNullable<Draft>; onClose: (
     if (!name.trim()) return setError("Bitte einen Namen eingeben.");
     if (!(n > 0)) return setError(`${labels.num} muss grösser als 0 sein.`);
     try {
-      if (draft.kind === "customer") await addCustomer({ name: name.trim(), rates: [{ validFrom: data.today, hourlyRate: n }] });
+      if (draft.kind === "customer") await addCustomer({ name: name.trim(), currency: cur, rates: [{ validFrom: data.today, hourlyRate: n }] });
       if (draft.kind === "project") await addProject({ customerId: draft.customerId, name: name.trim(), budget: n, jiraProjectKey: jira || undefined });
       if (draft.kind === "sub") await addSubProject({ projectId: draft.projectId, name: name.trim(), budget: n, jiraEpicKey: jira || undefined });
     } catch (e) {
@@ -189,6 +217,7 @@ function NewItemForm({ draft, onClose }: { draft: NonNullable<Draft>; onClose: (
       <h2>{labels.title}</h2>
       <div className="form-grid" style={{ alignItems: "end" }}>
         <label className="field"><span>Name</span><input id="n-name" className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus /></label>
+        {draft.kind === "customer" && <label className="field"><span>Währung</span><Select id="n-currency" value={cur} onChange={(v) => setCur(v as Currency)} options={CURRENCIES.map((c) => ({ value: c, label: c }))} /></label>}
         <label className="field"><span>{labels.num}</span><input id="n-num" type="number" className="input num" value={num} onChange={(e) => setNum(e.target.value)} /></label>
         {labels.jira && <label className="field"><span>{labels.jira}</span><input id="n-jira" className="input mono" value={jira} onChange={(e) => setJira(e.target.value.toUpperCase())} placeholder={draft.kind === "project" ? "z. B. KPR" : "z. B. KPR-4"} /></label>}
         <div className="toolbar">
@@ -293,7 +322,9 @@ function CustomerList({ onOpen }: { onOpen: (id: string) => void }) {
 
 /** One customer: rate, figures and the project tree with sub-projects. */
 function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Customer; onBack: () => void; onOpenProject: (id: string) => void }) {
-  const { data, reports } = useStore();
+  const { data, reports, role, updateCustomer, notify } = useStore();
+  const cur = currencyOf(customer);
+  const m = (v: number) => fmtMoney(v, cur);
   const [draft, setDraft] = useState<Draft>(null);
   const projects = data.projects.filter((p) => p.customerId === customer.id);
   const projReport = new Map(reports.map((r) => [r.project.id, r]));
@@ -312,18 +343,24 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
           <button className="btn small ghost back-btn" onClick={onBack}><Icon.back />Alle Kunden</button>
           <h1 style={{ marginTop: 8 }}>{customer.name}</h1>
           <p className="sub">
-            {fmtCHF(rateOn(customer, data.today))}/h
-            {history.length > 1 && ` · seit ${history.at(-1)!.validFrom.split("-").reverse().join(".")}, vorher ${fmtCHF(history.at(-2)!.hourlyRate)}/h`}
+            {m(rateOn(customer, data.today))}/h
+            {history.length > 1 && ` · seit ${history.at(-1)!.validFrom.split("-").reverse().join(".")}, vorher ${m(history.at(-2)!.hourlyRate)}/h`}
             {" · "}{projects.length} {projects.length === 1 ? "Projekt" : "Projekte"}
+            {cur !== "CHF" && data.fx?.rates[cur] && ` · 1 ${cur} = ${fmt1(data.fx.rates[cur]! * 100) === "100.0" ? "1.00" : data.fx.rates[cur]!.toFixed(4)} CHF`}
           </p>
         </div>
-        <button className="btn primary" onClick={() => setDraft({ kind: "project", customerId: customer.id })}>+ Projekt</button>
+        <div className="toolbar">
+          {role !== "employee" && (
+            <Select id="c-currency" small ariaLabel="Währung" value={cur} onChange={async (v) => { await updateCustomer(customer.id, { currency: v as Currency }); notify(`Währung auf ${v} gestellt`); }} options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
+          )}
+          <button className="btn primary" onClick={() => setDraft({ kind: "project", customerId: customer.id })}>+ Projekt</button>
+        </div>
       </div>
       {draft && <NewItemForm key={JSON.stringify(draft)} draft={draft} onClose={() => setDraft(null)} />}
       <div className="tiles">
-        <div className="card tile"><span className="label">Budget</span><span className="value num">{fmtCHF(budget)}</span></div>
-        <div className="card tile"><span className="label">Verbraucht</span><span className="value num">{fmtCHF(actual)}</span><span className="delta num">{budget > 0 ? `${fmt1((actual / budget) * 100)} % des Budgets` : `${fmt1(hours)} h gebucht`}</span></div>
-        <div className="card tile"><span className="label">Forecast</span><span className="value num">{fmtCHF(forecast)}</span><span className="delta">Abweichung <Money v={budget - forecast} signed /></span></div>
+        <div className="card tile"><span className="label">Budget</span><span className="value num">{m(budget)}</span></div>
+        <div className="card tile"><span className="label">Verbraucht</span><span className="value num">{m(actual)}</span><span className="delta num">{budget > 0 ? `${fmt1((actual / budget) * 100)} % des Budgets` : `${fmt1(hours)} h gebucht`}</span></div>
+        <div className="card tile"><span className="label">Forecast</span><span className="value num">{m(forecast)}</span><span className="delta">Abweichung <Money v={budget - forecast} signed currency={cur} /></span></div>
         <div className="card tile"><span className="label">Gebucht</span><span className="value num">{fmt1(hours)} h</span><span className="delta">über alle Projekte</span></div>
       </div>
       <section className="card">
@@ -336,10 +373,12 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
             <div className="tree-customer" key={p.id}>
               <div className="tree-row">
                 <div>
-                  <button className="link-btn" onClick={() => onOpenProject(p.id)}><h2 style={{ margin: 0, color: "inherit" }}>{p.name}</h2></button> {p.jiraProjectKey && <span className="pill neutral mono">{p.jiraProjectKey}</span>}
+                  <button className="link-btn" onClick={() => onOpenProject(p.id)}><h2 style={{ margin: 0, color: "inherit" }}>{p.name}</h2></button> {p.jiraProjectKey && <span className="pill neutral mono">{p.jiraProjectKey}</span>} {(p.kind ?? "tm") !== "tm" && <span className="pill neutral">{kindLabel(p.kind)}</span>}
                   <div className="muted num" style={{ fontSize: "0.8rem" }}>
-                    Budget {fmtCHF(p.budget)} · davon verteilt {fmtCHF(allocated)} · Reserve {fmtCHF(p.budget - allocated)}
-                    {r && ` · verbraucht ${fmtCHF(r.actualCost)} · Forecast ${fmtCHF(r.forecastCost)}`}
+                    {r?.retainer
+                      ? `Kontingent ${fmtNum(r.retainer.hoursPerMonth)} h/Monat · ${fmtMonth(r.retainer.month)} ${fmt1(r.retainer.used)} h genutzt · Schnitt ${fmt1(r.retainer.avg3)} h`
+                      : `${p.kind === "fixed" ? "Fixpreis" : "Budget"} ${m(p.budget)} · davon verteilt ${m(allocated)} · Reserve ${m(p.budget - allocated)}`}
+                    {r && !r.retainer && ` · verbraucht ${m(r.actualCost)} · Forecast ${m(r.forecastCost)}`}
                   </div>
                 </div>
                 <div className="toolbar">
@@ -355,7 +394,7 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
                     <div className="tree-sub clickable" key={s.id} onClick={() => onOpenProject(p.id)}>
                       <span>{s.name} {s.jiraEpicKey && <span className="mono muted">{s.jiraEpicKey}</span>}</span>
                       <span className="num">
-                        {fmtCHF(s.budget)}{sr ? ` · ${fmtCHF(sr.actualCost)} verbraucht · ${sr.spOpen} SP offen` : ""}
+                        {m(s.budget)}{sr ? ` · ${m(sr.actualCost)} verbraucht · ${sr.spOpen} SP offen` : ""}
                       </span>
                     </div>
                   );

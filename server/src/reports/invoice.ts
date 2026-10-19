@@ -108,7 +108,7 @@ export async function createInvoice(ctx: AppContext, orgId: string, customerId: 
     vatRate,
     vat,
     gross: round05(net + vat),
-    snapshot: { sender: billing, recipient: customer.billingAddress, customerName: customer.name, appName: org.settings.branding.appName, primaryColor: org.settings.branding.primaryColor },
+    snapshot: { sender: billing, recipient: customer.billingAddress, customerName: customer.name, appName: org.settings.branding.appName, primaryColor: org.settings.branding.primaryColor, currency: customer.currency },
     sentAt: null,
     paidAt: null,
     createdAt: new Date(),
@@ -131,7 +131,7 @@ export function qrBillPayload(inv: Invoice): string {
     ...addr(s.sender.address),
     "", "", "", "", "", "", "", // ultimate creditor (unused)
     inv.gross.toFixed(2),
-    "CHF",
+    s.currency ?? "CHF",
     ...addr(s.recipient),
     "NON",
     "",
@@ -187,7 +187,7 @@ async function drawQrBill(doc: PDFKit.PDFDocument, inv: Invoice) {
   y = top + 68 * MM;
   heading(x, y, "Währung");
   heading(x + 15 * MM, y, "Betrag");
-  value(x, y + 8, ["CHF"]);
+  value(x, y + 8, [s.currency ?? "CHF"]);
   value(x + 15 * MM, y + 8, [money2(inv.gross)]);
   heading(x + 38 * MM, top + 82 * MM, "Annahmestelle");
 
@@ -210,7 +210,7 @@ async function drawQrBill(doc: PDFKit.PDFDocument, inv: Invoice) {
   y = top + 68 * MM;
   heading(x, y, "Währung", 8);
   heading(x + 20 * MM, y, "Betrag", 8);
-  value(x, y + 10, ["CHF"], 10);
+  value(x, y + 10, [s.currency ?? "CHF"], 10);
   value(x + 20 * MM, y + 10, [money2(inv.gross)], 10);
 
   x = 118 * MM;
@@ -264,7 +264,7 @@ export async function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
     { label: "Beschreibung", w: W * 0.5 },
     { label: "Menge", w: W * 0.13, r: true },
     { label: "Ansatz", w: W * 0.17, r: true },
-    { label: "Betrag CHF", w: W * 0.2, r: true },
+    { label: `Betrag ${s.currency ?? "CHF"}`, w: W * 0.2, r: true },
   ];
   let y = 262;
   const header = () => {
@@ -304,7 +304,7 @@ export async function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
   const totals: [string, string, boolean][] = [
     ["Total netto", money2(inv.net), false],
     [`MwSt ${inv.vatRate.toLocaleString("de-CH")} %`, money2(inv.vat), false],
-    ["Total CHF", money2(inv.gross), true],
+    [`Total ${s.currency ?? "CHF"}`, money2(inv.gross), true],
   ];
   for (const [k, v, bold] of totals) {
     doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(bold ? 11 : 9).fillColor(INK);
@@ -316,9 +316,11 @@ export async function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
   y += 10;
   doc.font("Helvetica").fontSize(9).fillColor(INK).text(s.sender.footer || `Zahlbar innert ${s.sender.paymentDays} Tagen bis ${swissDate(inv.dueDate)} mit dem Zahlteil unten. Besten Dank für die Zusammenarbeit.`, 50, y, { width: W });
 
-  // QR bill on the last page
-  doc.switchToPage(doc.bufferedPageRange().count - 1);
-  await drawQrBill(doc, inv);
+  // QR bill on the last page (the Swiss QR bill exists for CHF and EUR only).
+  if ((s.currency ?? "CHF") !== "USD") {
+    doc.switchToPage(doc.bufferedPageRange().count - 1);
+    await drawQrBill(doc, inv);
+  }
   doc.end();
   return done;
 }
@@ -332,8 +334,8 @@ export async function sendInvoice(ctx: AppContext, inv: Invoice, recipients: str
     subject: `${org.name}: Rechnung ${inv.number} – ${fmtMonthLong(inv.month)}`,
     greeting: "Guten Tag",
     lines: [
-      `Im Anhang finden Sie unsere Rechnung ${inv.number} für ${fmtMonthLong(inv.month)} über CHF ${money2(inv.gross)}.`,
-      `Zahlbar bis ${swissDate(inv.dueDate)}; der Zahlteil mit QR-Code befindet sich auf der letzten Seite.`,
+      `Im Anhang finden Sie unsere Rechnung ${inv.number} für ${fmtMonthLong(inv.month)} über ${inv.snapshot.currency ?? "CHF"} ${money2(inv.gross)}.`,
+      (inv.snapshot.currency ?? "CHF") === "USD" ? `Zahlbar bis ${swissDate(inv.dueDate)} auf das angegebene Konto.` : `Zahlbar bis ${swissDate(inv.dueDate)}; der Zahlteil mit QR-Code befindet sich auf der letzten Seite.`,
     ],
     footer: `Bei Fragen antworten Sie einfach auf diese E-Mail. Freundliche Grüsse, ${org.name}`,
   });

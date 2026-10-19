@@ -14,10 +14,12 @@ import {
   burnUp,
   fmt1,
   fmtCHF,
+  fmtMoney,
   fmtKCHF,
   fmtMonth,
   fmtMonthLong,
   type BudgetStatus,
+  type Currency,
   type ProjectReport,
   type VelocityMonth,
 } from "@taktwerk/domain";
@@ -29,9 +31,9 @@ export function StatusPill({ status }: { status: BudgetStatus }) {
   return <span className={`pill ${status}`}>{STATUS_LABEL[status]}</span>;
 }
 
-export function Money({ v, signed }: { v: number; signed?: boolean }) {
+export function Money({ v, signed, currency }: { v: number; signed?: boolean; currency?: Currency }) {
   const cls = signed ? (v < 0 ? "neg" : "pos") : "";
-  return <span className={`num ${cls}`}>{signed && v > 0 ? "+" : ""}{fmtCHF(v)}</span>;
+  return <span className={`num ${cls}`}>{signed && v > 0 ? "+" : ""}{currency && currency !== "CHF" ? fmtMoney(v, currency) : fmtCHF(v)}</span>;
 }
 
 // ---------- bullet bars: actual cost, forecast extension, optimistic/pessimistic range, budget marker ----------

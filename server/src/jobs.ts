@@ -5,6 +5,7 @@ import { budgetAlerts, customers, jobRuns, monthClosings, organizations, users, 
 import type { ChatMessage } from "./notify/webhooks";
 import { actionMail } from "./mail/mailer";
 import { sendCustomerReport } from "./reports/export";
+import { refreshFxRates } from "./fx";
 import { loadDataset } from "./routes/data";
 
 const THRESHOLDS = ["80", "95", "100"] as const;
@@ -324,6 +325,7 @@ export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: stri
     ["Stunden-Erinnerung", () => sendHoursReminders(ctx, now)],
     ["Abschluss-Erinnerung", () => sendClosingReminders(ctx, now)],
     ["Tages-Erinnerung", () => sendDailyReminders(ctx, now)],
+    ["Wechselkurse", () => refreshFxRates(ctx)],
   ] as const) {
     try {
       await job();

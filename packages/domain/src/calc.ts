@@ -1,9 +1,12 @@
 import type {
+  Currency,
   Customer,
   Dataset,
   Expense,
+  FxRates,
   JiraIssue,
   Project,
+  ProjectKind,
   SubProject,
   TimeEntry,
   VelocitySettings,
@@ -28,6 +31,14 @@ export function monthRange(from: string, to: string): string[] {
 // ---------- rates ----------
 
 /** Customer hourly rate valid on `date` (latest period starting on or before it). */
+export const currencyOf = (customer: Pick<Customer, "currency"> | undefined) => customer?.currency ?? "CHF";
+
+/** Converts an amount in `currency` to CHF with the dataset's rates; unknown rates count 1:1. */
+export function toChf(amount: number, currency: Currency, fx?: FxRates): number {
+  if (currency === "CHF") return amount;
+  return amount * (fx?.rates[currency] ?? 1);
+}
+
 export function rateOn(customer: Customer, date: string): number {
   const sorted = [...customer.rates].sort((a, b) => a.validFrom.localeCompare(b.validFrom));
   let rate = sorted[0]?.hourlyRate ?? 0;
@@ -185,10 +196,23 @@ export interface SubProjectReport extends Figures {
   subProject: SubProject;
 }
 
+export interface RetainerUsage {
+  month: string;
+  hoursPerMonth: number;
+  /** Hours booked in the running month. */
+  used: number;
+  /** Average of the last three complete months. */
+  avg3: number;
+}
+
 export interface ProjectReport extends Figures {
   project: Project;
   customer: Customer;
   subs: SubProjectReport[];
+  kind: ProjectKind;
+  currency: Currency;
+  /** Only for retainer projects: usage of the monthly contingent. */
+  retainer?: RetainerUsage;
 }
 
 /** Billable and approved (older expenses without status count as approved). */
@@ -285,10 +309,26 @@ export function projectReports(data: Dataset, settings: VelocitySettings, custom
       const forecastCost = sum("forecastCost");
       const actualCost = sum("actualCost");
       const months = subs.map((s) => s.completionMonth);
+      const customer = idx.customer.get(project.customerId)!;
+      const kind = project.kind ?? "tm";
+      let retainer: RetainerUsage | undefined;
+      let status = statusFor(forecastCost, project.budget);
+      if (kind === "retainer" && project.retainerHours) {
+        const current = monthOf(data.today);
+        const subIds = new Set(subs.map((s) => s.subProject.id));
+        const hoursIn = (m: string) => data.timeEntries.filter((e) => subIds.has(e.subProjectId) && monthOf(e.date) === m).reduce((s, e) => s + e.hours, 0);
+        const used = hoursIn(current);
+        const avg3 = [1, 2, 3].reduce((s, n) => s + hoursIn(addMonths(current, -n)), 0) / 3;
+        retainer = { month: current, hoursPerMonth: project.retainerHours, used, avg3 };
+        status = statusFor(Math.max(used, avg3), project.retainerHours);
+      }
       return {
         project,
-        customer: idx.customer.get(project.customerId)!,
+        customer,
         subs,
+        kind,
+        currency: currencyOf(customer),
+        retainer,
         budget: project.budget,
         hoursBooked: sum("hoursBooked"),
         timeCost: sum("timeCost"),
@@ -302,7 +342,7 @@ export function projectReports(data: Dataset, settings: VelocitySettings, custom
         forecastLow: sum("forecastLow"),
         forecastHigh: sum("forecastHigh"),
         variance: project.budget - forecastCost,
-        status: statusFor(forecastCost, project.budget),
+        status,
         completionMonth: months.includes(null) ? null : (months as string[]).sort().at(-1) ?? null,
       };
     });
@@ -355,6 +395,17 @@ const monthLong = new Intl.DateTimeFormat("de-CH", { month: "long", year: "numer
 const dayFmt = new Intl.DateTimeFormat("de-CH", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" });
 
 export const fmtCHF = (v: number) => chf.format(v);
+const moneyFmt = new Map<string, Intl.NumberFormat>();
+/** Whole amounts in the given currency (CHF 12’300, € 9’800, $ 4’100). */
+export function fmtMoney(v: number, currency: Currency = "CHF", fraction = 0): string {
+  const key = `${currency}:${fraction}`;
+  let f = moneyFmt.get(key);
+  if (!f) {
+    f = new Intl.NumberFormat("de-CH", { style: "currency", currency, minimumFractionDigits: fraction, maximumFractionDigits: fraction });
+    moneyFmt.set(key, f);
+  }
+  return f.format(v);
+}
 const chf2 = new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** Amounts where the Rappen matter (expenses, invoices, rates per km). */
 export const fmtCHF2 = (v: number) => chf2.format(v);

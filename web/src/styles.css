@@ -618,3 +618,7 @@ table.wk th.wk-now, table.wk td.wk-now { background: color-mix(in srgb, var(--ac
 /* Receipt scan progress -------------------------------------------------- */
 .scan-bar { height: 4px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
 .scan-bar span { display: block; height: 100%; background: var(--accent); transition: width 0.3s; }
+
+/* Profitability ----------------------------------------------------------- */
+table.profit tr.total td { border-top: 2px solid var(--line); font-weight: 600; }
+table.profit .warn { color: var(--warn-ink); }

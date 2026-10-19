@@ -150,7 +150,7 @@ function Users() {
       <section className="card">
         <div className="table-wrap">
           <table className="data">
-            <thead><tr><th>Name</th><th>Benutzername</th><th>E-Mail</th><th>Rolle</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>Name</th><th>Benutzername</th><th>E-Mail</th><th>Rolle</th><th className="r">Kostensatz CHF/h</th><th>Status</th><th /></tr></thead>
             <tbody>
               {rows?.map((u) => (
                 <tr key={u.id}>
@@ -159,6 +159,9 @@ function Users() {
                   <td>{u.email}</td>
                   <td>
                     <Select small ariaLabel={`Rolle von ${u.name}`} value={u.role} onChange={(v) => patch(u.id, { role: v })} options={(Object.keys(ROLE_LABEL) as Role[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))} />
+                  </td>
+                  <td className="r">
+                    <input className="input num" type="number" min={0} step={5} style={{ width: 90, textAlign: "right" }} aria-label={`Kostensatz von ${u.name}`} placeholder="Standard" defaultValue={u.costRate ?? ""} onBlur={(e) => { const v = e.target.value.trim(); const next = v === "" ? null : Number(v); if ((u.costRate ?? null) !== next) patch(u.id, { costRate: next }); }} />
                   </td>
                   <td>{!u.active ? <span className="pill neutral">Deaktiviert</span> : u.lastLoginAt ? <span className="pill ok">Aktiv</span> : <span className="pill risk">Eingeladen</span>}</td>
                   <td className="r"><button className="btn small ghost" onClick={() => patch(u.id, { active: !u.active })}>{u.active ? "Deaktivieren" : "Aktivieren"}</button></td>
@@ -333,6 +336,9 @@ function Billing() {
   const [billing, setBilling] = useState<BillingSettings>(EMPTY_BILLING);
   const [kmRate, setKmRate] = useState(String(data.rates?.kmRate ?? DEFAULT_RATES.kmRate));
   const [vatRate, setVatRate] = useState(data.rates?.vatRate ?? DEFAULT_RATES.vatRate);
+  const [costRate, setCostRate] = useState(String(data.rates?.costRate ?? 95));
+  const [fx, setFx] = useState<{ EUR: string; USD: string; asOf: string; source: string; manual: boolean }>({ EUR: data.fx?.rates.EUR ? String(data.fx.rates.EUR) : "", USD: data.fx?.rates.USD ? String(data.fx.rates.USD) : "", asOf: data.fx?.asOf ?? "", source: data.fx?.source ?? "", manual: false });
+  const [fxBusy, setFxBusy] = useState(false);
   const [error, setError] = useState("");
   const addr = (k: keyof PostalAddress, v: string) => setBilling({ ...billing, address: { ...billing.address, [k]: v } });
   useEffect(() => {
@@ -341,12 +347,38 @@ function Billing() {
       if (s.billing) setBilling({ ...EMPTY_BILLING, ...s.billing, vatNumber: s.billing.vatNumber ?? "", footer: s.billing.footer ?? "" });
       setKmRate(String(s.kmRate ?? DEFAULT_RATES.kmRate));
       setVatRate(s.vatRate ?? DEFAULT_RATES.vatRate);
+      setCostRate(String(s.costRate ?? 95));
+      if (s.fx) setFx({ EUR: s.fx.rates.EUR ? String(s.fx.rates.EUR) : "", USD: s.fx.rates.USD ? String(s.fx.rates.USD) : "", asOf: s.fx.asOf, source: s.fx.source ?? "", manual: Boolean(s.fx.manual) });
     }).catch((e) => setError((e as Error).message));
   }, [mode]);
 
+  const saveFx = async () => {
+    try {
+      const rates = { ...(fx.EUR ? { EUR: Number(fx.EUR) } : {}), ...(fx.USD ? { USD: Number(fx.USD) } : {}) };
+      const s = await api<OrgSettings>("/api/settings", { method: "PUT", body: { fx: { rates, manual: true } } });
+      if (s.fx) setFx({ EUR: String(s.fx.rates.EUR ?? ""), USD: String(s.fx.rates.USD ?? ""), asOf: s.fx.asOf, source: s.fx.source ?? "", manual: true });
+      setError("");
+      notify("Wechselkurse gespeichert");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const refreshFx = async () => {
+    setFxBusy(true);
+    try {
+      const f = await api<NonNullable<OrgSettings["fx"]>>("/api/settings/fx/refresh", { body: {} });
+      setFx({ EUR: String(f.rates.EUR ?? ""), USD: String(f.rates.USD ?? ""), asOf: f.asOf, source: f.source ?? "", manual: false });
+      setError("");
+      notify(`Kurse vom ${f.asOf.split("-").reverse().join(".")} geladen`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setFxBusy(false);
+    }
+  };
   const saveRates = async () => {
     try {
-      await setWorkSettings({ kmRate: Number(kmRate), vatRate });
+      await setWorkSettings({ kmRate: Number(kmRate), vatRate, costRate: Number(costRate) });
       setError("");
       notify("Ansätze gespeichert");
     } catch (e) {
@@ -398,9 +430,23 @@ function Billing() {
             <Select id="bl-vatrate" value={String(vatRate)} onChange={(v) => setVatRate(Number(v))} options={VAT_RATES.map((v) => ({ value: String(v), label: v === 0 ? "keine MwSt" : `${fmt1(v)} %` }))} />
           </label>
         </div>
-        <p className="muted" style={{ fontSize: "0.82rem" }}>100 km ergeben {fmtCHF2(Math.round(100 * Number(kmRate) * 20) / 20)}. Bereits erfasste Kilometerspesen behalten ihren Betrag.</p>
+        <label className="field" style={{ maxWidth: 260 }}><span>Interner Kostensatz Standard (CHF/h)</span><input id="bl-cost" type="number" step={5} min={0} className="input num" value={costRate} onChange={(e) => setCostRate(e.target.value)} /></label>
+        <p className="muted" style={{ fontSize: "0.82rem" }}>100 km ergeben {fmtCHF2(Math.round(100 * Number(kmRate) * 20) / 20)}. Der Kostensatz gilt für die Profitabilität bei Personen ohne eigenen Satz (Benutzer).</p>
         {error && <p className="error">{error}</p>}
         <div className="toolbar"><button className="btn primary" onClick={saveRates}>Ansätze speichern</button></div>
+      </section>
+      <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <h3>Wechselkurse</h3>
+        <p className="explain">Für Kunden in EUR oder USD. CHF pro Einheit, täglich von der EZB geladen; von Hand gesetzte Kurse bleiben, bis du wieder «Jetzt laden» drückst.</p>
+        <div className="form-grid">
+          <label className="field"><span>1 EUR in CHF</span><input id="fx-eur" type="number" step={0.0001} min={0} className="input num" value={fx.EUR} onChange={(e) => setFx({ ...fx, EUR: e.target.value })} /></label>
+          <label className="field"><span>1 USD in CHF</span><input id="fx-usd" type="number" step={0.0001} min={0} className="input num" value={fx.USD} onChange={(e) => setFx({ ...fx, USD: e.target.value })} /></label>
+        </div>
+        <p className="muted" style={{ fontSize: "0.82rem" }}>{fx.asOf ? `Stand ${fx.asOf.split("-").reverse().join(".")} · ${fx.manual ? "manuell" : fx.source || "automatisch"}` : "Noch keine Kurse geladen."}</p>
+        <div className="toolbar" style={{ gap: 8 }}>
+          <button id="fx-save" className="btn primary" onClick={saveFx} disabled={mode === "demo"}>Kurse speichern</button>
+          <button id="fx-refresh" className="btn ghost" onClick={refreshFx} disabled={fxBusy || mode === "demo"}>{fxBusy ? "Lädt …" : "Jetzt von der EZB laden"}</button>
+        </div>
       </section>
     </div>
   );

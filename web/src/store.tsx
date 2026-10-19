@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, loadDataset, upload, type Branding, type Me, type EntryComment, type OpenQuestion, type WeekSubmission, type WeekOverviewRow } from "./api";
-import { currentVelocity, projectReports, velocityByMonth, type ProjectReport, type VelocityFactor, type VelocityMonth } from "@taktwerk/domain";
+import { currentVelocity, profitability, projectReports, velocityByMonth, type Profitability, type ProjectReport, type VelocityFactor, type VelocityMonth } from "@taktwerk/domain";
 import { NEEDS_APPROVAL, WorkCalendar, absenceProblem, isoWeekKey, monthRange, weekFigures } from "@taktwerk/domain";
 import type { Absence, Customer, Dataset, Employee, Expense, Holiday, Project, Role, SubProject, TimeEntry, VelocitySettings } from "@taktwerk/domain";
 
@@ -11,6 +11,7 @@ export interface WorkSettingsPatch {
   vatRate?: number;
   hoursReminder?: boolean;
   closingReminder?: boolean;
+  costRate?: number;
 }
 
 export type WorkModelPatch = Partial<Pick<Employee, "workload" | "vacationDays" | "trackingStart" | "overtimeCarry" | "vacationCarry">>;
@@ -85,6 +86,9 @@ interface Store {
   deleteTimeEntry: (id: string) => Promise<void>;
   updateExpense: Patch<Expense>;
   updateProject: Patch<Project>;
+  updateCustomer: (id: string, patch: { name?: string; currency?: Customer["currency"] }) => Promise<void>;
+  /** Margin per project and customer in CHF; leads only (employees get no cost rates). */
+  profit: Profitability;
   updateSubProject: Patch<SubProject>;
   deleteExpense: (id: string) => Promise<void>;
   closings: Closing[];
@@ -174,6 +178,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
   const velocity = useMemo(() => velocityByMonth(data, velocitySettings), [data, velocitySettings]);
   const factor = useMemo(() => currentVelocity(velocity, velocitySettings), [velocity, velocitySettings]);
   const reports = useMemo(() => projectReports(data, velocitySettings), [data, velocitySettings]);
+  const profit = useMemo(() => profitability(data, reports), [data, reports]);
 
   // In API mode every change goes to the server, then the dataset is reloaded so all figures stay consistent.
   const remote = async (path: string, body: unknown) => {
@@ -324,8 +329,17 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     },
     addCustomer:
       mode === "api"
-        ? (c) => remote("/api/customers", { name: c.name, hourlyRate: c.rates[0].hourlyRate, validFrom: c.rates[0].validFrom })
+        ? (c) => remote("/api/customers", { name: c.name, hourlyRate: c.rates[0].hourlyRate, validFrom: c.rates[0].validFrom, currency: c.currency })
         : local("customers", "c"),
+    updateCustomer: async (id, patch) => {
+      if (mode === "api") {
+        await api(`/api/customers/${id}`, { method: "PATCH", body: patch });
+        setData(await loadDataset());
+        return;
+      }
+      setData((d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
+    },
+    profit,
     addProject: mode === "api" ? (p) => remote("/api/projects", p) : local("projects", "p"),
     addSubProject: mode === "api" ? (s) => remote("/api/sub-projects", s) : local("subProjects", "s"),
     updateTimeEntry: mode === "api" ? (id, p) => send("PATCH", `/api/time-entries/${id}`, p) : localPatch("timeEntries"),
@@ -474,7 +488,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
       setData((d) => ({
         ...d,
         workModel: { weeklyHours: w.weeklyHours ?? d.workModel!.weeklyHours, holidays: w.holidays ?? d.workModel!.holidays },
-        rates: { kmRate: w.kmRate ?? d.rates?.kmRate ?? 0.7, vatRate: w.vatRate ?? d.rates?.vatRate ?? 8.1 },
+        rates: { kmRate: w.kmRate ?? d.rates?.kmRate ?? 0.7, vatRate: w.vatRate ?? d.rates?.vatRate ?? 8.1, costRate: w.costRate ?? d.rates?.costRate },
       }));
     },
     toast,

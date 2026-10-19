@@ -30,13 +30,13 @@ function rng(seed: number) {
 
 const TRACKING_START = "2026-01-01";
 const employees: Employee[] = [
-  { id: "e1", name: "Anna Keller", initials: "AK", role: "admin", teamId: "t1", workload: 100, vacationDays: 25, vacationCarry: 3 },
-  { id: "e2", name: "Marco Brunner", initials: "MB", role: "consultant", teamId: "t1", workload: 100, vacationDays: 25, overtimeCarry: 12.5 },
-  { id: "e3", name: "Lea Meier", initials: "LM", role: "employee", teamId: "t1", workload: 100, vacationDays: 25, overtimeCarry: -4 },
-  { id: "e4", name: "Jonas Weber", initials: "JW", role: "employee", teamId: "t1", workload: 80, vacationDays: 20 },
-  { id: "e5", name: "Sara Frei", initials: "SF", role: "employee", teamId: "t1", workload: 100, vacationDays: 25, vacationCarry: 2 },
-  { id: "e6", name: "Luca Schmid", initials: "LS", role: "employee", teamId: "t1", workload: 60, vacationDays: 15 },
-  { id: "e7", name: "Nina Huber", initials: "NH", role: "employee", teamId: "t1", workload: 80, vacationDays: 20 },
+  { id: "e1", name: "Anna Keller", initials: "AK", role: "admin", teamId: "t1", workload: 100, vacationDays: 25, vacationCarry: 3, costRate: 125 },
+  { id: "e2", name: "Marco Brunner", initials: "MB", role: "consultant", teamId: "t1", workload: 100, vacationDays: 25, overtimeCarry: 12.5, costRate: 115 },
+  { id: "e3", name: "Lea Meier", initials: "LM", role: "employee", teamId: "t1", workload: 100, vacationDays: 25, overtimeCarry: -4, costRate: 92 },
+  { id: "e4", name: "Jonas Weber", initials: "JW", role: "employee", teamId: "t1", workload: 80, vacationDays: 20, costRate: 88 },
+  { id: "e5", name: "Sara Frei", initials: "SF", role: "employee", teamId: "t1", workload: 100, vacationDays: 25, vacationCarry: 2, costRate: 98 },
+  { id: "e6", name: "Luca Schmid", initials: "LS", role: "employee", teamId: "t1", workload: 60, vacationDays: 15, costRate: 78 },
+  { id: "e7", name: "Nina Huber", initials: "NH", role: "employee", teamId: "t1", workload: 80, vacationDays: 20, costRate: 85 },
 ].map((e) => ({ ...e, role: e.role as Employee["role"], trackingStart: TRACKING_START }));
 
 /** Tendency to work more or less than the target, so the example shows different overtime balances. */
@@ -81,7 +81,7 @@ const customers: Customer[] = [
     address: { name: "Alpenbank AG", street: "Bahnhofstrasse 12", zip: "8001", city: "Zürich", country: "CH" } },
   { id: "c2", name: "Rheinlogistik GmbH", rates: [{ validFrom: "2025-01-01", hourlyRate: 155 }],
     address: { name: "Rheinlogistik GmbH", street: "Hafenweg 3", zip: "4057", city: "Basel", country: "CH" } },
-  { id: "c3", name: "Medtech Basel AG", rates: [{ validFrom: "2025-01-01", hourlyRate: 170 }],
+  { id: "c3", name: "Medtech Basel AG", currency: "EUR", rates: [{ validFrom: "2025-01-01", hourlyRate: 170 }],
     address: { name: "Medtech Basel AG", street: "Grenzacherstrasse 120", zip: "4058", city: "Basel", country: "CH" } },
   { id: "c4", name: "Stadtwerke Aarau", rates: [{ validFrom: "2025-01-01", hourlyRate: 145 }] },
   { id: "c5", name: "Intern", rates: [{ validFrom: "2025-01-01", hourlyRate: 0 }] },
@@ -89,9 +89,9 @@ const customers: Customer[] = [
 
 const projects: Project[] = [
   { id: "p1", customerId: "c1", name: "Kundenportal Relaunch", budget: 0, jiraProjectKey: "KPR" },
-  { id: "p2", customerId: "c2", name: "Flottenmanagement", budget: 0, jiraProjectKey: "FLT" },
+  { id: "p2", customerId: "c2", name: "Flottenmanagement", budget: 0, jiraProjectKey: "FLT", kind: "retainer", retainerHours: 120 },
   { id: "p3", customerId: "c3", name: "QMS Digitalisierung", budget: 0, jiraProjectKey: "QMS" },
-  { id: "p4", customerId: "c4", name: "Störungsmeldung App", budget: 0, jiraProjectKey: "SWA" },
+  { id: "p4", customerId: "c4", name: "Störungsmeldung App", budget: 0, jiraProjectKey: "SWA", kind: "fixed" },
   { id: "p5", customerId: "c5", name: "Interne Arbeit", budget: 0 },
 ];
 const INTERNAL_SUB: SubProject = { id: "s11", projectId: "p5", name: "Administration & Weiterbildung", budget: 0 };
@@ -316,6 +316,7 @@ export function buildDataset(): Dataset {
     absences: ABSENCES.map((a) => ({ ...a })),
     workModel: WORK_MODEL,
     rates: SAMPLE_RATES,
+    fx: { rates: { EUR: 0.94, USD: 0.8 }, asOf: TODAY, source: "Beispiel" },
     today: TODAY,
   };
 

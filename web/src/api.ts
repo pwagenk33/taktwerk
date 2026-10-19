@@ -48,6 +48,8 @@ export interface Settings {
   hoursReminder?: boolean;
   closingReminder?: boolean;
   billing?: BillingSettings;
+  costRate?: number;
+  fx?: { rates: { EUR?: number; USD?: number }; asOf: string; source?: string; manual?: boolean };
 }
 
 export type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";
@@ -85,6 +87,7 @@ export interface UserRow {
   active: boolean;
   hasPassword: boolean;
   lastLoginAt: string | null;
+  costRate?: number | null;
 }
 
 export class ApiError extends Error {

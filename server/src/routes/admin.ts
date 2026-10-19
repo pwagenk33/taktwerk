@@ -8,6 +8,7 @@ import { VAT_RATES } from "@taktwerk/domain";
 import { customers, organizations, sessions, users, type OrgSettings } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { createPasswordToken, passwordLink } from "./auth";
+import { fetchFxRates } from "../fx";
 
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Farbe als Hex-Wert, z. B. #D52B1E");
 
@@ -72,6 +73,8 @@ export async function adminRoutes(app: FastifyInstance) {
         vatRate: z.number().refine((v) => (VAT_RATES as readonly number[]).includes(v), "Ungültiger MwSt-Satz").optional(),
         hoursReminder: z.boolean().optional(),
         closingReminder: z.boolean().optional(),
+        costRate: z.number().min(0).max(1000).optional(),
+        fx: z.object({ rates: z.object({ EUR: z.number().positive().max(100).optional(), USD: z.number().positive().max(100).optional() }), manual: z.boolean().optional() }).optional(),
         billing: z
           .object({
             address: postalAddress,
@@ -100,9 +103,21 @@ export async function adminRoutes(app: FastifyInstance) {
       hoursReminder: body.hoursReminder ?? org.settings.hoursReminder,
       closingReminder: body.closingReminder ?? org.settings.closingReminder,
       billing: body.billing ?? org.settings.billing,
+      costRate: body.costRate ?? org.settings.costRate,
+      fx: body.fx ? { rates: { ...org.settings.fx?.rates, ...body.fx.rates }, asOf: todayZurich(), source: "manuell", manual: body.fx.manual ?? true } : org.settings.fx,
     };
     await ctx.db.update(organizations).set({ name: body.name ?? org.name, settings }).where(eq(organizations.id, org.id));
     return { name: body.name ?? org.name, ...settings };
+  });
+
+  /** Pulls today's ECB rates now and switches back to automatic daily updates. */
+  app.post("/api/settings/fx/refresh", async (req) => {
+    const user = requireRole(req, "admin");
+    const org = await orgOf(user.organizationId);
+    const fx = await fetchFxRates();
+    const settings: OrgSettings = { ...org.settings, fx: { ...fx, manual: false } };
+    await ctx.db.update(organizations).set({ settings }).where(eq(organizations.id, org.id));
+    return settings.fx;
   });
 
   app.post("/api/settings/test-mail", async (req) => {
@@ -173,7 +188,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const admin = requireRole(req, "admin");
     const { id } = req.params as { id: string };
     const body = z
-      .object({ name: z.string().trim().min(1).max(160).optional(), role: z.enum(["admin", "consultant", "employee"]).optional(), active: z.boolean().optional(), teamId: z.string().nullable().optional() })
+      .object({ name: z.string().trim().min(1).max(160).optional(), role: z.enum(["admin", "consultant", "employee"]).optional(), active: z.boolean().optional(), teamId: z.string().nullable().optional(), costRate: z.number().min(0).max(1000).nullable().optional() })
       .parse(req.body);
     const [target] = await ctx.db.select().from(users).where(and(eq(users.id, id), eq(users.organizationId, admin.organizationId))).limit(1);
     if (!target) throw new HttpError(404, "Benutzer nicht gefunden.");

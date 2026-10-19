@@ -8,6 +8,8 @@ export interface Employee {
   initials: string;
   role: Role;
   teamId: string;
+  /** Internal cost per hour in CHF (salary incl. social costs / productive hours); leads only. Falls back to OrgRates.costRate. */
+  costRate?: number;
   /** Employment level in percent (Pensum). Default 100. */
   workload?: number;
   /** Vacation days per calendar year for this person (already for their Pensum). Default 25. */
@@ -40,10 +42,30 @@ export interface PostalAddress {
   country: string;
 }
 
+export type Currency = "CHF" | "EUR" | "USD";
+export const CURRENCIES: Currency[] = ["CHF", "EUR", "USD"];
+
+/** Exchange rates as CHF per one unit of foreign currency, e.g. { EUR: 0.94, USD: 0.80 }. */
+export interface FxRates {
+  rates: Partial<Record<Currency, number>>;
+  /** Date of the quotes (YYYY-MM-DD). */
+  asOf: string;
+  source?: string;
+}
+
+export type ProjectKind = "tm" | "fixed" | "retainer";
+export const PROJECT_KINDS: { id: ProjectKind; label: string; hint: string }[] = [
+  { id: "tm", label: "Zeit und Material", hint: "Jede Stunde wird zum Kundensatz verrechnet, das Budget ist die Obergrenze." },
+  { id: "fixed", label: "Fixpreis", hint: "Der Kunde zahlt den Festpreis, Mehraufwand geht zulasten der Marge." },
+  { id: "retainer", label: "Retainer", hint: "Monatliches Stundenkontingent, verrechnet wird der Monatsbetrag." },
+];
+
 export interface Customer {
   id: string;
   name: string;
   rates: RatePeriod[];
+  /** Currency of rates, budgets and invoices. Default CHF. */
+  currency?: Currency;
   /** Postal address printed on invoices. */
   address?: PostalAddress;
 }
@@ -52,8 +74,12 @@ export interface Project {
   id: string;
   customerId: string;
   name: string;
-  budget: number; // CHF, may exceed the sum of sub-project budgets (reserve)
+  budget: number; // in the customer's currency, may exceed the sum of sub-project budgets (reserve)
   jiraProjectKey?: string;
+  /** Contract type. Default «Zeit und Material». */
+  kind?: ProjectKind;
+  /** Retainer: hours included per month. */
+  retainerHours?: number;
 }
 
 export interface SubProject {
@@ -145,6 +171,8 @@ export interface OrgRates {
   kmRate: number;
   /** VAT rate in percent on invoices. Default 8.1. */
   vatRate: number;
+  /** Default internal cost per hour in CHF for people without an own cost rate. */
+  costRate?: number;
 }
 
 export interface WorkModel {
@@ -166,6 +194,8 @@ export interface Dataset {
   absences?: Absence[];
   workModel?: WorkModel;
   rates?: OrgRates;
+  /** Exchange rates for customers in EUR or USD. */
+  fx?: FxRates;
   today: string;
 }
 

@@ -21,6 +21,8 @@ import {
 import { assertBookable, audit } from "./billing";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT");
+const projectKind = z.enum(["tm", "fixed", "retainer"]);
+const currency = z.enum(["CHF", "EUR", "USD"]);
 
 /** Today in Swiss time, as YYYY-MM-DD. */
 export const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Uhrzeit im Format HH:MM");
@@ -70,17 +72,19 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
         initials: initials(u.name),
         role: u.role,
         teamId: u.teamId ?? "",
-        // Work model and balances of colleagues stay private for employees.
+        // Work model and balances of colleagues stay private for employees; cost rates only for leads.
         ...(own && u.id !== user.id
           ? {}
           : { workload: u.workload, vacationDays: u.vacationDays, trackingStart: u.trackingStart ?? undefined, overtimeCarry: u.overtimeCarry, vacationCarry: u.vacationCarry }),
+        ...(own ? {} : { costRate: u.costRate ?? undefined }),
       })),
     customers: customerRows.map((c) => ({
       id: c.id,
       name: c.name,
+      currency: c.currency,
       rates: rateRows.filter((r) => r.r.customerId === c.id).map((r) => ({ validFrom: r.r.validFrom, hourlyRate: r.r.hourlyRate })),
     })),
-    projects: projectRows.map((p) => ({ id: p.id, customerId: p.customerId, name: p.name, budget: own ? 0 : p.budget, jiraProjectKey: p.jiraProjectKey ?? undefined })),
+    projects: projectRows.map((p) => ({ id: p.id, customerId: p.customerId, name: p.name, budget: own ? 0 : p.budget, jiraProjectKey: p.jiraProjectKey ?? undefined, kind: p.kind, retainerHours: p.retainerHours ?? undefined })),
     subProjects: subRows.map((s) => ({ id: s.id, projectId: s.projectId, name: s.name, budget: own ? 0 : s.budget, jiraEpicKey: s.jiraEpicKey ?? undefined })),
     timeEntries: entryRows.map((e) => ({
       id: e.id,
@@ -122,6 +126,12 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
       weeklyHours: orgRow?.settings.weeklyHours ?? DEFAULT_WEEKLY_HOURS,
       holidays: orgRow?.settings.holidays ?? [year - 1, year, year + 1].flatMap(defaultHolidays),
     },
+    rates: {
+      kmRate: orgRow?.settings.kmRate ?? DEFAULT_RATES.kmRate,
+      vatRate: orgRow?.settings.vatRate ?? DEFAULT_RATES.vatRate,
+      ...(own ? {} : { costRate: orgRow?.settings.costRate }),
+    },
+    fx: orgRow?.settings.fx ? { rates: orgRow.settings.fx.rates, asOf: orgRow.settings.fx.asOf, source: orgRow.settings.fx.source } : undefined,
     issues: issueRows.map((i) => ({
       key: i.key,
       summary: i.summary,
@@ -252,11 +262,23 @@ export async function dataRoutes(app: FastifyInstance) {
 
   app.post("/api/customers", async (req, reply) => {
     const user = requireRole(req, "admin");
-    const body = z.object({ name: z.string().trim().min(1).max(200), hourlyRate: z.number().positive(), validFrom: isoDate.optional() }).parse(req.body);
+    const body = z.object({ name: z.string().trim().min(1).max(200), hourlyRate: z.number().positive(), validFrom: isoDate.optional(), currency: currency.optional() }).parse(req.body);
     const id = randomUUID();
-    await ctx.db.insert(customers).values({ id, organizationId: user.organizationId, name: body.name });
+    await ctx.db.insert(customers).values({ id, organizationId: user.organizationId, name: body.name, currency: body.currency ?? "CHF" });
     await ctx.db.insert(customerRates).values({ customerId: id, validFrom: body.validFrom ?? "2000-01-01", hourlyRate: body.hourlyRate });
     return reply.status(201).send({ id });
+  });
+
+  /** Name and currency of a customer. The currency applies to rates, budgets and new invoices. */
+  app.patch("/api/customers/:id", async (req) => {
+    const user = requireRole(req, "admin", "consultant");
+    const { id } = req.params as { id: string };
+    const body = z.object({ name: z.string().trim().min(1).max(200).optional(), currency: currency.optional() }).parse(req.body);
+    const [c] = await ctx.db.select().from(customers).where(and(eq(customers.id, id), eq(customers.organizationId, user.organizationId))).limit(1);
+    if (!c) throw new HttpError(404, "Kunde nicht gefunden.");
+    const next = { name: body.name ?? c.name, currency: body.currency ?? c.currency };
+    await ctx.db.update(customers).set(next).where(eq(customers.id, id));
+    return { id, ...next };
   });
 
   app.post("/api/customers/:id/rates", async (req, reply) => {
@@ -271,11 +293,11 @@ export async function dataRoutes(app: FastifyInstance) {
 
   app.post("/api/projects", async (req, reply) => {
     const user = requireRole(req, "admin");
-    const body = z.object({ customerId: z.string(), name: z.string().trim().min(1).max(200), budget: z.number().min(0), jiraProjectKey: z.string().max(20).optional() }).parse(req.body);
+    const body = z.object({ customerId: z.string(), name: z.string().trim().min(1).max(200), budget: z.number().min(0), jiraProjectKey: z.string().max(20).optional(), kind: projectKind.optional(), retainerHours: z.number().min(0).max(10000).optional() }).parse(req.body);
     const [c] = await ctx.db.select().from(customers).where(and(eq(customers.id, body.customerId), eq(customers.organizationId, user.organizationId))).limit(1);
     if (!c) throw new HttpError(404, "Kunde nicht gefunden.");
     const id = randomUUID();
-    await ctx.db.insert(projects).values({ id, organizationId: user.organizationId, ...body, jiraProjectKey: body.jiraProjectKey || null });
+    await ctx.db.insert(projects).values({ id, organizationId: user.organizationId, ...body, jiraProjectKey: body.jiraProjectKey || null, kind: body.kind ?? "tm", retainerHours: body.kind === "retainer" ? body.retainerHours ?? null : null });
     return reply.status(201).send({ id });
   });
 
@@ -292,10 +314,17 @@ export async function dataRoutes(app: FastifyInstance) {
   app.patch("/api/projects/:id", async (req) => {
     const user = requireRole(req, "admin", "consultant");
     const { id } = req.params as { id: string };
-    const body = z.object({ name: z.string().trim().min(1).max(200).optional(), budget: z.number().min(0).optional(), jiraProjectKey: z.string().max(20).nullable().optional() }).parse(req.body);
+    const body = z.object({ name: z.string().trim().min(1).max(200).optional(), budget: z.number().min(0).optional(), jiraProjectKey: z.string().max(20).nullable().optional(), kind: projectKind.optional(), retainerHours: z.number().min(0).max(10000).nullable().optional() }).parse(req.body);
     const [p] = await ctx.db.select().from(projects).where(and(eq(projects.id, id), eq(projects.organizationId, user.organizationId))).limit(1);
     if (!p) throw new HttpError(404, "Projekt nicht gefunden.");
-    const next = { name: body.name ?? p.name, budget: body.budget ?? p.budget, jiraProjectKey: body.jiraProjectKey === undefined ? p.jiraProjectKey : body.jiraProjectKey || null };
+    const kind = body.kind ?? p.kind;
+    const next = {
+      name: body.name ?? p.name,
+      budget: body.budget ?? p.budget,
+      jiraProjectKey: body.jiraProjectKey === undefined ? p.jiraProjectKey : body.jiraProjectKey || null,
+      kind,
+      retainerHours: kind !== "retainer" ? null : body.retainerHours === undefined ? p.retainerHours : body.retainerHours,
+    };
     await ctx.db.update(projects).set(next).where(eq(projects.id, id));
     return { id, ...next };
   });

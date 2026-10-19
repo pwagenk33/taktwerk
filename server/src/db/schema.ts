@@ -82,6 +82,10 @@ export interface OrgSettings {
   /** E-mail on the 1st to people whose previous month is not submitted, digest to leads on the 5th. Default on. */
   closingReminder?: boolean;
   billing?: BillingSettings;
+  /** Default internal cost per hour in CHF for people without an own cost rate. Default 95. */
+  costRate?: number;
+  /** Exchange rates, CHF per unit (EUR, USD), refreshed daily unless `fx.manual` is set. */
+  fx?: { rates: { EUR?: number; USD?: number }; asOf: string; source?: string; manual?: boolean };
 }
 
 export const organizations = mysqlTable("organizations", {
@@ -127,6 +131,8 @@ export const users = mysqlTable(
     vacationCarry: decimal("vacation_carry", { precision: 4, scale: 1, mode: "number" }).notNull().default(0),
     lastLoginAt: datetime("last_login_at", { mode: "date" }),
     reminder: json<ReminderSettings>("reminder"),
+    /** Internal cost per hour in CHF; null = organization default. */
+    costRate: decimal("cost_rate", { precision: 7, scale: 2, mode: "number" }),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("users_username_uq").on(t.username), uniqueIndex("users_email_uq").on(t.email)],
@@ -168,6 +174,8 @@ export const customers = mysqlTable("customers", {
   id: id().primaryKey(),
   organizationId: orgId(),
   name: varchar("name", { length: 200 }).notNull(),
+  /** Currency of rates, budgets and invoices. */
+  currency: mysqlEnum("currency", ["CHF", "EUR", "USD"]).notNull().default("CHF"),
   /** E-mail addresses that receive the monthly report; empty = no automatic dispatch. */
   reportRecipients: json<string[]>("report_recipients").notNull().$defaultFn(() => []),
   /** Postal address printed on invoices and in the QR bill. */
@@ -192,6 +200,10 @@ export const projects = mysqlTable("projects", {
   name: varchar("name", { length: 200 }).notNull(),
   budget: money("budget").notNull().default(0),
   jiraProjectKey: varchar("jira_project_key", { length: 20 }),
+  /** Contract type: time & material, fixed price or monthly retainer. */
+  kind: mysqlEnum("kind", ["tm", "fixed", "retainer"]).notNull().default("tm"),
+  /** Retainer: hours included per month. */
+  retainerHours: decimal("retainer_hours", { precision: 6, scale: 1, mode: "number" }),
   createdAt: createdAt(),
 });
 
@@ -301,7 +313,7 @@ export const invoices = mysqlTable(
     vat: money("vat").notNull(),
     gross: money("gross").notNull(),
     /** Snapshot of sender, recipient and texts at creation, so the PDF stays stable. */
-    snapshot: json<{ sender: BillingSettings; recipient: PostalAddress; customerName: string; appName: string; primaryColor: string }>("snapshot").notNull(),
+    snapshot: json<{ sender: BillingSettings; recipient: PostalAddress; customerName: string; appName: string; primaryColor: string; currency?: "CHF" | "EUR" | "USD" }>("snapshot").notNull(),
     sentAt: datetime("sent_at", { mode: "date" }),
     paidAt: datetime("paid_at", { mode: "date" }),
     createdAt: createdAt(),

@@ -64,6 +64,13 @@
       "when": 1792424232984,
       "tag": "0008_user_reminder",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1792433911388,
+      "tag": "0009_project_kinds_fx",
+      "breakpoints": true
     }
   ]
 }

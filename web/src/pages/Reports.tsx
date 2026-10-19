@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { addMonths, fmt1, fmtCHF, fmtCHF2, fmtDate, fmtMonth, fmtMonthLong, fmtNum, monthOf, type Figures, type PostalAddress } from "@taktwerk/domain";
+import { PROJECT_KINDS, addMonths, currencyOf, fmt1, fmtCHF, fmtCHF2, fmtDate, fmtMoney, fmtMonth, fmtMonthLong, fmtNum, monthOf, type Currency, type Figures, type PostalAddress, type ProfitRow } from "@taktwerk/domain";
 import { api, type Invoice, type InvoicePosition, type InvoiceStatus } from "../api";
 import { useStore } from "../store";
 import { BulletBars, BurnUpChart, Icon, Money, StatusPill, reportToBullet } from "../ui/components";
@@ -288,6 +288,78 @@ function Row({ f, name, sub, cls, onClick, open }: { f: Figures; name: React.Rea
   );
 }
 
+const pct = (v: number | null) => (v === null ? "–" : `${fmt1(v * 100)} %`);
+const marginCls = (v: number | null) => (v === null ? "" : v < 0 ? "neg" : v < 0.2 ? "warn" : "pos");
+
+/** Leads: revenue against internal cost per project and customer, everything converted to CHF. */
+function ProfitSection({ customerId }: { customerId: string }) {
+  const { profit, data, role } = useStore();
+  const [by, setBy] = useState<"projects" | "customers">(customerId ? "projects" : "customers");
+  if (role === "employee") return null;
+  const rows: ProfitRow[] = (by === "projects" ? profit.projects : profit.customers).filter((r) => !customerId || r.customerId === customerId);
+  const sum = rows.reduce((t, r) => ({ hours: t.hours + r.hours, revenue: t.revenue + r.revenue, cost: t.cost + r.cost, margin: t.margin + r.margin }), { hours: 0, revenue: 0, cost: 0, margin: 0 });
+  const estimated = rows.some((r) => r.estimated);
+  const kindLabel = (k: ProfitRow["kind"]) => PROJECT_KINDS.find((x) => x.id === k)?.label ?? k;
+  return (
+    <section className="card">
+      <div className="card-head" style={{ paddingBottom: 8, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h2>Profitabilität</h2>
+          <span className="muted" style={{ fontSize: "0.8rem" }}>Umsatz zum Kundensatz gegen Stunden × Kostensatz plus Spesen, alles in CHF{profit.from ? `, seit ${fmtMonth(profit.from)}` : ""}</span>
+        </div>
+        {!customerId && (
+          <div className="seg" role="tablist">
+            <button role="tab" className={by === "customers" ? "on" : ""} onClick={() => setBy("customers")}>Nach Kunde</button>
+            <button role="tab" className={by === "projects" ? "on" : ""} onClick={() => setBy("projects")}>Nach Projekt</button>
+          </div>
+        )}
+      </div>
+      <div className="table-wrap">
+        <table className="data profit">
+          <thead>
+            <tr>
+              <th>{by === "projects" ? "Projekt" : "Kunde"}</th>
+              {by === "projects" && <th>Art</th>}
+              <th className="r">Stunden</th><th className="r">Umsatz</th><th className="r">Umsatz/h</th><th className="r">Kosten</th><th className="r">Marge</th><th className="r">Marge %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td>{r.name}{by === "projects" && !customerId && <div className="muted" style={{ fontSize: "0.76rem" }}>{r.customerName}</div>}</td>
+                {by === "projects" && <td><span className="pill neutral">{kindLabel(r.kind)}</span>{r.currency !== "CHF" && <span className="muted" style={{ marginLeft: 6, fontSize: "0.76rem" }}>{r.currency}</span>}</td>}
+                <td className="r num">{fmt1(r.hours)}</td>
+                <td className="r num">{fmtCHF(r.revenue)}</td>
+                <td className="r num">{r.revenuePerHour === null ? "–" : fmtCHF(r.revenuePerHour)}</td>
+                <td className="r num">{fmtCHF(r.cost)}</td>
+                <td className={`r num ${r.margin < 0 ? "neg" : ""}`}>{fmtCHF(r.margin)}</td>
+                <td className={`r num ${marginCls(r.marginPct)}`}><strong>{pct(r.marginPct)}</strong></td>
+              </tr>
+            ))}
+            {rows.length > 1 && (
+              <tr className="total">
+                <td>Total</td>
+                {by === "projects" && <td />}
+                <td className="r num">{fmt1(sum.hours)}</td>
+                <td className="r num">{fmtCHF(sum.revenue)}</td>
+                <td className="r num">{sum.hours ? fmtCHF(sum.revenue / sum.hours) : "–"}</td>
+                <td className="r num">{fmtCHF(sum.cost)}</td>
+                <td className={`r num ${sum.margin < 0 ? "neg" : ""}`}>{fmtCHF(sum.margin)}</td>
+                <td className={`r num ${marginCls(sum.revenue ? sum.margin / sum.revenue : null)}`}><strong>{pct(sum.revenue ? sum.margin / sum.revenue : null)}</strong></td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted card-pad" style={{ fontSize: "0.8rem", paddingTop: 8 }}>
+        Fixpreis zählt den Festpreis als Umsatz, Retainer das Kontingent pro Monat mit Buchungen, Zeit und Material die verrechenbaren Stunden. Fremdwährungen mit dem Kurs vom {data.fx ? fmtDate(data.fx.asOf) : "Tag"}.
+        {!customerId && profit.internal.hours > 0 && ` Interne Arbeit (${fmt1(profit.internal.hours)} h, ${fmtCHF(profit.internal.cost)}) bleibt aussen vor.`}
+        {estimated && ` Für Personen ohne Kostensatz gilt der Standard von ${fmtCHF(data.rates?.costRate ?? 95)}/h (Einstellungen → Rechnung).`}
+      </p>
+    </section>
+  );
+}
+
 export function Reports() {
   const { data, reports, factor, velocitySettings, role } = useStore();
   const [customerId, setCustomerId] = useState(data.customers[0]?.id ?? "");
@@ -299,6 +371,8 @@ export function Reports() {
   const total = { budget: sum("budget"), actual: sum("actualCost"), forecast: sum("forecastCost") };
   const chart = rows.find((r) => r.project.id === selected) ?? rows[0];
   const customer = data.customers.find((c) => c.id === customerId);
+  const cur: Currency = customer ? currencyOf(customer) : "CHF";
+  const m = (v: number) => fmtMoney(v, cur);
   const toggle = (id: string) => {
     const n = new Set(open);
     if (n.has(id)) n.delete(id); else n.add(id);
@@ -330,12 +404,14 @@ export function Reports() {
       {customerId && role !== "employee" && <Invoices customerId={customerId} />}
 
       <div className="tiles">
-        <div className="card tile"><span className="label">Gesamtbudget</span><span className="value num">{fmtCHF(total.budget)}</span></div>
-        <div className="card tile"><span className="label">Verbraucht</span><span className="value num">{fmtCHF(total.actual)}</span><span className="delta num">{fmt1((total.actual / Math.max(1, total.budget)) * 100)} % des Budgets</span></div>
-        <div className="card tile"><span className="label">Verbleibendes Budget</span><span className="value num"><Money v={total.budget - total.actual} signed={total.budget - total.actual < 0} /></span></div>
-        <div className="card tile"><span className="label">Forecast gesamt</span><span className="value num">{fmtCHF(total.forecast)}</span>
-          <span className="delta">Abweichung <Money v={total.budget - total.forecast} signed /></span></div>
+        <div className="card tile"><span className="label">Gesamtbudget</span><span className="value num">{m(total.budget)}</span>{!customerId && data.customers.some((c) => currencyOf(c) !== "CHF") && <span className="delta">Fremdwährungen nominal addiert</span>}</div>
+        <div className="card tile"><span className="label">Verbraucht</span><span className="value num">{m(total.actual)}</span><span className="delta num">{fmt1((total.actual / Math.max(1, total.budget)) * 100)} % des Budgets</span></div>
+        <div className="card tile"><span className="label">Verbleibendes Budget</span><span className="value num"><Money v={total.budget - total.actual} signed={total.budget - total.actual < 0} currency={cur} /></span></div>
+        <div className="card tile"><span className="label">Forecast gesamt</span><span className="value num">{m(total.forecast)}</span>
+          <span className="delta">Abweichung <Money v={total.budget - total.forecast} signed currency={cur} /></span></div>
       </div>
+
+      <ProfitSection customerId={customerId} />
 
       <section className="card">
         <div className="card-head" style={{ paddingBottom: 8 }}><h2>Projekte und Subprojekte</h2><span className="muted" style={{ fontSize: "0.8rem" }}>Zeile anklicken zum Auf- und Zuklappen</span></div>
