@@ -184,6 +184,8 @@ export interface WorkModel {
   /** Target hours per week at 100 %, spread over Monday to Friday. */
   weeklyHours: number;
   holidays: Holiday[];
+  /** How working time is recorded: hours per day (default) or come/go with breaks. */
+  timeModel?: "simplified" | "full";
 }
 
 export interface Dataset {
@@ -198,6 +200,8 @@ export interface Dataset {
   /** Absences visible to the viewer (employees: own only). */
   absences?: Absence[];
   workModel?: WorkModel;
+  /** Come/go periods (time model «full»). */
+  workPeriods?: import("./presence").WorkPeriod[];
   rates?: OrgRates;
   /** Exchange rates for customers in EUR or USD. */
   fx?: FxRates;

@@ -89,6 +89,7 @@ export interface Settings {
   vatRate?: number;
   hoursReminder?: boolean;
   closingReminder?: boolean;
+  timeModel?: "simplified" | "full";
   billing?: BillingSettings;
   costRate?: number;
   fx?: { rates: { EUR?: number; USD?: number }; asOf: string; source?: string; manual?: boolean };

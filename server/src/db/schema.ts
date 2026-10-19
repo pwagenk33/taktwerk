@@ -88,6 +88,8 @@ export interface OrgSettings {
   scheduledReports?: { id: string; name: string; kind: "weekly" | "monthly"; dayOfWeek?: number; dayOfMonth?: number; hour: number; recipients: string[]; enabled: boolean }[];
   /** Exchange rates, CHF per unit (EUR, USD), refreshed daily unless `fx.manual` is set. */
   fx?: { rates: { EUR?: number; USD?: number }; asOf: string; source?: string; manual?: boolean };
+  /** Working-time recording: "simplified" (hours per day, Art. 73b ArGV 1, default) or "full" (come/go with breaks, Art. 73 ArGV 1). */
+  timeModel?: "simplified" | "full";
 }
 
 export const organizations = mysqlTable(
@@ -486,4 +488,20 @@ export const passkeys = mysqlTable(
     createdAt: createdAt(),
   },
   (t) => [index("passkeys_user_idx").on(t.userId)],
+);
+
+/** Come/go recording (time model «full»): one row per stretch of work or break; `end` is null while running. */
+export const workPeriods = mysqlTable(
+  "work_periods",
+  {
+    id: id().primaryKey(),
+    organizationId: orgId(),
+    userId: id("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    date: varchar("date", { length: 10 }).notNull(),
+    kind: mysqlEnum("kind", ["work", "break"]).notNull().default("work"),
+    start: varchar("start", { length: 5 }).notNull(),
+    end: varchar("end", { length: 5 }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("period_user_date_idx").on(t.userId, t.date), index("period_org_date_idx").on(t.organizationId, t.date)],
 );

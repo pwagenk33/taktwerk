@@ -28,6 +28,7 @@ import { platformRoutes } from "./routes/platform";
 import { statusRoutes } from "./routes/status";
 import { securityRoutes } from "./routes/security";
 import { privacyRoutes } from "./routes/privacy";
+import { presenceRoutes } from "./routes/presence";
 
 /** auditor (Treuhand/Revision) reads everything of the organization and changes nothing. */
 export type Role = "admin" | "consultant" | "employee" | "auditor" | "customer";
@@ -234,6 +235,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(platformRoutes);
   await app.register(securityRoutes);
   await app.register(privacyRoutes);
+  await app.register(presenceRoutes);
 
   // Production: serve the built web app with SPA fallback.
   const webDist = ctx.config.WEB_DIST ? resolve(ctx.config.WEB_DIST) : null;

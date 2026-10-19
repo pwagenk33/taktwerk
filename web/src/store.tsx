@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, loadDataset, upload, type Branding, type Me, type EntryComment, type OpenQuestion, type WeekSubmission, type WeekOverviewRow, type PortalAccount } from "./api";
-import { currentVelocity, profitability, projectReports, velocityByMonth, type Profitability, type ProjectReport, type VelocityFactor, type VelocityMonth } from "@taktwerk/domain";
+import { currentVelocity, profitability, projectReports, velocityByMonth, type Profitability, type ProjectReport, type VelocityFactor, type VelocityMonth, applyStamp, type PeriodKind, type StampAction, type TimeModel, type WorkPeriod } from "@taktwerk/domain";
 import { NEEDS_APPROVAL, WorkCalendar, absenceProblem, isoWeekKey, monthRange, weekFigures } from "@taktwerk/domain";
 import type { Absence, Customer, Dataset, Employee, Expense, Holiday, Project, Role, SubProject, TimeEntry, VelocitySettings } from "@taktwerk/domain";
 
@@ -12,6 +12,7 @@ export interface WorkSettingsPatch {
   hoursReminder?: boolean;
   closingReminder?: boolean;
   costRate?: number;
+  timeModel?: TimeModel;
 }
 
 export type WorkModelPatch = Partial<Pick<Employee, "workload" | "vacationDays" | "trackingStart" | "overtimeCarry" | "vacationCarry">>;
@@ -163,6 +164,11 @@ interface Store {
   deleteAbsence: (id: string) => Promise<void>;
   updateWorkModel: (userId: string, patch: WorkModelPatch) => Promise<void>;
   setWorkSettings: (s: WorkSettingsPatch) => Promise<void>;
+  /** Come/go recording (time model «full»): stamp now, or add, change and remove periods by hand. */
+  stamp: (action: StampAction) => Promise<void>;
+  addWorkPeriod: (p: { date: string; start: string; end: string; kind: PeriodKind }) => Promise<void>;
+  updateWorkPeriod: (id: string, patch: { start?: string; end?: string | null; kind?: PeriodKind }) => Promise<void>;
+  deleteWorkPeriod: (id: string) => Promise<void>;
   toast: string | null;
   notify: (msg: string) => void;
 }
@@ -181,7 +187,16 @@ interface ProviderProps {
 
 export function StoreProvider({ children, initial, me, branding, onBranding, onLogout }: ProviderProps) {
   const mode = me ? "api" : "demo";
-  const [data, setData] = useState<Dataset>(() => (me ? initial : { ...initial, allocations: loadLocal<Dataset["allocations"] | null>("rt.allocations", null) ?? initial.allocations }));
+  const [data, setData] = useState<Dataset>(() =>
+    me
+      ? initial
+      : {
+          ...initial,
+          allocations: loadLocal<Dataset["allocations"] | null>("rt.allocations", null) ?? initial.allocations,
+          workPeriods: loadLocal<WorkPeriod[]>("rt.presence", []),
+          workModel: { ...initial.workModel!, timeModel: loadLocal<TimeModel>("rt.timeModel", "simplified") },
+        },
+  );
   const [demoRole, setDemoRole] = useState<Role>(() => loadLocal<Role>("rt.role", "admin"));
   const [velocitySettings, setVS] = useState<VelocitySettings>(() =>
     loadLocal<VelocitySettings>("rt.velocity", { method: "rolling", window: 3 }),
@@ -555,15 +570,65 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
       mode === "api"
         ? (userId, patch) => send("PATCH", `/api/users/${userId}/work-model`, patch)
         : async (userId, patch) => setData((d) => ({ ...d, employees: d.employees.map((e) => (e.id === userId ? { ...e, ...patch } : e)) })),
+    stamp: async (action) => {
+      if (mode === "api") {
+        await api("/api/presence/stamp", { body: { action } });
+        setData(await loadDataset());
+        return;
+      }
+      const now = new Intl.DateTimeFormat("de-CH", { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()).replace(".", ":");
+      setData((d) => {
+        const next = applyStamp(d.workPeriods ?? [], action, currentUserId, d.today, now, () => uid("wp"));
+        saveLocal("rt.presence", next);
+        return { ...d, workPeriods: next };
+      });
+    },
+    addWorkPeriod: async (p) => {
+      if (mode === "api") {
+        await api("/api/presence", { body: p });
+        setData(await loadDataset());
+        return;
+      }
+      setData((d) => {
+        const next = [...(d.workPeriods ?? []), { ...p, id: uid("wp"), employeeId: currentUserId }];
+        saveLocal("rt.presence", next);
+        return { ...d, workPeriods: next };
+      });
+    },
+    updateWorkPeriod: async (id, patch) => {
+      if (mode === "api") {
+        await api(`/api/presence/${id}`, { method: "PUT", body: patch });
+        setData(await loadDataset());
+        return;
+      }
+      setData((d) => {
+        const next = (d.workPeriods ?? []).map((p) => (p.id === id ? { ...p, ...patch, end: patch.end === null ? undefined : (patch.end ?? p.end) } : p));
+        saveLocal("rt.presence", next);
+        return { ...d, workPeriods: next };
+      });
+    },
+    deleteWorkPeriod: async (id) => {
+      if (mode === "api") {
+        await api(`/api/presence/${id}`, { method: "DELETE" });
+        setData(await loadDataset());
+        return;
+      }
+      setData((d) => {
+        const next = (d.workPeriods ?? []).filter((p) => p.id !== id);
+        saveLocal("rt.presence", next);
+        return { ...d, workPeriods: next };
+      });
+    },
     setWorkSettings: async (w) => {
       if (mode === "api") {
         await api("/api/settings", { method: "PUT", body: w });
         setData(await loadDataset());
         return;
       }
+      if (w.timeModel) saveLocal("rt.timeModel", w.timeModel);
       setData((d) => ({
         ...d,
-        workModel: { weeklyHours: w.weeklyHours ?? d.workModel!.weeklyHours, holidays: w.holidays ?? d.workModel!.holidays },
+        workModel: { weeklyHours: w.weeklyHours ?? d.workModel!.weeklyHours, holidays: w.holidays ?? d.workModel!.holidays, timeModel: w.timeModel ?? d.workModel!.timeModel },
         rates: { kmRate: w.kmRate ?? d.rates?.kmRate ?? 0.7, vatRate: w.vatRate ?? d.rates?.vatRate ?? 8.1, costRate: w.costRate ?? d.rates?.costRate },
       }));
     },

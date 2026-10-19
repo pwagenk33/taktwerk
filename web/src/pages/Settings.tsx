@@ -1,4 +1,4 @@
-import { DEFAULT_RATES, EXPORT_ENTITIES, VAT_RATES, defaultHolidays, exportRows, fmt1, fmtCHF2, fmtDate, toCsv, type ExportEntity, type Holiday, type PostalAddress, type Role } from "@taktwerk/domain";
+import { DEFAULT_RATES, EXPORT_ENTITIES, TIME_MODELS, VAT_RATES, defaultHolidays, type TimeModel, exportRows, fmt1, fmtCHF2, fmtDate, toCsv, type ExportEntity, type Holiday, type PostalAddress, type Role } from "@taktwerk/domain";
 import { useEffect, useState } from "react";
 import { api, type BillingSettings, type Branding, type PlatformOrg, type ScheduledReport, type Settings as OrgSettings, type UserRow } from "../api";
 import { useStore } from "../store";
@@ -336,12 +336,13 @@ function WorkSettings() {
     }).catch(() => {});
   }, [mode]);
   const [weeklyHours, setWeeklyHours] = useState(String(model.weeklyHours));
+  const [timeModel, setTimeModel] = useState<TimeModel>(model.timeModel ?? "simplified");
   const [holidays, setHolidays] = useState<Holiday[]>(model.holidays);
   const [year, setYear] = useState(Number(data.today.slice(0, 4)));
   const [draft, setDraft] = useState<Holiday>({ date: `${year}-05-01`, name: "", fraction: 1 });
   const [error, setError] = useState("");
   const ofYear = holidays.filter((h) => h.date.startsWith(String(year))).sort((a, b) => a.date.localeCompare(b.date));
-  const changed = Number(weeklyHours) !== model.weeklyHours || JSON.stringify(holidays) !== JSON.stringify(model.holidays) || reminder !== reminderSaved || closingRem !== closingRemSaved;
+  const changed = Number(weeklyHours) !== model.weeklyHours || JSON.stringify(holidays) !== JSON.stringify(model.holidays) || reminder !== reminderSaved || closingRem !== closingRemSaved || timeModel !== (model.timeModel ?? "simplified");
 
   const upsert = (list: Holiday[]) => {
     const map = new Map(holidays.map((h) => [h.date, h]));
@@ -350,7 +351,7 @@ function WorkSettings() {
   };
   const save = async () => {
     try {
-      await setWorkSettings({ weeklyHours: Number(weeklyHours), holidays, hoursReminder: reminder, closingReminder: closingRem });
+      await setWorkSettings({ weeklyHours: Number(weeklyHours), holidays, hoursReminder: reminder, closingReminder: closingRem, timeModel });
       setReminderSaved(reminder);
       setClosingRemSaved(closingRem);
       setError("");
@@ -369,6 +370,10 @@ function WorkSettings() {
           <input id="w-hours" type="number" step={0.25} min={1} max={60} className="input num" value={weeklyHours} onChange={(e) => setWeeklyHours(e.target.value)} />
         </label>
         <p className="muted" style={{ fontSize: "0.82rem" }}>Das sind {(Number(weeklyHours) / 5 || 0).toFixed(2)} h pro Arbeitstag bei 100 %.</p>
+        <h3>Arbeitszeiterfassung nach Arbeitsgesetz</h3>
+        <p className="explain">Wie die Arbeitszeit erfasst wird, gilt für die ganze Firma. Die vereinfachte Erfassung braucht eine schriftliche Vereinbarung; sonst gilt Kommen/Gehen.</p>
+        <Select id="w-model" ariaLabel="Erfassungsmodell" value={timeModel} onChange={(v) => setTimeModel(v as TimeModel)} options={TIME_MODELS.map((m) => ({ value: m.id, label: m.label }))} />
+        <p className="muted" style={{ fontSize: "0.82rem" }}>{TIME_MODELS.find((m) => m.id === timeModel)?.hint}</p>
         <h3>Erinnerung</h3>
         <label className="check"><input id="w-reminder" type="checkbox" checked={reminder} onChange={(e) => setReminder(e.target.checked)} />Montags per E-Mail erinnern, wenn in der Vorwoche mehr als zwei Stunden fehlen</label>
         <p className="muted" style={{ fontSize: "0.82rem" }}>Die Erinnerung geht ab 09:00 Uhr an die betroffene Person und nennt die fehlenden Stunden. Bei Ferien und Krankheit zählen die gutgeschriebenen Stunden mit.</p>

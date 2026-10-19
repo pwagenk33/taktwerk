@@ -727,3 +727,18 @@ table.plan td:first-child a:hover { color: var(--accent); }
 /* ---------- read-only access (auditor / Treuhand) ---------- */
 .ro-chip { font-size: 0.78rem; font-weight: 600; padding: 5px 10px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--warn) 60%, var(--line)); background: color-mix(in srgb, var(--warn) 14%, var(--surface)); color: var(--warn-ink); white-space: nowrap; }
 .shell[data-readonly] .btn.primary, .shell[data-readonly] .btn.danger, .shell[data-readonly] .cal-add, .shell[data-readonly] .phone-fab { display: none !important; }
+
+/* ---------- come/go stamping ---------- */
+.stamp { padding: 12px 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px; }
+.stamp-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.stamp-state { display: flex; align-items: center; gap: 12px; }
+.stamp-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--axis, #ccc); flex: none; }
+.stamp-dot.working { background: var(--good); box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 22%, transparent); }
+.stamp-dot.break { background: var(--warn); }
+.stamp-issues { margin: 0; padding: 8px 12px 8px 28px; border-radius: var(--radius-s); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); color: var(--warn-ink); font-size: 0.85rem; }
+.stamp-more { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.stamp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.stamp-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stamp-list input[type="time"], .stamp input[type="time"] { width: 110px; }
+.stamp-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.stamp-add input[type="date"] { width: 160px; flex: none; }

@@ -74,6 +74,7 @@ export async function adminRoutes(app: FastifyInstance) {
         vatRate: z.number().refine((v) => (VAT_RATES as readonly number[]).includes(v), "Ungültiger MwSt-Satz").optional(),
         hoursReminder: z.boolean().optional(),
         closingReminder: z.boolean().optional(),
+        timeModel: z.enum(["simplified", "full"]).optional(),
         costRate: z.number().min(0).max(1000).optional(),
         scheduledReports: z
           .array(
@@ -118,6 +119,7 @@ export async function adminRoutes(app: FastifyInstance) {
       vatRate: body.vatRate ?? org.settings.vatRate,
       hoursReminder: body.hoursReminder ?? org.settings.hoursReminder,
       closingReminder: body.closingReminder ?? org.settings.closingReminder,
+      timeModel: body.timeModel ?? org.settings.timeModel,
       billing: body.billing ?? org.settings.billing,
       costRate: body.costRate ?? org.settings.costRate,
       scheduledReports: body.scheduledReports ?? org.settings.scheduledReports,

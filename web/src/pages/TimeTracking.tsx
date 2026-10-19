@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, fmt1, fmtCHF, fmtCHF2, fmtDay, isoWeekKey, parseReceipt, rateOn } from "@taktwerk/domain";
+import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, dayPresence, fmt1, fmtCHF, fmtCHF2, fmtDay, isoWeekKey, parseReceipt, presenceIssues, rateOn, stampOptions, type PeriodKind, type StampAction } from "@taktwerk/domain";
 import { recognizeReceipt } from "../ocr";
 import type { Expense, ExpenseCategory, TimeEntry } from "@taktwerk/domain";
 import { api, type EntryComment } from "../api";
@@ -1333,8 +1333,87 @@ function WeekCalendar() {
   );
 }
 
+const STAMP_LABEL: Record<StampAction, string> = { in: "Kommen", break: "Pause", resume: "Weiter", out: "Gehen" };
+/** Clock time in Zurich, like the server stamps it, whatever time zone the device is in. */
+const clockZurich = () => new Intl.DateTimeFormat("de-CH", { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()).replace(".", ":");
+
+/** Come/go bar (time model «full»): stamp, see presence against booked hours, fix forgotten stamps. */
+function StampBar() {
+  const { data, currentUserId, stamp, addWorkPeriod, updateWorkPeriod, deleteWorkPeriod, notify, scope } = useStore();
+  const [now, setNow] = useState(clockZurich);
+  useEffect(() => {
+    const t = setInterval(() => setNow(clockZurich()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const [more, setMore] = useState(false);
+  const [draft, setDraft] = useState<{ date: string; start: string; end: string; kind: PeriodKind }>({ date: data.today, start: "08:00", end: "12:00", kind: "work" });
+  const [error, setError] = useState("");
+  const mine = (data.workPeriods ?? []).filter((p) => p.employeeId === currentUserId);
+  const day = dayPresence(mine, data.today, now);
+  const yesterday = dayPresence(mine, addDays(data.today, -1));
+  const issues = presenceIssues(day, yesterday.last);
+  const booked = data.timeEntries.filter((e) => e.employeeId === currentUserId && e.date === data.today).reduce((s, e) => s + e.hours, 0);
+  const run = (f: () => Promise<void>, msg?: string) => f().then(() => { setError(""); if (msg) notify(msg); }).catch((e: Error) => setError(e.message));
+  const h = (min: number) => `${(min / 60).toFixed(2).replace(/\.?0+$/, "")} h`;
+  const stateText = day.state === "working" ? `Am Arbeiten seit ${day.open!.start}` : day.state === "break" ? `Pause seit ${day.open!.start}` : day.periods.length ? `Gegangen um ${day.last ?? "–"}` : "Noch nicht gestempelt";
+  if (scope.readOnly) return null;
+  return (
+    <section className="card stamp" id="stamp-bar">
+      <div className="stamp-row">
+        <div className="stamp-state">
+          <span className={`stamp-dot ${day.state}`} />
+          <div>
+            <strong>{stateText}</strong>
+            <div className="muted num" style={{ fontSize: "0.82rem" }}>Anwesend {h(day.work)} · Pausen {day.breaks} min · Gebucht {fmt1(booked)} h{day.work > 0 && Math.abs(day.work / 60 - booked) >= 0.25 ? ` · Differenz ${fmt1(day.work / 60 - booked)} h` : ""}</div>
+          </div>
+        </div>
+        <div className="toolbar">
+          {stampOptions(day.state).map((a) => (
+            <button key={a} id={`stamp-${a}`} className={`btn ${a === "in" || a === "resume" ? "primary" : ""}`} onClick={() => void run(() => stamp(a), `${STAMP_LABEL[a]} ${now}`)}>{STAMP_LABEL[a]}</button>
+          ))}
+          <button className="btn small ghost" onClick={() => setMore(!more)} aria-expanded={more}>{more ? "Weniger" : "Abschnitte"}</button>
+        </div>
+      </div>
+      {issues.length > 0 && <ul className="stamp-issues">{issues.map((i) => <li key={i}>{i}</li>)}</ul>}
+      {more && (
+        <div className="stamp-more">
+          {day.periods.length === 0 ? <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>Heute noch keine Abschnitte.</p> : (
+            <ul className="stamp-list">
+              {day.periods.map((p) => (
+                <li key={p.id}>
+                  <span className={`pill ${p.kind === "work" ? "ok" : "neutral"}`}>{p.kind === "work" ? "Arbeit" : "Pause"}</span>
+                  <input className="input num" type="time" value={p.start} aria-label="Beginn" onChange={(e) => void run(() => updateWorkPeriod(p.id, { start: e.target.value }))} />
+                  <span className="muted">bis</span>
+                  <input className="input num" type="time" value={p.end ?? ""} aria-label="Ende" placeholder="offen" onChange={(e) => void run(() => updateWorkPeriod(p.id, { end: e.target.value || null }))} />
+                  <span className="muted num">{p.end ? h(Math.max(0, (Number(p.end.slice(0, 2)) * 60 + Number(p.end.slice(3))) - (Number(p.start.slice(0, 2)) * 60 + Number(p.start.slice(3))))) : "läuft"}</span>
+                  <button className="btn small ghost" aria-label="Abschnitt löschen" onClick={() => void run(() => deleteWorkPeriod(p.id), "Abschnitt entfernt")}>×</button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="stamp-add">
+            <span className="muted" style={{ fontSize: "0.85rem" }}>Vergessen zu stempeln?</span>
+            <input id="pp-date" className="input" type="date" value={draft.date} max={data.today} onChange={(e) => setDraft({ ...draft, date: e.target.value })} aria-label="Datum" />
+            <input id="pp-start" className="input num" type="time" value={draft.start} onChange={(e) => setDraft({ ...draft, start: e.target.value })} aria-label="Beginn" />
+            <input id="pp-end" className="input num" type="time" value={draft.end} onChange={(e) => setDraft({ ...draft, end: e.target.value })} aria-label="Ende" />
+            <div className="seg" role="radiogroup" aria-label="Art">
+              <button role="radio" aria-checked={draft.kind === "work"} className={draft.kind === "work" ? "on" : ""} onClick={() => setDraft({ ...draft, kind: "work" })}>Arbeit</button>
+              <button role="radio" aria-checked={draft.kind === "break"} className={draft.kind === "break" ? "on" : ""} onClick={() => setDraft({ ...draft, kind: "break" })}>Pause</button>
+            </div>
+            <button id="pp-add" className="btn small" onClick={() => void run(() => addWorkPeriod(draft), "Abschnitt nachgetragen")}>Nachtragen</button>
+          </div>
+          {error && <p className="error" style={{ margin: 0 }}>{error}</p>}
+          <p className="muted" style={{ margin: 0, fontSize: "0.78rem" }}>Jetzt {now}. Gesetzliche Pausen: 15 min ab 5½ h, 30 min ab 7 h, 60 min ab 9 h Arbeit; 11 h Ruhezeit zwischen zwei Arbeitstagen.</p>
+        </div>
+      )}
+      {error && !more && <p className="error" style={{ margin: "8px 0 0" }}>{error}</p>}
+    </section>
+  );
+}
+
 export function TimeTracking() {
   const { data, currentUserId } = useStore();
+  const stamping = data.workModel?.timeModel === "full";
   const me = data.employees.find((e) => e.id === currentUserId);
   const [view, setView] = useState<"day" | "week">(() => loadLocal<"day" | "week">("rt.view", "week"));
   const switchTo = (v: "day" | "week") => {
@@ -1353,6 +1432,7 @@ export function TimeTracking() {
           <button id="view-day" className={view === "day" ? "on" : ""} onClick={() => switchTo("day")}>Liste</button>
         </div>
       </div>
+      {stamping && <StampBar />}
       {view === "week" ? (
         <>
           {me && <WorkTiles employee={me} />}

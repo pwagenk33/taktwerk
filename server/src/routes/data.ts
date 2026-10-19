@@ -19,6 +19,7 @@ import {
   teams,
   timeEntries,
   users,
+  workPeriods
 } from "../db/schema";
 import { assertBookable, audit } from "./billing";
 
@@ -60,7 +61,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
     if (ledSubIds.length) parts.push(inArray(t.subProjectId, ledSubIds));
     return and(orgOf(t), or(...parts));
   };
-  const [teamRows, userRows, customerRows, rateRows, projectRows, subRows, entryRows, expenseRows, issueRows, absenceRows, [orgRow], allocationRows] = await Promise.all([
+  const [teamRows, userRows, customerRows, rateRows, projectRows, subRows, entryRows, expenseRows, issueRows, absenceRows, [orgRow], allocationRows, periodRows] = await Promise.all([
     db.select().from(teams).where(eq(teams.organizationId, org)),
     db.select().from(users).where(eq(users.organizationId, org)),
     db.select().from(customers).where(eq(customers.organizationId, org)),
@@ -73,6 +74,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
     db.select().from(absences).where(byPerson(absences)),
     db.select().from(organizations).where(eq(organizations.id, org)).limit(1),
     db.select().from(allocations).where(own ? and(eq(allocations.organizationId, org), ledProjects.length ? or(inArray(allocations.userId, scopeIds), inArray(allocations.projectId, ledProjects)) : inArray(allocations.userId, scopeIds)) : eq(allocations.organizationId, org)),
+    db.select().from(workPeriods).where(byPerson(workPeriods)),
   ]);
   const seesPerson = (id: string) => !own || scope!.has(id);
   const seesBudget = (projectId: string) => !own || ledProjects.includes(projectId);
@@ -144,7 +146,9 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
     workModel: {
       weeklyHours: orgRow?.settings.weeklyHours ?? DEFAULT_WEEKLY_HOURS,
       holidays: orgRow?.settings.holidays ?? [year - 1, year, year + 1].flatMap(defaultHolidays),
+      timeModel: orgRow?.settings.timeModel ?? "simplified",
     },
+    workPeriods: periodRows.map((p) => ({ id: p.id, employeeId: p.userId, date: p.date, kind: p.kind, start: p.start, end: p.end ?? undefined })),
     rates: {
       kmRate: orgRow?.settings.kmRate ?? DEFAULT_RATES.kmRate,
       vatRate: orgRow?.settings.vatRate ?? DEFAULT_RATES.vatRate,
