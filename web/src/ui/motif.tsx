@@ -25,14 +25,13 @@ export function MatterhornRidge({ snow = "var(--surface)", back = true, classNam
   );
 }
 
-/** Compact peak for the logo square: Matterhorn silhouette with a snow cap and the Hörnli shoulder. */
+/** Logo mark «Gipfel»: a geometric Matterhorn peak with a lit face, a shadow face and a snow cap, for the brand square. */
 export function MatterhornMark() {
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <path d="M17,27 L22.5,15.5 L26,20 L31,27 Z" fill="currentColor" opacity="0.4" />
-      <path d="M1,27 L9.5,17 L13,11 L15.6,4.6 L17,3.5 L18.6,6.8 L21.2,12.5 L24.5,18 L30,27 Z" fill="currentColor" />
-      <path d="M13.6,9.8 L15.6,4.6 L17,3.5 L18.6,6.8 L19.9,9.6 C18.9,9.1 18.3,10.2 17.3,9.6 C16.4,9 15.7,10 14.9,9.5 C14.5,9.3 14.1,9.5 13.6,9.8 Z" fill="var(--snow, #ffffff)" opacity="0.95" />
-      <path d="M1,27 L31,27" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+      <path d="M4 26 L16 5 L19.5 11 L17.2 11.8 L21 17 L28 26 Z" fill="currentColor" opacity="0.55" />
+      <path d="M4 26 L16 5 L19.5 11 L17.2 11.8 L15.3 15 L13.6 26 Z" fill="currentColor" />
+      <path d="M13.3 10 L16 5 L19.5 11 L17.2 11.8 L15.3 10.6 Z" fill="var(--snow, currentColor)" />
     </svg>
   );
 }

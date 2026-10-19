@@ -76,7 +76,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .rail { background: var(--rail); color: var(--rail-ink); border-right: 1px solid var(--line); padding: 20px 14px; overflow: hidden; display: flex; flex-direction: column; gap: 24px; position: sticky; top: 0; height: 100vh; }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 700; font-size: 1.1rem; padding: 0 6px; letter-spacing: -0.01em; }
 .brand-mark { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(145deg, color-mix(in srgb, var(--brand) 85%, #ffffff), var(--brand) 55%, color-mix(in srgb, var(--brand) 75%, #000000)); color: #ffffff; display: grid; place-items: center; flex: none; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1px 2px rgba(0, 0, 0, 0.2); }
-.brand-mark svg { width: 78%; height: 78%; }
+.brand-mark svg { width: 80%; height: 80%; }
 .brand-logo { display: block; object-fit: contain; flex: none; }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; color: var(--rail-ink); text-decoration: none; font-weight: 500; }
@@ -255,7 +255,7 @@ table.data tr.clickable:hover td { background: var(--accent-soft); }
 .login { min-height: 100vh; display: grid; grid-template-columns: minmax(320px, 1fr) minmax(380px, 1fr); background: var(--surface); }
 .login-brand { position: relative; background: var(--brand); color: #ffffff; padding-block: 36px 0; padding-left: max(40px, env(safe-area-inset-left, 0px)); padding-right: 40px; display: flex; flex-direction: column; gap: 40px; overflow: hidden; }
 .login-brand .brand { color: #ffffff; }
-.brand-mark-inverse { background: #ffffff; color: var(--brand); --snow: color-mix(in srgb, var(--brand) 30%, #ffffff); }
+.brand-mark-inverse { background: #ffffff; color: var(--brand); --snow: color-mix(in srgb, var(--brand) 55%, #ffffff); }
 .login-claim { position: relative; z-index: 1; max-width: 520px; }
 .login-claim h1 { font-size: clamp(2rem, 3.4vw, 3rem); line-height: 1.05; letter-spacing: -0.03em; font-weight: 700; }
 .login-claim p { margin-top: 14px; font-size: 1.02rem; opacity: 0.88; max-width: 36ch; }
