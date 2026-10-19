@@ -1,0 +1,209 @@
+import { todayZurich } from "./data";
+import { Google, MicrosoftEntraId, decodeIdToken, generateCodeVerifier, generateState } from "arctic";
+import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
+import type { FastifyInstance, FastifyReply } from "fastify";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { HttpError, SESSION_COOKIE, defaultOrganization, requireUser, type AppContext } from "../app";
+import { hashPassword, newToken, passwordProblem, sha256, verifyPassword } from "../auth/crypto";
+import { DEFAULT_BRANDING, oauthAccounts, passwordTokens, sessions, users } from "../db/schema";
+import { actionMail } from "../mail/mailer";
+
+type Provider = "microsoft" | "google";
+
+// Simple in-memory brute-force protection: 10 failed attempts per IP + username in 15 minutes.
+const failures = new Map<string, { count: number; until: number }>();
+const WINDOW_MS = 15 * 60 * 1000;
+
+function oauthClient(ctx: AppContext, provider: Provider) {
+  const c = ctx.config;
+  const redirect = `${new URL(c.APP_URL).origin}/api/auth/${provider}/callback`;
+  if (provider === "microsoft" && c.MICROSOFT_CLIENT_ID && c.MICROSOFT_CLIENT_SECRET)
+    return new MicrosoftEntraId(c.MICROSOFT_TENANT, c.MICROSOFT_CLIENT_ID, c.MICROSOFT_CLIENT_SECRET, redirect);
+  if (provider === "google" && c.GOOGLE_CLIENT_ID && c.GOOGLE_CLIENT_SECRET)
+    return new Google(c.GOOGLE_CLIENT_ID, c.GOOGLE_CLIENT_SECRET, redirect);
+  return null;
+}
+
+export async function startSession(ctx: AppContext, reply: FastifyReply, userId: string) {
+  const token = newToken();
+  const expiresAt = new Date(Date.now() + ctx.config.SESSION_DAYS * 86400_000);
+  await ctx.db.insert(sessions).values({ id: sha256(token), userId, expiresAt });
+  await ctx.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, userId));
+  reply.setCookie(SESSION_COOKIE, token, {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: ctx.config.APP_URL.startsWith("https://"),
+    expires: expiresAt,
+  });
+}
+
+/** Creates a one-time link token (invite: 7 days, reset: 1 hour) and returns the plain token. */
+export async function createPasswordToken(ctx: AppContext, userId: string, purpose: "invite" | "reset") {
+  const token = newToken();
+  const hours = purpose === "invite" ? 24 * 7 : 1;
+  await ctx.db.insert(passwordTokens).values({ id: sha256(token), userId, purpose, expiresAt: new Date(Date.now() + hours * 3600_000) });
+  return token;
+}
+
+export function passwordLink(ctx: AppContext, token: string) {
+  return `${new URL(ctx.config.APP_URL).origin}/passwort?token=${encodeURIComponent(token)}`;
+}
+
+export async function authRoutes(app: FastifyInstance) {
+  const ctx = app.ctx;
+
+  app.get("/api/auth/providers", async () => ({
+    password: true,
+    microsoft: oauthClient(ctx, "microsoft") !== null,
+    google: oauthClient(ctx, "google") !== null,
+  }));
+
+  /** Public branding so the login page can render in the corporate design. */
+  app.get("/api/branding", async () => (await defaultOrganization(ctx.db))?.settings.branding ?? DEFAULT_BRANDING);
+
+  app.post("/api/auth/login", async (req, reply) => {
+    const body = z.object({ username: z.string().trim().min(1).max(254), password: z.string().min(1).max(500) }).parse(req.body);
+    const key = `${req.ip}|${body.username.toLowerCase()}`;
+    const f = failures.get(key);
+    if (f && f.count >= 10 && f.until > Date.now()) throw new HttpError(429, "Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen.");
+
+    const [user] = await ctx.db
+      .select()
+      .from(users)
+      .where(or(eq(users.username, body.username), sql`lower(${users.email}) = ${body.username.toLowerCase()}`))
+      .limit(1);
+    const ok = user?.active ? await verifyPassword(body.password, user.passwordHash) : false;
+    if (!ok || !user) {
+      const prev = f && f.until > Date.now() ? f.count : 0;
+      failures.set(key, { count: prev + 1, until: Date.now() + WINDOW_MS });
+      throw new HttpError(401, "Benutzername oder Passwort ist falsch.");
+    }
+    failures.delete(key);
+    await startSession(ctx, reply, user.id);
+    return { ok: true };
+  });
+
+  app.post("/api/auth/logout", async (req, reply) => {
+    const token = req.cookies[SESSION_COOKIE];
+    if (token) await ctx.db.delete(sessions).where(eq(sessions.id, sha256(token)));
+    reply.clearCookie(SESSION_COOKIE, { path: "/" });
+    return { ok: true };
+  });
+
+  app.get("/api/auth/me", async (req) => {
+    const user = requireUser(req);
+    return user;
+  });
+
+  // ---------- password reset & invitation ----------
+
+  app.post("/api/auth/password/forgot", async (req) => {
+    const { email } = z.object({ email: z.string().trim().email() }).parse(req.body);
+    const [user] = await ctx.db.select().from(users).where(sql`lower(${users.email}) = ${email.toLowerCase()}`).limit(1);
+    if (user?.active) {
+      const token = await createPasswordToken(ctx, user.id, "reset");
+      const branding = (await defaultOrganization(ctx.db))?.settings.branding ?? DEFAULT_BRANDING;
+      await ctx.mailer.send(
+        actionMail(branding, {
+          to: user.email,
+          subject: `${branding.appName}: Passwort zurücksetzen`,
+          greeting: `Hallo ${user.name}`,
+          lines: ["Du hast ein neues Passwort angefordert. Der Link ist eine Stunde gültig."],
+          action: "Neues Passwort setzen",
+          url: passwordLink(ctx, token),
+          footer: "Wenn du das nicht warst, kannst du diese E-Mail ignorieren. Dein Passwort bleibt unverändert.",
+        }),
+      );
+    }
+    // Same answer whether or not the address exists, so accounts cannot be probed.
+    return { ok: true };
+  });
+
+  app.post("/api/auth/password/set", async (req, reply) => {
+    const body = z.object({ token: z.string().min(10), password: z.string().max(500) }).parse(req.body);
+    const problem = passwordProblem(body.password);
+    if (problem) throw new HttpError(400, problem);
+    const [row] = await ctx.db
+      .select()
+      .from(passwordTokens)
+      .where(and(eq(passwordTokens.id, sha256(body.token)), isNull(passwordTokens.usedAt), gt(passwordTokens.expiresAt, new Date())))
+      .limit(1);
+    if (!row) throw new HttpError(400, "Der Link ist abgelaufen oder wurde schon verwendet. Bitte fordere einen neuen an.");
+    await ctx.db.update(passwordTokens).set({ usedAt: new Date() }).where(eq(passwordTokens.id, row.id));
+    await ctx.db.update(users).set({ passwordHash: await hashPassword(body.password) }).where(eq(users.id, row.userId));
+    await ctx.db.delete(sessions).where(eq(sessions.userId, row.userId)); // sign out everywhere else
+    await startSession(ctx, reply, row.userId);
+    return { ok: true };
+  });
+
+  // ---------- Microsoft / Google (OAuth 2.0 + OpenID Connect, PKCE) ----------
+
+  for (const provider of ["microsoft", "google"] as const) {
+    app.get(`/api/auth/${provider}`, async (_req, reply) => {
+      const client = oauthClient(ctx, provider);
+      if (!client) throw new HttpError(404, "Diese Anmeldeart ist nicht eingerichtet.");
+      const state = generateState();
+      const verifier = generateCodeVerifier();
+      const url = client.createAuthorizationURL(state, verifier, ["openid", "profile", "email"]);
+      const opts = { path: "/api/auth", httpOnly: true, sameSite: "lax" as const, secure: ctx.config.APP_URL.startsWith("https://"), maxAge: 600 };
+      reply.setCookie("tw_oauth_state", state, opts).setCookie("tw_oauth_verifier", verifier, opts);
+      return reply.redirect(url.toString());
+    });
+
+    app.get(`/api/auth/${provider}/callback`, async (req, reply) => {
+      const fail = (code: string) => reply.redirect(`${new URL(ctx.config.APP_URL).origin}/?anmeldung=${code}`);
+      const client = oauthClient(ctx, provider);
+      const q = req.query as { code?: string; state?: string };
+      const state = req.cookies.tw_oauth_state;
+      const verifier = req.cookies.tw_oauth_verifier;
+      reply.clearCookie("tw_oauth_state", { path: "/api/auth" }).clearCookie("tw_oauth_verifier", { path: "/api/auth" });
+      if (!client || !q.code || !state || q.state !== state || !verifier) return fail("abgebrochen");
+
+      let claims: Record<string, unknown>;
+      try {
+        const tokens = await client.validateAuthorizationCode(q.code, verifier);
+        claims = decodeIdToken(tokens.idToken()) as Record<string, unknown>;
+      } catch (e) {
+        req.log.warn({ err: e }, "oauth code exchange failed");
+        return fail("fehlgeschlagen");
+      }
+      const subject = String(claims.sub ?? "");
+      const email = String(claims.email ?? claims.preferred_username ?? "").toLowerCase();
+      const name = String(claims.name ?? email);
+      if (!subject) return fail("fehlgeschlagen");
+      if (provider === "google" && claims.email_verified !== true) return fail("email_unbestaetigt");
+
+      const userId = await resolveOAuthUser(ctx, provider, subject, email, name);
+      if (!userId) return fail("unbekannt");
+      await startSession(ctx, reply, userId);
+      return reply.redirect(`${new URL(ctx.config.APP_URL).origin}/`);
+    });
+  }
+}
+
+/** Existing link → user; else link by e-mail; else auto-provision when the domain is allowed. */
+export async function resolveOAuthUser(ctx: AppContext, provider: Provider, subject: string, email: string, name: string) {
+  const [linked] = await ctx.db
+    .select({ id: users.id, active: users.active })
+    .from(oauthAccounts)
+    .innerJoin(users, eq(users.id, oauthAccounts.userId))
+    .where(and(eq(oauthAccounts.provider, provider), eq(oauthAccounts.providerUserId, subject)))
+    .limit(1);
+  if (linked) return linked.active ? linked.id : null;
+  if (!email.includes("@")) return null;
+
+  const [byEmail] = await ctx.db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
+  let userId = byEmail?.active ? byEmail.id : null;
+  if (!byEmail) {
+    const org = await defaultOrganization(ctx.db);
+    const domain = email.split("@")[1];
+    if (!org || !org.settings.ssoAutoProvisionDomains.map((d) => d.toLowerCase()).includes(domain)) return null;
+    userId = randomUUID();
+    await ctx.db.insert(users).values({ id: userId, organizationId: org.id, username: email, email, name, role: "employee", trackingStart: todayZurich() });
+  }
+  if (!userId) return null;
+  await ctx.db.insert(oauthAccounts).values({ provider, providerUserId: subject, userId });
+  return userId;
+}

@@ -1,0 +1,1039 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, fmt1, fmtCHF, fmtCHF2, fmtDay, rateOn } from "@taktwerk/domain";
+import type { Expense, ExpenseCategory, TimeEntry } from "@taktwerk/domain";
+import { api } from "../api";
+import { loadLocal, saveLocal, useStore } from "../store";
+import { Icon } from "../ui/components";
+import { TYPE_CLASS, WorkTiles, signedH } from "./WorkTime";
+
+const CATEGORIES = EXPENSE_CATEGORIES as readonly ExpenseCategory[];
+
+/** A booking target the person uses often: sub-project plus activity, as it appears in the week grid. */
+export interface Favorite {
+  subProjectId: string;
+  reason: string;
+  jiraIssueKey?: string;
+}
+const favKey = (userId: string) => `rt.fav.${userId}`;
+const sameFav = (a: Favorite, b: Favorite) => a.subProjectId === b.subProjectId && a.reason === b.reason && (a.jiraIssueKey ?? "") === (b.jiraIssueKey ?? "");
+
+function useFavorites(userId: string) {
+  const [favorites, setFavorites] = useState<Favorite[]>(() => loadLocal<Favorite[]>(favKey(userId), []));
+  useEffect(() => setFavorites(loadLocal<Favorite[]>(favKey(userId), [])), [userId]);
+  const toggle = (f: Favorite) => {
+    const next = favorites.some((x) => sameFav(x, f)) ? favorites.filter((x) => !sameFav(x, f)) : [...favorites, f].slice(-12);
+    setFavorites(next);
+    saveLocal(favKey(userId), next);
+  };
+  return { favorites, isFavorite: (f: Favorite) => favorites.some((x) => sameFav(x, f)), toggle };
+}
+
+/** Distinct targets of the person's bookings in the last 30 days, most recent first. */
+function useRecent(userId: string, exclude: Favorite[]) {
+  const { data } = useStore();
+  return useMemo(() => {
+    const since = addDays(data.today, -30);
+    const seen: Favorite[] = [];
+    for (const e of [...data.timeEntries].filter((e) => e.employeeId === userId && e.date >= since).sort((a, b) => b.date.localeCompare(a.date))) {
+      const f: Favorite = { subProjectId: e.subProjectId, reason: e.reason, jiraIssueKey: e.jiraIssueKey };
+      if (!seen.some((x) => sameFav(x, f)) && !exclude.some((x) => sameFav(x, f))) seen.push(f);
+      if (seen.length >= 6) break;
+    }
+    return seen;
+  }, [data, userId, exclude]);
+}
+
+function mondayOf(date: string) {
+  const wd = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return addDays(date, wd === 0 ? -6 : 1 - wd);
+}
+function isoWeek(date: string) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const start = Date.UTC(d.getUTCFullYear(), 0, 1);
+  return Math.ceil(((d.getTime() - start) / 86400000 + 1) / 7);
+}
+const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+
+/** Cascading customer → project → sub-project selection, shared by time and expense forms. */
+function useTarget() {
+  const { data } = useStore();
+  const [customerId, setCustomerId] = useState(data.customers[0]?.id ?? "");
+  const projects = data.projects.filter((p) => p.customerId === customerId);
+  const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
+  const subs = data.subProjects.filter((s) => s.projectId === projectId);
+  const [subProjectId, setSubProjectId] = useState(subs[0]?.id ?? "");
+
+  useEffect(() => {
+    if (!projects.some((p) => p.id === projectId)) setProjectId(projects[0]?.id ?? "");
+  }, [customerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!subs.some((s) => s.id === subProjectId)) setSubProjectId(subs[0]?.id ?? "");
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Jumps to a sub-project, setting customer and project with it. */
+  const select = (subId: string) => {
+    const sp = data.subProjects.find((x) => x.id === subId);
+    const p = sp && data.projects.find((x) => x.id === sp.projectId);
+    if (!sp || !p) return;
+    setCustomerId(p.customerId);
+    setProjectId(p.id);
+    setSubProjectId(sp.id);
+  };
+
+  const fields = (prefix: string) => (
+    <>
+      <label className="field">
+        <span>Kunde</span>
+        <select id={`${prefix}-customer`} className="input" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+          {data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </label>
+      <label className="field">
+        <span>Projekt</span>
+        <select id={`${prefix}-project`} className="input" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </label>
+      <label className="field">
+        <span>Subprojekt</span>
+        <select id={`${prefix}-sub`} className="input" value={subProjectId} onChange={(e) => setSubProjectId(e.target.value)}>
+          {subs.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </label>
+    </>
+  );
+  return { customerId, subProjectId, select, fields };
+}
+
+/** Short «Kunde · Subprojekt» label for a sub-project id. */
+function useLabels() {
+  const { data } = useStore();
+  const sub = new Map(data.subProjects.map((s) => [s.id, s]));
+  const proj = new Map(data.projects.map((p) => [p.id, p]));
+  const cust = new Map(data.customers.map((c) => [c.id, c]));
+  return {
+    short: (subId: string) => {
+      const s = sub.get(subId);
+      const p = s && proj.get(s.projectId);
+      return s && p ? `${cust.get(p.customerId)?.name} · ${s.name}` : "–";
+    },
+    long: (subId: string) => {
+      const s = sub.get(subId);
+      const p = s && proj.get(s.projectId);
+      return s && p ? `${cust.get(p.customerId)?.name} · ${p.name} · ${s.name}` : "–";
+    },
+    customerOf: (subId: string) => {
+      const s = sub.get(subId);
+      const p = s && proj.get(s.projectId);
+      return p ? cust.get(p.customerId) : undefined;
+    },
+  };
+}
+
+/** Favorites and recently used targets as one-click chips. */
+function QuickPicks({ userId, onPick, fav }: { userId: string; onPick: (f: Favorite) => void; fav: ReturnType<typeof useFavorites> }) {
+  const labels = useLabels();
+  const recent = useRecent(userId, fav.favorites);
+  if (fav.favorites.length === 0 && recent.length === 0) return null;
+  const chip = (f: Favorite, star: boolean) => (
+    <span className="chip-wrap" key={`${f.subProjectId}|${f.reason}|${f.jiraIssueKey ?? ""}`}>
+      <button type="button" className="chip" title={`${labels.long(f.subProjectId)} – ${f.reason}`} onClick={() => onPick(f)}>
+        <span className="chip-main">{f.reason}</span>
+        <span className="chip-sub">{labels.short(f.subProjectId)}</span>
+      </button>
+      <button type="button" className={`star ${star ? "on" : ""}`} aria-label={star ? "Favorit entfernen" : "Als Favorit merken"} title={star ? "Favorit entfernen" : "Als Favorit merken"} onClick={() => fav.toggle(f)}>★</button>
+    </span>
+  );
+  return (
+    <div className="quick">
+      {fav.favorites.length > 0 && (
+        <div className="quick-row"><span className="quick-label">Favoriten</span><div className="chips">{fav.favorites.map((f) => chip(f, true))}</div></div>
+      )}
+      {recent.length > 0 && (
+        <div className="quick-row"><span className="quick-label">Zuletzt</span><div className="chips">{recent.map((f) => chip(f, false))}</div></div>
+      )}
+    </div>
+  );
+}
+
+function fmtClock(sec: number) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function TimeForm() {
+  const { data, addTimeEntry, currentUserId, notify } = useStore();
+  const target = useTarget();
+  const fav = useFavorites(currentUserId);
+  const [mode, setMode] = useState<"timer" | "manual">("manual");
+  const [date, setDate] = useState(data.today);
+  const [hours, setHours] = useState("2");
+  const [reason, setReason] = useState("");
+  const [issueKey, setIssueKey] = useState("");
+  const [billable, setBillable] = useState(true);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (startedAt === null) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [startedAt]);
+
+  const openIssues = data.issues.filter((i) => i.subProjectId === target.subProjectId && i.status !== "Done");
+  const customer = data.customers.find((c) => c.id === target.customerId);
+  const rate = customer ? rateOn(customer, date) : 0;
+  // Internal work (customer without rate) is not billable by default.
+  useEffect(() => setBillable(rate > 0), [target.customerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const elapsed = startedAt ? Math.floor((now - startedAt) / 1000) : 0;
+  const pick = (f: Favorite) => {
+    target.select(f.subProjectId);
+    setIssueKey(f.jiraIssueKey ?? "");
+    setReason(f.jiraIssueKey && f.reason.startsWith(`${f.jiraIssueKey} `) ? f.reason.slice(f.jiraIssueKey.length + 1) : f.reason);
+  };
+  const current: Favorite | null = reason.trim() && target.subProjectId
+    ? { subProjectId: target.subProjectId, reason: issueKey ? `${issueKey} ${reason.trim()}` : reason.trim(), jiraIssueKey: issueKey || undefined }
+    : null;
+
+  const save = async (h: number) => {
+    if (!reason.trim()) return setError("Bitte einen Grund angeben, er erscheint im Kundenreport.");
+    if (!target.subProjectId) return setError("Bitte ein Subprojekt wählen.");
+    if (!(h > 0 && h <= 24)) return setError("Dauer muss zwischen 0 und 24 Stunden liegen.");
+    const issue = data.issues.find((i) => i.key === issueKey);
+    try {
+      await addTimeEntry({
+      employeeId: currentUserId,
+      subProjectId: target.subProjectId,
+      date,
+      hours: Math.round(h * 100) / 100,
+      reason: issue ? `${issue.key} ${reason.trim()}` : reason.trim(),
+      billable,
+      hourlyRate: rate,
+      jiraIssueKey: issueKey || undefined,
+      });
+    } catch (e) {
+      return setError((e as Error).message);
+    }
+    setError("");
+    setReason("");
+    notify(`${fmt1(h)} h gebucht`);
+  };
+
+  return (
+    <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div className="tree-row">
+        <h2>Zeit erfassen</h2>
+        <div className="seg" role="tablist">
+          <button className={mode === "manual" ? "on" : ""} onClick={() => setMode("manual")}>Manuell</button>
+          <button className={mode === "timer" ? "on" : ""} onClick={() => setMode("timer")}>Stoppuhr</button>
+        </div>
+      </div>
+      <QuickPicks userId={currentUserId} onPick={pick} fav={fav} />
+      <div className="form-grid">
+        {target.fields("t")}
+        <label className="field">
+          <span>JIRA-Issue (optional)</span>
+          <select id="t-issue" className="input" value={issueKey} onChange={(e) => setIssueKey(e.target.value)}>
+            <option value="">Ohne Issue (z. B. Meeting)</option>
+            {openIssues.map((i) => <option key={i.key} value={i.key}>{i.key} · {i.summary} · {i.storyPoints} SP</option>)}
+          </select>
+        </label>
+      </div>
+      <label className="field">
+        <span className="tree-row" style={{ display: "flex" }}>
+          Grund / Tätigkeit
+          <button type="button" id="t-fav" className={`star ${current && fav.isFavorite(current) ? "on" : ""}`} disabled={!current} title="Diese Kombination als Favorit merken" onClick={() => current && fav.toggle(current)}>
+            ★ <span style={{ fontSize: "0.75rem" }}>{current && fav.isFavorite(current) ? "Favorit" : "Als Favorit merken"}</span>
+          </button>
+        </span>
+        <textarea id="t-reason" className="input" placeholder="z. B. Abnahme-Workshop mit Fachbereich vorbereitet" value={reason} onChange={(e) => setReason(e.target.value)} />
+      </label>
+      {mode === "manual" ? (
+        <div className="form-grid" style={{ alignItems: "end" }}>
+          <label className="field"><span>Datum</span><input id="t-date" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+          <label className="field"><span>Dauer (h)</span><input id="t-hours" type="number" step="0.25" min="0" className="input num" value={hours} onChange={(e) => setHours(e.target.value)} /></label>
+          <label className="check"><input id="t-billable" type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />Verrechenbar · {fmtCHF(rate)}/h</label>
+          <button className="btn primary" onClick={() => save(Number(hours))}>Buchen</button>
+        </div>
+      ) : (
+        <div className="timer">
+          <div>
+            <div className={`timer-clock ${startedAt ? "running" : ""}`}>{fmtClock(elapsed)}</div>
+            <label className="check"><input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />Verrechenbar · {fmtCHF(rate)}/h</label>
+          </div>
+          {startedAt ? (
+            <button className="btn primary" onClick={() => { save(Math.max(0.25, Math.ceil(elapsed / 900) / 4)); setStartedAt(null); }}>Stoppen & buchen</button>
+          ) : (
+            <button className="btn primary" onClick={() => { setStartedAt(Date.now()); setNow(Date.now()); }}>Start</button>
+          )}
+        </div>
+      )}
+      {mode === "timer" && <p className="muted" style={{ fontSize: "0.8rem" }}>Die Stoppuhr rundet auf die nächste Viertelstunde auf.</p>}
+      {error && <p className="error">{error}</p>}
+    </section>
+  );
+}
+
+function ExpenseForm({ compact = false, initialDate, onDone }: { compact?: boolean; initialDate?: string; onDone?: () => void } = {}) {
+  const { data, addExpenseWithReceipt, currentUserId, notify, mode, role } = useStore();
+  const target = useTarget();
+  const kmRate = data.rates?.kmRate ?? DEFAULT_RATES.kmRate;
+  const [date, setDate] = useState(initialDate ?? data.today);
+  const [amount, setAmount] = useState("");
+  const [km, setKm] = useState("");
+  const [category, setCategory] = useState<ExpenseCategory>("Reise");
+  const [vatRate, setVatRate] = useState(data.rates?.vatRate ?? DEFAULT_RATES.vatRate);
+  const [reason, setReason] = useState("");
+  const [billable, setBillable] = useState(true);
+  const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const isKm = category === "Kilometer";
+  const kmAmount = Math.round(Number(km) * kmRate * 20) / 20;
+
+  const save = async () => {
+    const a = isKm ? kmAmount : Number(amount);
+    if (isKm && !(Number(km) > 0)) return setError("Bitte die gefahrenen Kilometer eingeben.");
+    if (!(a > 0)) return setError("Bitte einen Betrag grösser als 0 eingeben.");
+    if (!reason.trim()) return setError("Bitte einen Grund angeben.");
+    try {
+      await addExpenseWithReceipt(
+        { employeeId: currentUserId, subProjectId: target.subProjectId, date, amount: a, category, reason: reason.trim(), billable, vatRate: isKm ? 0 : vatRate, km: isKm ? Number(km) : undefined },
+        file,
+      );
+    } catch (e) {
+      return setError((e as Error).message);
+    }
+    setError("");
+    setAmount("");
+    setKm("");
+    setReason("");
+    setFile(null);
+    if (fileInput.current) fileInput.current.value = "";
+    notify(role === "employee" ? `Spesen über ${fmtCHF2(a)} eingereicht` : `Spesen über ${fmtCHF2(a)} erfasst`);
+    onDone?.();
+  };
+
+  return (
+    <section className={compact ? "" : "card card-pad"} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {!compact && <h2>Spesen erfassen</h2>}
+      <div className="form-grid">
+        {target.fields("x")}
+        <label className="field">
+          <span>Kategorie</span>
+          <select id="x-cat" className="input" value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)}>
+            {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+          </select>
+        </label>
+        <label className="field"><span>Datum</span><input id="x-date" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+        {isKm ? (
+          <>
+            <label className="field"><span>Kilometer</span><input id="x-km" type="number" step="1" min="0" className="input num" placeholder="0" value={km} onChange={(e) => setKm(e.target.value)} /></label>
+            <label className="field"><span>Betrag (CHF)</span><input className="input num" value={km ? fmtCHF2(kmAmount) : "–"} readOnly title={`${fmtCHF2(kmRate)} pro Kilometer`} /></label>
+          </>
+        ) : (
+          <>
+            <label className="field"><span>Betrag brutto (CHF)</span><input id="x-amount" type="number" step="0.05" min="0" className="input num" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+            <label className="field">
+              <span>MwSt enthalten</span>
+              <select id="x-vat" className="input" value={vatRate} onChange={(e) => setVatRate(Number(e.target.value))}>
+                {VAT_RATES.map((v) => <option key={v} value={v}>{v === 0 ? "keine" : `${fmt1(v)} %`}</option>)}
+              </select>
+            </label>
+          </>
+        )}
+      </div>
+      <label className="field">
+        <span>Grund</span>
+        <input id="x-reason" className="input" placeholder={isKm ? "z. B. Fahrt zum Workshop beim Kunden" : "z. B. SBB Basel–Zürich für Sprint Review"} value={reason} onChange={(e) => setReason(e.target.value)} />
+      </label>
+      <div className="export-bar">
+        <label className="field" style={{ flex: "1 1 240px" }}>
+          <span>Beleg (Foto oder PDF, max. 10 MB)</span>
+          <input id="x-file" ref={fileInput} type="file" className="input" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        </label>
+        <label className="check"><input id="x-billable" type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />An Kunden weiterverrechnen</label>
+        <button className="btn primary" onClick={save}>{role === "employee" ? "Spesen einreichen" : "Spesen speichern"}</button>
+      </div>
+      <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>
+        {isKm ? `Kilometerpauschale ${fmtCHF2(kmRate)} pro km, ohne MwSt. ` : ""}
+        {role === "employee" ? "Spesen werden von Consultants oder Admins bewilligt, bevor sie in Report und Rechnung erscheinen." : "Als Consultant oder Admin erfasste Spesen gelten als bewilligt."}
+        {mode === "demo" && file ? " Im Prototyp bleibt der Beleg nur im Browser." : ""}
+      </p>
+      {error && <p className="error">{error}</p>}
+    </section>
+  );
+}
+
+function WeekList() {
+  const { data, currentUserId, role } = useStore();
+  const sub = new Map(data.subProjects.map((s) => [s.id, s]));
+  const proj = new Map(data.projects.map((p) => [p.id, p]));
+  const cust = new Map(data.customers.map((c) => [c.id, c]));
+  const mine = role !== "admin";
+  const days = useMemo(() => {
+    const from = new Date(`${data.today}T00:00:00Z`);
+    from.setUTCDate(from.getUTCDate() - (mine ? 13 : 6));
+    const since = from.toISOString().slice(0, 10);
+    const entries = data.timeEntries.filter((e) => e.date >= since && (!mine || e.employeeId === currentUserId));
+    const expenses = data.expenses.filter((e) => e.date >= since && (!mine || e.employeeId === currentUserId));
+    const byDay = new Map<string, { time: typeof entries; exp: typeof expenses }>();
+    for (const e of entries) {
+      const d = byDay.get(e.date) ?? { time: [], exp: [] };
+      d.time.push(e);
+      byDay.set(e.date, d);
+    }
+    for (const e of expenses) {
+      const d = byDay.get(e.date) ?? { time: [], exp: [] };
+      d.exp.push(e);
+      byDay.set(e.date, d);
+    }
+    return [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [data, currentUserId, mine]);
+  const label = (subId: string) => {
+    const s = sub.get(subId)!;
+    const p = proj.get(s.projectId)!;
+    return `${cust.get(p.customerId)?.name} · ${p.name} · ${s.name}`;
+  };
+  const emp = new Map(data.employees.map((e) => [e.id, e]));
+
+  return (
+    <section className="card" style={{ maxHeight: "calc(100vh - 140px)", overflow: "auto" }}>
+      <div className="card-head" style={{ paddingBottom: 12 }}>
+        <h2>{mine ? "Meine Buchungen · letzte 14 Tage" : "Alle Buchungen · letzte 7 Tage"}</h2>
+      </div>
+      {days.length === 0 && <p className="card-pad muted">Noch keine Buchungen in diesem Zeitraum.</p>}
+      {days.map(([day, { time, exp }]) => (
+        <div className="day-group" key={day}>
+          <div className="day-head"><span>{fmtDay(day)}</span><span className="num">{fmt1(time.reduce((s, e) => s + e.hours, 0))} h</span></div>
+          {time.map((e) => (
+            <EntryRow key={e.id} kind="time" item={e} who={emp.get(e.employeeId)} title={e.reason} meta={`${label(e.subProjectId)}${e.billable ? "" : " · nicht verrechenbar"}`} value={`${fmt1(e.hours)} h`} />
+          ))}
+          {exp.map((x) => (
+            <EntryRow
+              key={x.id}
+              kind="expense"
+              item={x}
+              who={mine ? undefined : emp.get(x.employeeId)}
+              title={`${x.category}: ${x.reason}`}
+              meta={`${label(x.subProjectId)}${x.km ? ` · ${x.km} km` : ""}${x.vatRate ? ` · inkl. ${fmt1(x.vatRate)} % MwSt` : ""}${x.billable ? "" : " · nicht verrechenbar"}`}
+              value={fmtCHF2(x.amount)}
+            />
+          ))}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+interface AuditRow {
+  id: string;
+  action: string;
+  actorName: string | null;
+  createdAt: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+}
+
+const FIELD_LABEL: Record<string, string> = { date: "Datum", hours: "Stunden", reason: "Grund", billable: "Verrechenbar", amount: "Betrag", category: "Kategorie", subProjectId: "Subprojekt", hourlyRate: "Satz", jiraIssueKey: "JIRA-Issue", vatRate: "MwSt", km: "Kilometer", receipt: "Beleg", status: "Status", comment: "Begründung" };
+const ACTION_LABEL: Record<string, string> = { create: "erfasst", update: "geändert", delete: "gelöscht", submit: "eingereicht", approve: "bewilligt", reject: "abgelehnt", reopen: "wieder geöffnet" };
+const EXPENSE_STATUS = { requested: { label: "Offen", cls: "risk" }, approved: { label: "Bewilligt", cls: "ok" }, rejected: { label: "Abgelehnt", cls: "over" } } as const;
+const show = (v: unknown) => (typeof v === "boolean" ? (v ? "ja" : "nein") : v === null || v === undefined || v === "" ? "–" : String(v));
+
+function History({ id }: { id: string }) {
+  const [rows, setRows] = useState<AuditRow[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api<AuditRow[]>(`/api/audit/${id}`).then(setRows).catch((e) => setError((e as Error).message));
+  }, [id]);
+  if (error) return <p className="error">{error}</p>;
+  if (!rows) return <p className="muted">Lade Verlauf …</p>;
+  if (rows.length === 0) return <p className="muted">Kein Verlauf vorhanden (vor der Einführung des Änderungsprotokolls erfasst).</p>;
+  return (
+    <ul className="history">
+      {rows.map((r) => {
+        const changes = r.action === "update" && r.before && r.after
+          ? Object.keys(FIELD_LABEL).filter((k) => show(r.before![k]) !== show(r.after![k])).map((k) => `${FIELD_LABEL[k]}: ${show(r.before![k])} → ${show(r.after![k])}`)
+          : [];
+        return (
+          <li key={r.id}>
+            <span className="muted">{new Date(r.createdAt).toLocaleString("de-CH", { dateStyle: "short", timeStyle: "short" })}</span> {ACTION_LABEL[r.action] ?? r.action} von {r.actorName ?? "unbekannt"}
+            {changes.length > 0 && <div className="muted">{changes.join(" · ")}</div>}
+            {r.action === "reject" && r.after?.comment ? <div className="muted">Begründung: {String(r.after.comment)}</div> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+type EntryProps =
+  | { kind: "time"; item: TimeEntry; who?: { name: string; initials: string }; title: string; meta: string; value: string }
+  | { kind: "expense"; item: Expense; who?: { name: string; initials: string }; title: string; meta: string; value: string };
+
+/** One booking in the list, with inline edit, delete and change history. */
+function EntryRow(props: EntryProps) {
+  const { lockOf, updateTimeEntry, deleteTimeEntry, updateExpense, deleteExpense, uploadReceipt, deleteReceipt, resubmitExpense, notify, mode, currentUserId, role } = useStore();
+  const { item, kind } = props;
+  const expense = kind === "expense" ? props.item : null;
+  const status = expense ? expense.status ?? "approved" : null;
+  const [vatRate, setVatRate] = useState(expense?.vatRate ?? DEFAULT_RATES.vatRate);
+  const [state, setState] = useState<"view" | "edit" | "confirm">("view");
+  const [date, setDate] = useState(item.date);
+  const [amount, setAmount] = useState(String(kind === "time" ? props.item.hours : props.item.category === "Kilometer" ? props.item.km ?? 0 : props.item.amount));
+  const [reason, setReason] = useState(item.reason);
+  const [billable, setBillable] = useState(item.billable);
+  const [history, setHistory] = useState(false);
+  const [error, setError] = useState("");
+  const lock = lockOf(item.employeeId, item.date);
+
+  const run = async (fn: () => Promise<void>, msg: string) => {
+    try {
+      await fn();
+      setError("");
+      setState("view");
+      setHistory(false);
+      notify(msg);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const save = () => {
+    const n = Number(amount);
+    if (!reason.trim()) return setError("Bitte einen Grund angeben.");
+    if (kind === "time" && !(n > 0 && n <= 24)) return setError("Dauer muss zwischen 0 und 24 Stunden liegen.");
+    if (kind === "expense" && !(n > 0)) return setError("Bitte einen Betrag grösser als 0 eingeben.");
+    const base = { date, reason: reason.trim(), billable };
+    return run(
+      () =>
+        kind === "time"
+          ? updateTimeEntry(item.id, { ...base, hours: Math.round(n * 100) / 100 })
+          : updateExpense(item.id, expense?.category === "Kilometer" ? { ...base, km: n } : { ...base, amount: n, vatRate }),
+      "Änderung gespeichert",
+    );
+  };
+  const remove = () => run(() => (kind === "time" ? deleteTimeEntry(item.id) : deleteExpense(item.id)), kind === "time" ? "Buchung gelöscht" : "Spese gelöscht");
+
+  return (
+    <div className={`entry-wrap ${state === "edit" ? "editing-entry" : ""}`}>
+      <div className="entry">
+        {kind === "time" || props.who ? (
+          <span className="who" title={props.who?.name} style={kind === "expense" ? { background: "var(--surface-2)", color: "var(--ink-2)" } : undefined}>{props.who?.initials}</span>
+        ) : (
+          <span className="who" style={{ background: "var(--surface-2)", color: "var(--ink-2)" }} title="Spesen">CHF</span>
+        )}
+        <div className="what">
+          <div className="tree-row" style={{ justifyContent: "flex-start", gap: 8 }}>
+            <span>{props.title}</span>
+            {expense && status !== "approved" && <span className={`pill ${EXPENSE_STATUS[status!].cls}`}>{EXPENSE_STATUS[status!].label}</span>}
+            {expense?.receipt && (mode === "api"
+              ? <a className="receipt-link" href={`/api/expenses/${expense.id}/receipt`} target="_blank" rel="noreferrer" title={expense.receipt.name}><Icon.report />Beleg</a>
+              : <span className="receipt-link" title={expense.receipt.name}><Icon.report />Beleg</span>)}
+          </div>
+          <div className="meta">{props.meta}</div>
+        </div>
+        <strong className="num">{props.value}</strong>
+        <div className="entry-actions">
+          {lock ? (
+            <span className="lock" title={lock} aria-label={lock}><Icon.lock /></span>
+          ) : state === "confirm" ? (
+            <>
+              <button className="btn small primary" onClick={remove}>Löschen</button>
+              <button className="btn small ghost" onClick={() => setState("view")}>Nein</button>
+            </>
+          ) : (
+            <>
+              <button className="icon-btn" title="Bearbeiten" aria-label="Bearbeiten" onClick={() => setState(state === "edit" ? "view" : "edit")}><Icon.edit /></button>
+              <button className="icon-btn" title="Löschen" aria-label="Löschen" onClick={() => setState("confirm")}><Icon.trash /></button>
+            </>
+          )}
+        </div>
+      </div>
+      {state === "edit" && (
+        <div className="entry-edit">
+          <div className="form-grid">
+            <label className="field"><span>Datum</span><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+            <label className="field">
+              <span>{kind === "time" ? "Dauer (h)" : expense?.category === "Kilometer" ? "Kilometer" : "Betrag brutto (CHF)"}</span>
+              <input type="number" step={kind === "time" ? "0.25" : expense?.category === "Kilometer" ? "1" : "0.05"} min="0" className="input num" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </label>
+            {expense && expense.category !== "Kilometer" && (
+              <label className="field">
+                <span>MwSt enthalten</span>
+                <select className="input" value={vatRate} onChange={(e) => setVatRate(Number(e.target.value))}>
+                  {VAT_RATES.map((v) => <option key={v} value={v}>{v === 0 ? "keine" : `${fmt1(v)} %`}</option>)}
+                </select>
+              </label>
+            )}
+            {expense && (
+              <label className="field">
+                <span>{expense.receipt ? `Beleg ersetzen (${expense.receipt.name})` : "Beleg hochladen"}</span>
+                <input type="file" className="input" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) run(() => uploadReceipt(expense.id, f), "Beleg gespeichert");
+                }} />
+              </label>
+            )}
+          </div>
+          <label className="field"><span>Grund</span><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} /></label>
+          <div className="tree-row">
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <label className="check"><input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />Verrechenbar</label>
+              {expense?.receipt && <button className="btn small ghost" onClick={() => run(() => deleteReceipt(expense.id), "Beleg entfernt")}>Beleg entfernen</button>}
+              {expense && status === "rejected" && (expense.employeeId === currentUserId || role !== "employee") && (
+                <button className="btn small" onClick={() => run(() => resubmitExpense(expense.id), "Spese erneut eingereicht")}>Erneut einreichen</button>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {mode === "api" && <button className="btn small ghost" onClick={() => setHistory(!history)}>{history ? "Verlauf ausblenden" : "Verlauf"}</button>}
+              <button className="btn small ghost" onClick={() => { setState("view"); setHistory(false); }}>Abbrechen</button>
+              <button className="btn small primary" onClick={save}>Speichern</button>
+            </div>
+          </div>
+          {history && <History id={item.id} />}
+        </div>
+      )}
+      {error && <p className="error" style={{ padding: "0 16px 10px" }}>{error}</p>}
+    </div>
+  );
+}
+
+// ---------- week calendar ----------
+
+const DAY_START = 6 * 60;
+const DAY_END = 20 * 60;
+const PX_PER_MIN = 0.8; // 48 px per hour
+const SNAP = 15;
+const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+const toClock = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+const snap = (min: number) => Math.round(min / SNAP) * SNAP;
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+interface Placed {
+  entry: TimeEntry;
+  start: number;
+  end: number;
+  col: number;
+  cols: number;
+}
+
+/** Side-by-side layout for overlapping blocks of one day. */
+function layoutDay(entries: TimeEntry[]): Placed[] {
+  const timed = entries
+    .filter((e) => e.startTime)
+    .map((e) => ({ entry: e, start: toMin(e.startTime!), end: toMin(e.startTime!) + Math.max(SNAP, Math.round(e.hours * 60)), col: 0, cols: 1 }))
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+  let cluster: Placed[] = [];
+  let clusterEnd = -1;
+  const flush = () => {
+    const cols = Math.max(1, ...cluster.map((p) => p.col + 1));
+    for (const p of cluster) p.cols = cols;
+    cluster = [];
+  };
+  for (const p of timed) {
+    if (p.start >= clusterEnd) flush();
+    const taken = new Set(cluster.filter((c) => c.end > p.start).map((c) => c.col));
+    let col = 0;
+    while (taken.has(col)) col++;
+    p.col = col;
+    cluster.push(p);
+    clusterEnd = Math.max(clusterEnd, p.end);
+  }
+  flush();
+  return timed;
+}
+
+interface DialogState {
+  entry?: TimeEntry;
+  date: string;
+  startTime?: string;
+  hours: number;
+}
+
+/** Popup to create or change one booking (or to record an expense for that day). */
+function EntryDialog({ state, onClose }: { state: DialogState; onClose: () => void }) {
+  const { data, currentUserId, addTimeEntry, updateTimeEntry, deleteTimeEntry, notify, lockOf, mode } = useStore();
+  const target = useTarget();
+  const fav = useFavorites(currentUserId);
+  const e = state.entry;
+  const [kind, setKind] = useState<"time" | "expense">("time");
+  const [date, setDate] = useState(state.date);
+  const [startTime, setStartTime] = useState(e?.startTime ?? state.startTime ?? "");
+  const [hours, setHours] = useState(String(e?.hours ?? state.hours));
+  const [reason, setReason] = useState("");
+  const [issueKey, setIssueKey] = useState(e?.jiraIssueKey ?? "");
+  const [billable, setBillable] = useState(e?.billable ?? true);
+  const [confirm, setConfirm] = useState(false);
+  const [history, setHistory] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const lock = lockOf(e?.employeeId ?? currentUserId, date);
+
+  // Prefill from the existing entry once the target picker is mounted.
+  useEffect(() => {
+    if (!e) return;
+    target.select(e.subProjectId);
+    setReason(e.jiraIssueKey && e.reason.startsWith(`${e.jiraIssueKey} `) ? e.reason.slice(e.jiraIssueKey.length + 1) : e.reason);
+  }, [e?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => ev.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const customer = data.customers.find((c) => c.id === target.customerId);
+  const rate = customer ? rateOn(customer, date) : 0;
+  useEffect(() => {
+    if (!e) setBillable(rate > 0);
+  }, [target.customerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openIssues = data.issues.filter((i) => i.subProjectId === target.subProjectId && i.status !== "Done");
+  const pick = (f: Favorite) => {
+    target.select(f.subProjectId);
+    setIssueKey(f.jiraIssueKey ?? "");
+    setReason(f.jiraIssueKey && f.reason.startsWith(`${f.jiraIssueKey} `) ? f.reason.slice(f.jiraIssueKey.length + 1) : f.reason);
+  };
+  const h = Number(String(hours).replace(",", "."));
+  const endTime = startTime && h > 0 ? toClock(Math.min(24 * 60 - 1, toMin(startTime) + Math.round(h * 60))) : "";
+
+  const run = async (fn: () => Promise<void>, msg: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      notify(msg);
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const save = () => {
+    if (!reason.trim()) return setError("Bitte einen Grund angeben, er erscheint im Kundenreport.");
+    if (!target.subProjectId) return setError("Bitte ein Subprojekt wählen.");
+    if (!(h > 0 && h <= 24)) return setError("Dauer muss zwischen 0 und 24 Stunden liegen.");
+    const issue = data.issues.find((i) => i.key === issueKey);
+    const text = issue ? `${issue.key} ${reason.trim()}` : reason.trim();
+    const body = { subProjectId: target.subProjectId, date, hours: Math.round(h * 100) / 100, reason: text, billable, jiraIssueKey: issueKey || undefined, startTime: startTime || undefined };
+    return run(
+      () => (e ? updateTimeEntry(e.id, { ...body, jiraIssueKey: issueKey || null } as Partial<TimeEntry>) : addTimeEntry({ employeeId: currentUserId, hourlyRate: rate, ...body })),
+      e ? "Buchung gespeichert" : `${fmt1(h)} h gebucht`,
+    );
+  };
+
+  return (
+    <div className="overlay" onMouseDown={(ev) => ev.target === ev.currentTarget && onClose()}>
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={e ? "Buchung bearbeiten" : "Neue Buchung"}>
+        <div className="dialog-head">
+          {e ? <h2>Buchung bearbeiten</h2> : (
+            <div className="seg" role="tablist">
+              <button className={kind === "time" ? "on" : ""} onClick={() => setKind("time")}>Zeit</button>
+              <button className={kind === "expense" ? "on" : ""} onClick={() => setKind("expense")}>Spese</button>
+            </div>
+          )}
+          <button className="icon-btn" aria-label="Schliessen" onClick={onClose}><Icon.close /></button>
+        </div>
+        {kind === "expense" ? (
+          <ExpenseForm compact initialDate={date} onDone={onClose} />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {lock && <p className="notice">{lock}. Die Buchung kann nur angesehen werden.</p>}
+            <QuickPicks userId={currentUserId} onPick={pick} fav={fav} />
+            <div className="form-grid">{target.fields("d")}</div>
+            <div className="form-grid">
+              <label className="field"><span>Datum</span><input id="d-date" type="date" className="input" value={date} onChange={(ev) => setDate(ev.target.value)} /></label>
+              <label className="field"><span>Von</span><input id="d-start" type="time" step={900} className="input" value={startTime} onChange={(ev) => setStartTime(ev.target.value)} /></label>
+              <label className="field">
+                <span>Dauer (h){endTime ? ` · bis ${endTime}` : ""}</span>
+                <input id="d-hours" type="number" step="0.25" min="0.25" max="24" className="input num" value={hours} onChange={(ev) => setHours(ev.target.value)} />
+              </label>
+              <label className="field">
+                <span>JIRA-Issue (optional)</span>
+                <select id="d-issue" className="input" value={issueKey} onChange={(ev) => setIssueKey(ev.target.value)}>
+                  <option value="">Ohne Issue</option>
+                  {openIssues.map((i) => <option key={i.key} value={i.key}>{i.key} · {i.summary}</option>)}
+                  {e?.jiraIssueKey && !openIssues.some((i) => i.key === e.jiraIssueKey) && <option value={e.jiraIssueKey}>{e.jiraIssueKey}</option>}
+                </select>
+              </label>
+            </div>
+            <label className="field">
+              <span>Grund / Tätigkeit</span>
+              <input id="d-reason" className="input" placeholder="z. B. Abnahme-Workshop vorbereitet" value={reason} autoFocus={!e} onChange={(ev) => setReason(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && save()} />
+            </label>
+            {error && <p className="error">{error}</p>}
+            {history && e && <History id={e.id} />}
+            <div className="tree-row" style={{ flexWrap: "wrap", gap: 8 }}>
+              <label className="check"><input id="d-billable" type="checkbox" checked={billable} onChange={(ev) => setBillable(ev.target.checked)} />Verrechenbar · {fmtCHF(rate)}/h</label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {e && mode === "api" && <button className="btn small ghost" onClick={() => setHistory(!history)}>Verlauf</button>}
+                {e && !lock && (confirm ? (
+                  <>
+                    <button className="btn small primary" disabled={busy} onClick={() => run(() => deleteTimeEntry(e.id), "Buchung gelöscht")}>Wirklich löschen</button>
+                    <button className="btn small ghost" onClick={() => setConfirm(false)}>Nein</button>
+                  </>
+                ) : (
+                  <button className="btn small ghost" onClick={() => setConfirm(true)}><Icon.trash />Löschen</button>
+                ))}
+                <button className="btn small ghost" onClick={onClose}>Abbrechen</button>
+                {!lock && <button id="d-save" className="btn small primary" disabled={busy} onClick={save}>{e ? "Speichern" : "Buchen"}</button>}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type Drag =
+  | { kind: "create"; date: string; from: number; to: number }
+  | { kind: "move"; entry: TimeEntry; date: string; start: number; offset: number; moved: boolean }
+  | { kind: "resize"; entry: TimeEntry; date: string; end: number };
+
+/** Week calendar: columns are days, the vertical axis is the time of day. Drag on empty space to book. */
+function WeekCalendar() {
+  const { data, currentUserId, updateTimeEntry, lockOf, notify } = useStore();
+  const labels = useLabels();
+  const [monday, setMonday] = useState(() => mondayOf(data.today));
+  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [error, setError] = useState("");
+  const gridRef = useRef<HTMLDivElement>(null);
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(monday, i)), [monday]);
+  const employee = data.employees.find((e) => e.id === currentUserId);
+  const cal = useMemo(() => (employee ? new WorkCalendar(data, employee) : null), [data, employee]);
+  const byDay = useMemo(() => {
+    const m = new Map<string, TimeEntry[]>(days.map((d) => [d, []]));
+    for (const e of data.timeEntries) if (e.employeeId === currentUserId && m.has(e.date)) m.get(e.date)!.push(e);
+    return m;
+  }, [data, currentUserId, days]);
+  const hoursOf = (d: string) => (byDay.get(d) ?? []).reduce((s, e) => s + e.hours, 0);
+  const targetOf = (d: string) => (cal ? Math.max(0, cal.target(d) - cal.credit(d)) : 0);
+  const absenceOn = (d: string) => (data.absences ?? []).find((a) => a.employeeId === currentUserId && a.status !== "rejected" && a.startDate <= d && a.endDate >= d);
+  const holidayOn = (d: string) => cal?.holidays.get(d);
+  const weekWorked = days.reduce((s, d) => s + hoursOf(d), 0);
+  const weekTarget = days.reduce((s, d) => s + targetOf(d), 0);
+  const height = (DAY_END - DAY_START) * PX_PER_MIN;
+  const hoursAxis = Array.from({ length: (DAY_END - DAY_START) / 60 }, (_, i) => DAY_START + i * 60);
+
+  // Scroll the day columns to the working hours on first render.
+  useEffect(() => {
+    gridRef.current?.scrollTo({ top: (6.75 * 60 - DAY_START) * PX_PER_MIN });
+  }, []);
+
+  const minutesAt = (col: HTMLElement, clientY: number) => {
+    const rect = col.getBoundingClientRect();
+    return clamp(snap(DAY_START + (clientY - rect.top) / PX_PER_MIN), DAY_START, DAY_END);
+  };
+  const dateAt = (clientX: number) => {
+    const cols = gridRef.current?.querySelectorAll<HTMLElement>(".cal-col") ?? [];
+    for (const c of cols) {
+      const r = c.getBoundingClientRect();
+      if (clientX >= r.left && clientX < r.right) return c.dataset.date!;
+    }
+    return null;
+  };
+
+  const startCreate = (ev: React.PointerEvent<HTMLDivElement>, date: string) => {
+    if (ev.button !== 0 || (ev.target as HTMLElement).closest(".cal-block") || lockOf(currentUserId, date)) return;
+    const from = minutesAt(ev.currentTarget, ev.clientY);
+    setDrag({ kind: "create", date, from, to: from + 60 });
+    ev.currentTarget.setPointerCapture(ev.pointerId);
+  };
+  const startMove = (ev: React.PointerEvent<HTMLDivElement>, entry: TimeEntry, date: string) => {
+    if (ev.button !== 0 || lockOf(currentUserId, date) || !entry.startTime) return;
+    ev.stopPropagation();
+    const col = ev.currentTarget.parentElement as HTMLElement;
+    const at = minutesAt(col, ev.clientY);
+    setDrag({ kind: "move", entry, date, start: toMin(entry.startTime), offset: at - toMin(entry.startTime), moved: false });
+    col.setPointerCapture(ev.pointerId);
+  };
+  const startResize = (ev: React.PointerEvent<HTMLSpanElement>, entry: TimeEntry, date: string) => {
+    if (ev.button !== 0 || lockOf(currentUserId, date) || !entry.startTime) return;
+    ev.stopPropagation();
+    const col = ev.currentTarget.closest(".cal-col") as HTMLElement;
+    setDrag({ kind: "resize", entry, date, end: toMin(entry.startTime) + Math.round(entry.hours * 60) });
+    col.setPointerCapture(ev.pointerId);
+  };
+  const onMove = (ev: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag) return;
+    const at = minutesAt(ev.currentTarget, ev.clientY);
+    if (drag.kind === "create") setDrag({ ...drag, to: Math.max(drag.from + SNAP, at) });
+    if (drag.kind === "move") {
+      const start = clamp(at - drag.offset, DAY_START, DAY_END - SNAP);
+      const date = dateAt(ev.clientX) ?? drag.date;
+      setDrag({ ...drag, start, date, moved: drag.moved || start !== toMin(drag.entry.startTime!) || date !== drag.entry.date });
+    }
+    if (drag.kind === "resize") setDrag({ ...drag, end: Math.max(toMin(drag.entry.startTime!) + SNAP, at) });
+  };
+  const onUp = async () => {
+    if (!drag) return;
+    const d = drag;
+    setDrag(null);
+    try {
+      if (d.kind === "create") {
+        setDialog({ date: d.date, startTime: toClock(d.from), hours: (d.to - d.from) / 60 });
+      } else if (d.kind === "move") {
+        if (!d.moved) return setDialog({ entry: d.entry, date: d.entry.date, hours: d.entry.hours });
+        if (lockOf(currentUserId, d.date)) throw new Error(lockOf(currentUserId, d.date)!);
+        await updateTimeEntry(d.entry.id, { startTime: toClock(d.start), date: d.date });
+        notify(`Verschoben auf ${fmtDay(d.date)} ${toClock(d.start)}`);
+      } else {
+        const hours = Math.round(((d.end - toMin(d.entry.startTime!)) / 60) * 100) / 100;
+        if (hours !== d.entry.hours) {
+          await updateTimeEntry(d.entry.id, { hours });
+          notify(`Dauer: ${fmt1(hours)} h`);
+        }
+      }
+      setError("");
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const block = (p: Placed, date: string, preview = false) => {
+    const e = p.entry;
+    const top = (p.start - DAY_START) * PX_PER_MIN;
+    const h = Math.max(18, (p.end - p.start) * PX_PER_MIN);
+    const lock = lockOf(currentUserId, date);
+    return (
+      <div
+        key={preview ? "preview" : e.id}
+        className={`cal-block ${e.billable ? "" : "internal"} ${preview ? "preview" : ""} ${lock ? "locked" : ""}`}
+        style={{ top, height: h, left: `calc(${(p.col / p.cols) * 100}% + 2px)`, width: `calc(${100 / p.cols}% - 4px)` }}
+        title={`${e.reason}\n${labels.long(e.subProjectId)} · ${fmt1(e.hours)} h${lock ? `\n${lock}` : ""}`}
+        onPointerDown={(ev) => !preview && startMove(ev, e, date)}
+      >
+        <div className="cal-block-title">{e.reason}</div>
+        {h >= 34 && <div className="cal-block-meta">{labels.short(e.subProjectId)}</div>}
+        <div className="cal-block-time">{toClock(p.start)}–{toClock(p.end)} · {fmt1((p.end - p.start) / 60)} h</div>
+        {!lock && !preview && <span className="cal-resize" onPointerDown={(ev) => startResize(ev, e, date)} />}
+      </div>
+    );
+  };
+
+  return (
+    <section className="card cal">
+      <div className="card-head" style={{ flexWrap: "wrap", gap: 10 }}>
+        <div className="tree-row" style={{ gap: 8 }}>
+          <button className="btn small ghost" aria-label="Vorherige Woche" onClick={() => setMonday(addDays(monday, -7))}>‹</button>
+          <h2 style={{ margin: 0 }}>KW {isoWeek(monday)} · {fmtDay(days[0]).split(",")[1]?.trim()} – {fmtDay(days[6]).split(",")[1]?.trim()}</h2>
+          <button className="btn small ghost" aria-label="Nächste Woche" onClick={() => setMonday(addDays(monday, 7))}>›</button>
+          {monday !== mondayOf(data.today) && <button className="btn small ghost" onClick={() => setMonday(mondayOf(data.today))}>Heute</button>}
+        </div>
+        <div className="tree-row" style={{ gap: 12 }}>
+          <span className="muted" style={{ fontSize: "0.82rem" }}>
+            {fmt1(weekWorked)} h von {fmt1(weekTarget)} h Soll · Saldo <strong className={weekWorked - weekTarget < 0 ? "neg" : ""}>{signedH(weekWorked - weekTarget)}</strong>
+          </span>
+          <button id="cal-new" className="btn small primary" onClick={() => setDialog({ date: days.includes(data.today) ? data.today : days[0], hours: 1 })}>+ Eintrag</button>
+        </div>
+      </div>
+      <div className="cal-scroll">
+        <div className="cal-head">
+          <div className="cal-gutter" />
+          {days.map((d, i) => {
+            const off = cal ? cal.workShare(d) === 0 : false;
+            const lock = lockOf(currentUserId, d);
+            return (
+              <div key={d} className={`cal-day-head ${d === data.today ? "today" : ""} ${off ? "off" : ""}`}>
+                <div className="cal-day-name">{WEEKDAYS[i]} <span>{d.slice(8, 10)}.{d.slice(5, 7)}.</span>{lock && <span className="lock" title={lock}><Icon.lock /></span>}</div>
+                <div className="cal-day-sum num">{fmt1(hoursOf(d))} / {fmt1(targetOf(d))} h</div>
+                <div className="cal-allday">
+                  {holidayOn(d) && <span className="cal-chip holiday" title="Feiertag">{holidayOn(d)!.name}</span>}
+                  {absenceOn(d) && (
+                    <span className={`cal-chip absence ${TYPE_CLASS[absenceOn(d)!.type]}`} title={absenceOn(d)!.status === "requested" ? "beantragt" : "bewilligt"}>
+                      {absenceOn(d)!.type}{absenceOn(d)!.halfDay ? " (½)" : ""}{absenceOn(d)!.status === "requested" ? " · beantragt" : ""}
+                    </span>
+                  )}
+                  {(byDay.get(d) ?? []).filter((e) => !e.startTime).map((e) => (
+                    <button key={e.id} className={`cal-chip ${e.billable ? "" : "internal"}`} title={`${e.reason} · ohne Uhrzeit`} onClick={() => setDialog({ entry: e, date: d, hours: e.hours })}>
+                      {fmt1(e.hours)} h {e.reason}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="cal-grid" ref={gridRef}>
+          <div className="cal-gutter" style={{ height }}>
+            {hoursAxis.map((m) => <div key={m} className="cal-hour" style={{ top: (m - DAY_START) * PX_PER_MIN }}>{toClock(m)}</div>)}
+          </div>
+          {days.map((d) => {
+            const placed = layoutDay(byDay.get(d) ?? []);
+            const off = cal ? cal.workShare(d) === 0 : false;
+            const lock = lockOf(currentUserId, d);
+            return (
+              <div
+                key={d}
+                data-date={d}
+                className={`cal-col ${d === data.today ? "today" : ""} ${off ? "off" : ""} ${lock ? "locked" : ""}`}
+                style={{ height }}
+                onPointerDown={(ev) => startCreate(ev, d)}
+                onPointerMove={onMove}
+                onPointerUp={onUp}
+                onPointerCancel={() => setDrag(null)}
+              >
+                {hoursAxis.map((m) => <div key={m} className="cal-line" style={{ top: (m - DAY_START) * PX_PER_MIN }} />)}
+                {placed.filter((p) => !(drag && drag.kind !== "create" && drag.entry.id === p.entry.id)).map((p) => block(p, d))}
+                {drag?.kind === "create" && drag.date === d && (
+                  <div className="cal-block preview" style={{ top: (drag.from - DAY_START) * PX_PER_MIN, height: (drag.to - drag.from) * PX_PER_MIN, left: 2, right: 2 }}>
+                    <div className="cal-block-time">{toClock(drag.from)}–{toClock(drag.to)} · {fmt1((drag.to - drag.from) / 60)} h</div>
+                  </div>
+                )}
+                {drag?.kind === "move" && drag.date === d && block({ entry: drag.entry, start: drag.start, end: drag.start + Math.round(drag.entry.hours * 60), col: 0, cols: 1 }, d, true)}
+                {drag?.kind === "resize" && drag.date === d && block({ entry: drag.entry, start: toMin(drag.entry.startTime!), end: drag.end, col: 0, cols: 1 }, d, true)}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="card-pad" style={{ paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <span className="muted" style={{ fontSize: "0.78rem" }}>Auf eine freie Stelle klicken oder ziehen, um zu buchen. Blöcke lassen sich verschieben und unten verlängern. Buchungen ohne Uhrzeit stehen oben im Tag.</span>
+        {error && <span className="error">{error}</span>}
+      </div>
+      {dialog && <EntryDialog key={`${dialog.entry?.id ?? "new"}|${dialog.date}|${dialog.startTime ?? ""}`} state={dialog} onClose={() => setDialog(null)} />}
+    </section>
+  );
+}
+
+export function TimeTracking() {
+  const { data, currentUserId } = useStore();
+  const me = data.employees.find((e) => e.id === currentUserId);
+  const [view, setView] = useState<"day" | "week">(() => loadLocal<"day" | "week">("rt.view", "week"));
+  const switchTo = (v: "day" | "week") => {
+    setView(v);
+    saveLocal("rt.view", v);
+  };
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Zeiterfassung</h1>
+          <p className="sub">Zeit und Spesen auf Kunde, Projekt und Subprojekt buchen. Alle gebuchten Stunden zählen als Arbeitszeit, Ferien und Absenzen werden gutgeschrieben.</p>
+        </div>
+        <div className="seg" role="tablist" aria-label="Ansicht">
+          <button id="view-week" className={view === "week" ? "on" : ""} onClick={() => switchTo("week")}>Kalender</button>
+          <button id="view-day" className={view === "day" ? "on" : ""} onClick={() => switchTo("day")}>Liste</button>
+        </div>
+      </div>
+      {view === "week" ? (
+        <>
+          {me && <WorkTiles employee={me} />}
+          <WeekCalendar />
+        </>
+      ) : (
+        <div className="grid-2" style={{ alignItems: "start" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+            <TimeForm />
+            <ExpenseForm />
+          </div>
+          <WeekList />
+        </div>
+      )}
+    </>
+  );
+}

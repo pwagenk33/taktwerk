@@ -1,0 +1,75 @@
+# Taktwerk (Arbeitstitel)
+
+Zeiterfassung und Kunden-Reporting mit JIRA-basiertem Forecast. Konzept: [docs/KONZEPT.md](docs/KONZEPT.md).
+
+```
+packages/domain   Datenmodell, Velocity, Forecast (geteilt von Server und Web)
+server            API (Fastify, MariaDB/Drizzle, Login, SMTP)
+web               Oberfläche (React, Vite)
+```
+
+## Schnellstart mit Docker
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+# Beispieldaten laden (alle Beispiel-Benutzer bekommen das angegebene Passwort):
+docker compose run --rm app node server/dist/cli.js seed mein-demo-passwort
+# oder leere Installation mit erstem Admin (Einladungslink wird ausgegeben und gemailt):
+docker compose run --rm app node server/dist/cli.js init "Firma AG" "Vorname Nachname" admin@firma.ch admin
+```
+
+App: http://localhost:3000 · E-Mails landen in Mailpit: http://localhost:8025
+
+## Entwicklung ohne Docker
+
+Voraussetzungen: Node 22, MariaDB ab 10.6 mit Datenbank `taktwerk` (Benutzer/Passwort `taktwerk`, siehe `.env.example`).
+
+```bash
+npm install
+npm run db:seed -- mein-demo-passwort   # Migrationen + Beispieldaten
+npm run dev:server                       # API auf :3000
+npm run dev:web                          # Oberfläche auf :5173 (leitet /api an :3000 weiter)
+npm test                                 # Domain-Tests + API-Tests (brauchen die Datenbank taktwerk_test)
+```
+
+Login mit den Beispieldaten: `anna.keller` (Admin), `marco.brunner` (Consultant), `lea.meier` (Mitarbeiterin).
+
+Schema ändern: `server/src/db/schema.ts` anpassen, dann `npm run db:generate -w server` erzeugt die SQL-Migration in `server/drizzle/`.
+
+## Abrechnung
+
+- **Buchungen bearbeiten und löschen** direkt in der Liste unter Zeiterfassung. Jede Änderung landet im Änderungsprotokoll (Tabelle `audit_log`, in der Oberfläche unter «Verlauf»).
+- **Monatsabschluss:** Mitarbeitende reichen den Monat ein, Consultants oder Admins geben frei. Eingereicht: nur noch die Freigabe-Person kann korrigieren. Freigegeben: gesperrt, bis eine Admin-Person den Monat wieder öffnet.
+- **Kundenreport** unter Reports → Kunde wählen: PDF und Excel im Corporate Design, «Jetzt senden» an die hinterlegten Empfänger.
+- **Hintergrundjobs** laufen im Server-Prozess alle 15 Minuten: monatlicher Report-Versand (Tag einstellbar, Standard der 3. ab 07:00 Uhr Zürich) und Budget-Alarm an Admins und Consultants bei 80, 95 und 100 % des Forecasts. Jeder Versand wird in der Datenbank vermerkt (`job_runs`, `budget_alerts`) und geht nur einmal raus, auch wenn mehrere Instanzen laufen.
+
+## Arbeitszeit & Absenzen
+
+- Sollzeit pro Woche und Feiertage unter Einstellungen → Arbeitszeit; Pensum, Ferientage, Erfassungsbeginn und Überträge pro Person unter Absenzen → Team (nur Admins). Überzeit-Saldo, Ferienstand und Soll/Ist stehen als Kacheln über dem Kalender.
+- Neue Benutzer starten ihr Zeitkonto am Tag der Einladung. Für bestehende Personen «Erfassung ab» und den Überzeit-Übertrag setzen, bevor der Saldo zählt.
+- Interne Arbeit (Administration, Weiterbildung) bucht man auf einen Kunden ohne Stundensatz, z. B. «Intern». Sie zählt zur Arbeitszeit, aber nicht in den Kundenreport.
+
+## Erfassen-Komfort
+
+- **Kalender** unter Zeiterfassung: Woche mit Zeitachse. Klick oder Ziehen auf eine freie Stelle öffnet das Eintrags-Fenster (Zeit oder Spese), Blöcke verschieben oder unten verlängern ändert Beginn und Dauer, Klick bearbeitet. Buchungen ohne Uhrzeit (z. B. aus der Listenansicht oder von früher) stehen oben im Tag; die Uhrzeit wird in der Spalte `start_time` gespeichert.
+- **Favoriten** (Stern) und **Zuletzt** (letzte 30 Tage) stehen als Chips im Eintrags-Fenster und in der Listenansicht. Favoriten liegen pro Person im Browser.
+- **Projektseite** unter Kunden & Projekte → Projekt anklicken: Kennzahlen, Subprojekte mit JIRA-Tickets und Burn-up; Budgets, Namen und JIRA-Schlüssel dort bearbeiten (Admins und Consultants).
+- **Erinnerung:** montags ab 09:00 Uhr Zürich geht eine E-Mail an alle, denen in der Vorwoche mehr als zwei Stunden zur Sollzeit fehlen (Absenzen zählen mit). Ausschalten unter Einstellungen → Arbeitszeit.
+
+## Spesen & Rechnung
+
+- **Spesen** mit MwSt-Satz, Kategorie «Kilometer» (Betrag = km × Pauschale aus Einstellungen → Rechnung) und Beleg (JPEG/PNG/WebP/PDF bis 10 MB). Belege liegen im Dateisystem unter `DATA_DIR/receipts/` (Docker-Volume `data`), nur die Metadaten in der Datenbank.
+- **Freigabe:** Spesen von Mitarbeitenden sind «offen», bis Consultants oder Admins sie unter Monatsabschluss → Offene Spesen bewilligen oder ablehnen (mit Begründung per E-Mail). Nur bewilligte, weiterverrechenbare Spesen erscheinen im Kundenreport und auf der Rechnung.
+- **Rechnung** unter Reports → Kunde: Absender und IBAN einmalig unter Einstellungen → Rechnung, Rechnungsadresse pro Kunde. «Rechnung erstellen» friert Positionen (Stunden pro Subprojekt und Satz, bewilligte Spesen) und Adressen ein, vergibt die nächste Nummer `JJJJ-NNNN` und erzeugt ein PDF mit Schweizer QR-Zahlteil. Senden geht an die Report-Empfänger des Kunden. Status: Entwurf → Versendet → Bezahlt; nach dem Versand wird storniert statt gelöscht, damit die Nummern lückenlos bleiben.
+
+## Microsoft- und Google-Anmeldung einrichten
+
+- **Microsoft:** Im Entra Admin Center eine App registrieren, Redirect-URI `<APP_URL>/api/auth/microsoft/callback` (Typ Web), Client-Secret anlegen. `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT` setzen.
+- **Google:** In der Google Cloud Console einen OAuth-Client (Webanwendung) mit Redirect-URI `<APP_URL>/api/auth/google/callback` anlegen. `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` setzen.
+
+Die Buttons erscheinen auf der Anmeldeseite, sobald die Werte gesetzt sind.
+
+## Prototyp als einzelne HTML-Datei
+
+`npm run build:single -w web` erzeugt `web/dist-single/artifact.html`, eine Version mit Beispieldaten ohne Server.

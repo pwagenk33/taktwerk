@@ -1,0 +1,36 @@
+# Local setup: MariaDB, Mailpit (catches all e-mails, web inbox on http://localhost:8025) and the app on http://localhost:3000.
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: taktwerk
+      MARIADB_USER: taktwerk
+      MARIADB_PASSWORD: taktwerk
+      MARIADB_ROOT_PASSWORD: root-bitte-aendern
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes: [db:/var/lib/mysql]
+    ports: ["3306:3306"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 20
+
+  mail:
+    image: axllent/mailpit:v1.21
+    ports: ["8025:8025", "1025:1025"]
+
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: mysql://taktwerk:taktwerk@db:3306/taktwerk
+      SMTP_HOST: mail
+      SMTP_PORT: "1025"
+    ports: ["3000:3000"]
+    volumes: [data:/app/data]
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  db:
+  data:

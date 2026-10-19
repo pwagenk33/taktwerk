@@ -1,0 +1,205 @@
+import { WorkCalendar, addMonths, fmtCHF, fmtDate, projectReports } from "@taktwerk/domain";
+import { and, eq, inArray } from "drizzle-orm";
+import type { AppContext } from "./app";
+import { budgetAlerts, customers, jobRuns, organizations, users } from "./db/schema";
+import { actionMail } from "./mail/mailer";
+import { sendCustomerReport } from "./reports/export";
+import { loadDataset } from "./routes/data";
+
+const THRESHOLDS = ["80", "95", "100"] as const;
+type Threshold = (typeof THRESHOLDS)[number];
+
+/** Local date and hour in Zurich. */
+function zurich(now: Date) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Zurich", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
+      .formatToParts(now)
+      .map((x) => [x.type, x.value]),
+  );
+  return { month: `${p.year}-${p.month}`, day: Number(p.day), hour: Number(p.hour) };
+}
+
+/** Marks a job as done for a period. Returns false if it already ran (another instance won the race). */
+async function claim(ctx: AppContext, job: string, period: string) {
+  const res = await ctx.db.insert(jobRuns).ignore().values({ job, period, ranAt: new Date() });
+  return res[0].affectedRows === 1;
+}
+
+/**
+ * From `reportDay` (default 3rd) 07:00 Zurich time, send last month's report to every customer with recipients.
+ * Each customer is sent once per month; a failed send is retried on the next run.
+ */
+export async function sendMonthlyReports(ctx: AppContext, now = new Date()) {
+  const z = zurich(now);
+  const sent: { customerId: string; month: string; to: string[] }[] = [];
+  for (const org of await ctx.db.select().from(organizations)) {
+    const reportDay = org.settings.reportDay ?? 3;
+    if (z.day < reportDay || (z.day === reportDay && z.hour < 7)) continue;
+    const month = addMonths(z.month, -1);
+    for (const c of await ctx.db.select().from(customers).where(eq(customers.organizationId, org.id))) {
+      if (c.reportRecipients.length === 0) continue;
+      const job = `monthly-report:${c.id}`;
+      if (!(await claim(ctx, job, month))) continue;
+      try {
+        const to = await sendCustomerReport(ctx, org.id, c.id, month);
+        sent.push({ customerId: c.id, month, to });
+      } catch (err) {
+        await ctx.db.delete(jobRuns).where(and(eq(jobRuns.job, job), eq(jobRuns.period, month)));
+        throw err;
+      }
+    }
+  }
+  return sent;
+}
+
+/**
+ * E-mails admins and consultants when a project's or sub-project's forecast reaches 80, 95 or 100 % of its budget.
+ * Each threshold is reported once per project/sub-project.
+ */
+export async function checkBudgetAlerts(ctx: AppContext) {
+  const alerts: { targetId: string; name: string; threshold: Threshold; forecast: number; budget: number }[] = [];
+  for (const org of await ctx.db.select().from(organizations)) {
+    const data = await loadDataset(ctx, { id: "", organizationId: org.id, name: "", username: "", email: "", role: "admin" });
+    const reports = projectReports(data, { method: "rolling", window: 3 });
+    const targets = reports.flatMap((p) => [
+      { id: p.project.id, name: `${p.customer.name} · ${p.project.name}`, budget: p.budget, forecast: p.forecastCost },
+      ...p.subs.map((s) => ({ id: s.subProject.id, name: `${p.customer.name} · ${p.project.name} · ${s.subProject.name}`, budget: s.budget, forecast: s.forecastCost })),
+    ]);
+    const known = await ctx.db.select().from(budgetAlerts).where(eq(budgetAlerts.organizationId, org.id));
+    const fresh: typeof alerts = [];
+    for (const t of targets) {
+      if (t.budget <= 0) continue;
+      const reached = THRESHOLDS.filter((th) => t.forecast >= (t.budget * Number(th)) / 100);
+      const missing = reached.filter((th) => !known.some((k) => k.targetId === t.id && k.threshold === th));
+      if (missing.length === 0) continue;
+      await ctx.db.insert(budgetAlerts).ignore().values(missing.map((threshold) => ({ organizationId: org.id, targetId: t.id, threshold, sentAt: new Date() })));
+      // One line per target, with the highest newly reached threshold.
+      fresh.push({ targetId: t.id, name: t.name, threshold: missing.at(-1)!, forecast: t.forecast, budget: t.budget });
+    }
+    if (fresh.length === 0) continue;
+    alerts.push(...fresh);
+
+    const leads = await ctx.db
+      .select()
+      .from(users)
+      .where(and(eq(users.organizationId, org.id), eq(users.active, true), inArray(users.role, ["admin", "consultant"])));
+    const lines = fresh.map((a) => `${a.name}: Forecast ${fmtCHF(a.forecast)} von ${fmtCHF(a.budget)} Budget (${Math.round((a.forecast / a.budget) * 100)} %, Schwelle ${a.threshold} %).`);
+    for (const lead of leads) {
+      await ctx.mailer.send(
+        actionMail(org.settings.branding, {
+          to: lead.email,
+          subject: `${org.settings.branding.appName}: Budget-Alarm (${fresh.length} ${fresh.length === 1 ? "Eintrag" : "Einträge"})`,
+          greeting: `Hallo ${lead.name.split(" ")[0]}`,
+          lines: ["Der Forecast hat bei folgenden Projekten eine Budgetschwelle erreicht:", ...lines],
+          action: "Reports öffnen",
+          url: new URL("/", ctx.config.APP_URL).toString(),
+          footer: "Du erhältst diese E-Mail einmal pro Schwelle (80, 95 und 100 %) und Projekt.",
+        }),
+      );
+    }
+  }
+  return alerts;
+}
+
+/** ISO week key (e.g. 2026-W42) and the Monday/Sunday of the week before `date`. */
+function previousWeek(date: string) {
+  const d = new Date(`${date}T00:00:00Z`);
+  const monday = new Date(d);
+  monday.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7) - 7);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  const thu = new Date(monday);
+  thu.setUTCDate(monday.getUTCDate() + 3);
+  const yearStart = new Date(Date.UTC(thu.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((thu.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return { key: `${thu.getUTCFullYear()}-W${String(week).padStart(2, "0")}`, from: monday.toISOString().slice(0, 10), to: sunday.toISOString().slice(0, 10) };
+}
+
+/**
+ * Monday from 09:00 Zurich: people whose previous week is more than two hours short of target get one reminder.
+ * Only for organizations with the reminder on (default) and only once per person and week.
+ */
+export async function sendHoursReminders(ctx: AppContext, now = new Date()) {
+  const z = zurich(now);
+  const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Zurich" }).format(now);
+  const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+  // Monday after 09:00, or any later weekday (catches a server that was down on Monday).
+  if (weekday === 0 || weekday === 6 || (weekday === 1 && z.hour < 9)) return [];
+  const week = previousWeek(today);
+  const sent: { userId: string; missing: number }[] = [];
+  for (const org of await ctx.db.select().from(organizations)) {
+    if (org.settings.hoursReminder === false) continue;
+    const data = await loadDataset(ctx, { id: "", organizationId: org.id, name: "", username: "", email: "", role: "admin" });
+    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, org.id), eq(users.active, true)));
+    for (const u of people) {
+      const emp = data.employees.find((e) => e.id === u.id);
+      if (!emp || (emp.trackingStart ?? "") > week.to) continue;
+      const cal = new WorkCalendar(data, emp);
+      let due = 0;
+      let worked = 0;
+      for (let d = week.from; d <= week.to; d = addDaysIso(d, 1)) {
+        due += cal.target(d) - cal.credit(d);
+        worked += cal.workedOn(d);
+      }
+      const missing = due - worked;
+      if (missing <= 2) continue;
+      if (!(await claim(ctx, `hours-reminder:${u.id}`, week.key))) continue;
+      await ctx.mailer.send(
+        actionMail(org.settings.branding, {
+          to: u.email,
+          subject: `${org.settings.branding.appName}: ${missing.toFixed(1).replace(".", ",")} Stunden fehlen für letzte Woche`,
+          greeting: `Hallo ${u.name.split(" ")[0]}`,
+          lines: [
+            `Für die Woche vom ${fmtDate(week.from)} bis ${fmtDate(week.to)} sind ${worked.toFixed(1).replace(".", ",")} von ${due.toFixed(1).replace(".", ",")} Stunden erfasst.`,
+            "Bitte trage die fehlenden Stunden nach, damit Kundenreports und dein Überzeit-Saldo stimmen. Am schnellsten geht es im Wochenraster.",
+          ],
+          action: "Wochenraster öffnen",
+          url: new URL("/#zeit", ctx.config.APP_URL).toString(),
+          footer: "Du erhältst diese Erinnerung jeweils montags, wenn mehr als zwei Stunden fehlen. Admins können sie unter Einstellungen → Arbeitszeit ausschalten.",
+        }),
+      );
+      sent.push({ userId: u.id, missing });
+    }
+  }
+  return sent;
+}
+
+const addDaysIso = (iso: string, n: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: string, err?: unknown) => void = console.error) {
+  for (const [name, job] of [
+    ["Monatsreport", () => sendMonthlyReports(ctx, now)],
+    ["Budget-Alarm", () => checkBudgetAlerts(ctx)],
+    ["Stunden-Erinnerung", () => sendHoursReminders(ctx, now)],
+  ] as const) {
+    try {
+      await job();
+    } catch (err) {
+      log(`[jobs] ${name} fehlgeschlagen`, err);
+    }
+  }
+}
+
+/** Runs the scheduled jobs every 15 minutes (first run one minute after start). */
+export function startScheduler(ctx: AppContext, log?: (msg: string, err?: unknown) => void) {
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try {
+      await runJobs(ctx, new Date(), log);
+    } finally {
+      running = false;
+    }
+  };
+  const first = setTimeout(tick, 60_000);
+  const every = setInterval(tick, 15 * 60_000);
+  return () => {
+    clearTimeout(first);
+    clearInterval(every);
+  };
+}

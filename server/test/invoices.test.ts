@@ -1,0 +1,100 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { login, setup } from "./helpers";
+
+let t: Awaited<ReturnType<typeof setup>>;
+let admin: string, lead: string, lea: string;
+let alpen: string, stadtwerke: string;
+
+beforeAll(async () => {
+  t = await setup();
+  [admin, lead, lea] = await Promise.all(["anna.keller", "marco.brunner", "lea.meier"].map(async (u) => (await login(t.app, u)).cookie));
+  const d = (await get("/api/dataset", admin)).json();
+  alpen = d.customers.find((c: { name: string }) => c.name.startsWith("Alpenbank")).id;
+  stadtwerke = d.customers.find((c: { name: string }) => c.name.startsWith("Stadtwerke")).id;
+});
+afterAll(async () => {
+  await t.app.close();
+  await t.pool.end();
+});
+
+const get = (url: string, cookie: string) => t.app.inject({ method: "GET", url, headers: { cookie } });
+const send = (method: "POST" | "PATCH" | "DELETE" | "PUT", url: string, cookie: string, payload: object = {}) =>
+  t.app.inject({ method, url, headers: { cookie }, payload });
+
+describe("billing settings", () => {
+  it("validates and normalizes the IBAN", async () => {
+    const billing = { address: { name: "Beispiel AG", street: "Weg 1", zip: "8000", city: "Zürich", country: "CH" }, iban: "ch93 0076 2011 6238 5295 7", paymentDays: 20 };
+    const res = await send("PUT", "/api/settings", admin, { billing });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().billing).toMatchObject({ iban: "CH9300762011623852957", paymentDays: 20 });
+    expect((await send("PUT", "/api/settings", admin, { billing: { ...billing, iban: "DE89370400440532013000" } })).statusCode).toBe(400);
+    expect((await send("PUT", "/api/settings", lead, { billing })).statusCode).toBe(403);
+    expect((await send("PUT", "/api/settings", admin, { vatRate: 7.7 })).statusCode).toBe(400);
+  });
+
+  it("keeps a customer's billing address", async () => {
+    expect((await get(`/api/customers/${stadtwerke}/address`, lead)).json()).toMatchObject({ name: "Stadtwerke Aarau", zip: "" });
+    const res = await send("PUT", `/api/customers/${stadtwerke}/address`, lead, { name: "Stadtwerke Aarau", street: "Obere Vorstadt 37", zip: "5000", city: "Aarau" });
+    expect(res.json()).toMatchObject({ zip: "5000", country: "CH" });
+    expect((await send("PUT", `/api/customers/${stadtwerke}/address`, lea, { name: "x", street: "", zip: "1", city: "y" })).statusCode).toBe(403);
+  });
+});
+
+describe("invoices", () => {
+  it("creates one invoice per customer and month from billable hours and approved expenses", async () => {
+    const preview = (await get(`/api/invoices/preview?customerId=${alpen}&month=2026-09`, lead)).json();
+    expect(preview.positions.length).toBeGreaterThan(0);
+    expect(preview.positions.some((p: { unit: string }) => p.unit === "h")).toBe(true);
+    const created = await send("POST", "/api/invoices", lead, { customerId: alpen, month: "2026-09" });
+    expect(created.statusCode).toBe(201);
+    const inv = created.json();
+    expect(inv).toMatchObject({ number: "2026-0001", status: "draft", month: "2026-09", vatRate: 8.1 });
+    expect(inv.net).toBeCloseTo(Math.round(preview.net * 20) / 20, 1);
+    expect(inv.gross).toBeCloseTo(inv.net + inv.vat, 1);
+    expect(inv.dueDate > inv.issueDate).toBe(true);
+    // A second draft for the same month is refused; a cancelled one does not block.
+    expect((await send("POST", "/api/invoices", lead, { customerId: alpen, month: "2026-09" })).statusCode).toBe(409);
+    const next = (await send("POST", "/api/invoices", lead, { customerId: alpen, month: "2026-08" })).json();
+    expect(next.number).toBe("2026-0002");
+    expect((await get(`/api/invoices?customerId=${alpen}`, lead)).json().invoices.map((i: { number: string }) => i.number)).toEqual(["2026-0002", "2026-0001"]);
+    expect((await get("/api/invoices", lea)).statusCode).toBe(403);
+  });
+
+  it("renders a PDF with the QR bill and sends it to the report recipients", async () => {
+    const inv = (await get(`/api/invoices?customerId=${alpen}`, lead)).json().invoices.find((i: { number: string }) => i.number === "2026-0001");
+    const pdf = await get(`/api/invoices/${inv.id}/pdf`, lead);
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers["content-type"]).toBe("application/pdf");
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(pdf.rawPayload.length).toBeGreaterThan(5000);
+    const detail = (await get(`/api/invoices/${inv.id}`, lead)).json();
+    expect(detail.snapshot.sender.iban).toBe("CH9300762011623852957");
+    expect(detail.snapshot.recipient.city).toBe("Zürich");
+
+    expect((await send("POST", `/api/invoices/${inv.id}/send`, lead)).statusCode).toBe(400); // no recipients yet
+    await send("PUT", `/api/customers/${alpen}/recipients`, lead, { recipients: ["einkauf@alpenbank.example"] });
+    t.mailer.outbox.length = 0;
+    const sent = await send("POST", `/api/invoices/${inv.id}/send`, lead);
+    expect(sent.json()).toMatchObject({ status: "sent", sentTo: ["einkauf@alpenbank.example"] });
+    const mail = t.mailer.outbox[0]!;
+    expect(mail.subject).toContain("2026-0001");
+    expect(mail.attachments?.[0]?.filename).toBe("Rechnung-2026-0001.pdf");
+
+    expect((await send("DELETE", `/api/invoices/${inv.id}`, lead)).statusCode).toBe(409);
+    expect((await send("POST", `/api/invoices/${inv.id}/status`, lead, { status: "paid" })).json().status).toBe("paid");
+    expect((await send("POST", `/api/invoices/${inv.id}/status`, lead, { status: "draft" })).statusCode).toBe(409);
+    expect((await send("POST", `/api/invoices/${inv.id}/status`, lead, { status: "cancelled" })).json().status).toBe("cancelled");
+    expect((await send("POST", `/api/invoices/${inv.id}/send`, lead)).statusCode).toBe(409);
+  });
+
+  it("deletes drafts and refuses customers without address or months without work", async () => {
+    const draft = (await get(`/api/invoices?customerId=${alpen}`, lead)).json().invoices.find((i: { status: string }) => i.status === "draft");
+    expect((await send("DELETE", `/api/invoices/${draft.id}`, lead)).statusCode).toBe(200);
+    expect((await send("POST", "/api/invoices", lead, { customerId: alpen, month: "2020-01" })).statusCode).toBe(400);
+    const d = (await get("/api/dataset", admin)).json();
+    const medtech = d.customers.find((c: { name: string }) => c.name.startsWith("Medtech")).id;
+    await send("PUT", `/api/customers/${medtech}/address`, admin, { name: "", street: "", zip: "", city: "" }).catch(() => {});
+    const noAddress = (await send("POST", "/api/customers", admin, { name: "Neu AG", hourlyRate: 100, validFrom: "2026-01-01" })).json();
+    expect((await send("POST", "/api/invoices", lead, { customerId: noAddress.id, month: "2026-09" })).statusCode).toBe(400);
+  });
+});

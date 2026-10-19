@@ -1,0 +1,1 @@
+ALTER TABLE `time_entries` ADD `start_time` varchar(5);
