@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/copy-ocr.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/copy-ocr.mjs",
     "build": "tsc -p . && vite build",
     "build:single": "tsc -p . && vite build --mode single && node scripts/to-artifact.mjs",
     "typecheck": "tsc -p ."
@@ -12,10 +14,13 @@
   "dependencies": {
     "@radix-ui/react-select": "^2.1.6",
     "@taktwerk/domain": "*",
+    "@tesseract.js-data/deu": "^1.0.0",
+    "@tesseract.js-data/eng": "^1.0.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-grid-layout": "1.5.4",
-    "recharts": "2.15.4"
+    "recharts": "2.15.4",
+    "tesseract.js": "^6.0.1"
   },
   "devDependencies": {
     "@types/react": "18.3.12",

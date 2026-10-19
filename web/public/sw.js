@@ -1,7 +1,7 @@
 /* TrackInsight service worker: app shell offline, last data as fallback. Bookings made offline are queued by the app itself. */
-const VERSION = "ti-v1";
+const VERSION = "ti-v2";
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
-const DATA_PATHS = ["/api/dataset", "/api/auth/me", "/api/closings", "/api/comments/open", "/api/branding/logo"];
+const DATA_PATHS = ["/api/dataset", "/api/auth/me", "/api/closings", "/api/comments/open", "/api/branding/logo", "/api/weeks", "/api/me/reminder"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

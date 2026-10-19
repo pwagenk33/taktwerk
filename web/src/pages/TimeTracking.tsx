@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, fmt1, fmtCHF, fmtCHF2, fmtDay, isoWeekKey, rateOn } from "@taktwerk/domain";
+import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, fmt1, fmtCHF, fmtCHF2, fmtDay, isoWeekKey, parseReceipt, rateOn } from "@taktwerk/domain";
+import { recognizeReceipt } from "../ocr";
 import type { Expense, ExpenseCategory, TimeEntry } from "@taktwerk/domain";
 import { api, type EntryComment } from "../api";
 import { loadLocal, saveLocal, useStore } from "../store";
@@ -352,8 +353,40 @@ function ExpenseForm({ compact = false, initialDate, onDone }: { compact?: boole
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
+  const scanInput = useRef<HTMLInputElement>(null);
+  const [scan, setScan] = useState<{ progress: number; step: string } | null>(null);
+  const [scanned, setScanned] = useState<string[]>([]);
+  const phone = usePhone();
   const isKm = category === "Kilometer";
   const kmAmount = Math.round(Number(km) * kmRate * 20) / 20;
+
+  /** Reads a receipt photo and fills amount, date, VAT, category and reason; every value stays editable. */
+  const readReceipt = async (f: File) => {
+    setScan({ progress: 0, step: "Texterkennung laden" });
+    setScanned([]);
+    try {
+      const { text } = await recognizeReceipt(f, (progress, step) => setScan({ progress, step }));
+      const g = parseReceipt(text, data.today);
+      const found: string[] = [];
+      if (g.amount !== undefined) { setAmount(g.amount.toFixed(2)); found.push(`Betrag ${fmtCHF2(g.amount)}`); }
+      if (g.date) { setDate(g.date); found.push(`Datum ${g.date.split("-").reverse().join(".")}`); }
+      if (g.vatRate !== undefined) { setVatRate(g.vatRate); found.push(`MwSt ${fmt1(g.vatRate)} %`); }
+      if (g.category) { setCategory(g.category); found.push(g.category); }
+      if (g.merchant && !reason.trim()) { setReason(g.merchant); found.push(`«${g.merchant}»`); }
+      setScanned(found.length ? found : ["Nichts Brauchbares erkannt, bitte von Hand ausfüllen."]);
+      setError("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setScan(null);
+    }
+  };
+  const onScanFile = (f: File | null) => {
+    if (!f) return;
+    setFile(f);
+    if (fileInput.current) fileInput.current.value = "";
+    void readReceipt(f);
+  };
 
   const save = async () => {
     const a = isKm ? kmAmount : Number(amount);
@@ -412,9 +445,15 @@ function ExpenseForm({ compact = false, initialDate, onDone }: { compact?: boole
           <span>Beleg (Foto oder PDF, max. 10 MB)</span>
           <input id="x-file" ref={fileInput} type="file" className="input" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </label>
+        <input id="x-scan-file" ref={scanInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => onScanFile(e.target.files?.[0] ?? null)} />
+        <button id="x-scan" type="button" className="btn" disabled={Boolean(scan)} title="Foto des Belegs auslesen und Betrag, Datum und MwSt vorschlagen" onClick={() => (file && file.type.startsWith("image/") ? void readReceipt(file) : scanInput.current?.click())}>
+          <Icon.camera />{scan ? scan.step : file && file.type.startsWith("image/") ? "Beleg auslesen" : phone ? "Beleg fotografieren" : "Beleg scannen"}
+        </button>
         <label className="check"><input id="x-billable" type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />An Kunden weiterverrechnen</label>
         <button className="btn primary" onClick={save}>{role === "employee" ? "Spesen einreichen" : "Spesen speichern"}</button>
       </div>
+      {scan && <div className="scan-bar" role="progressbar" aria-valuenow={Math.round(scan.progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.round(scan.progress * 100)}%` }} /></div>}
+      {scanned.length > 0 && <p id="x-scanned" className="notice" style={{ margin: 0 }}>Aus dem Beleg gelesen: {scanned.join(" · ")}. Bitte kurz prüfen.</p>}
       <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>
         {isKm ? `Kilometerpauschale ${fmtCHF2(kmRate)} pro km, ohne MwSt. ` : ""}
         {role === "employee" ? "Spesen werden von Consultants oder Admins bewilligt, bevor sie in Report und Rechnung erscheinen." : "Als Consultant oder Admin erfasste Spesen gelten als bewilligt."}
