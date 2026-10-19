@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { HttpError, requireRole, requireUser } from "../app";
 import { VAT_RATES } from "@taktwerk/domain";
-import { customers, organizations, sessions, users, type OrgSettings } from "../db/schema";
+import { customers, organizations, sessions, teams, users, type OrgSettings } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { createPasswordToken, passwordLink } from "./auth";
 import { fetchFxRates } from "../fx";
@@ -182,7 +182,7 @@ export async function adminRoutes(app: FastifyInstance) {
         name: z.string().trim().min(1).max(160),
         email: z.string().trim().toLowerCase().email(),
         username: z.string().trim().min(3).max(80).regex(/^[a-zA-Z0-9._@-]+$/, "Benutzername: Buchstaben, Ziffern, . _ - @"),
-        role: z.enum(["admin", "consultant", "employee"]),
+        role: z.enum(["admin", "consultant", "employee", "auditor"]),
         teamId: z.string().optional(),
       })
       .parse(req.body);
@@ -217,7 +217,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const admin = requireRole(req, "admin");
     const { id } = req.params as { id: string };
     const body = z
-      .object({ name: z.string().trim().min(1).max(160).optional(), role: z.enum(["admin", "consultant", "employee"]).optional(), active: z.boolean().optional(), teamId: z.string().nullable().optional(), costRate: z.number().min(0).max(1000).nullable().optional() })
+      .object({ name: z.string().trim().min(1).max(160).optional(), role: z.enum(["admin", "consultant", "employee", "auditor"]).optional(), active: z.boolean().optional(), teamId: z.string().nullable().optional(), costRate: z.number().min(0).max(1000).nullable().optional() })
       .parse(req.body);
     const [target] = await ctx.db.select().from(users).where(and(eq(users.id, id), eq(users.organizationId, admin.organizationId))).limit(1);
     if (!target) throw new HttpError(404, "Benutzer nicht gefunden.");
@@ -232,6 +232,51 @@ export async function adminRoutes(app: FastifyInstance) {
     }
     await ctx.db.update(users).set(body).where(eq(users.id, id));
     if (body.active === false) await ctx.db.delete(sessions).where(eq(sessions.userId, id));
+    return { ok: true };
+  });
+
+  // ---------- teams ----------
+
+  app.get("/api/teams", async (req) => {
+    const user = requireUser(req);
+    const rows = await ctx.db.select().from(teams).where(eq(teams.organizationId, user.organizationId));
+    return rows.map((t) => ({ id: t.id, name: t.name, leadUserId: t.leadUserId ?? null }));
+  });
+
+  const teamLead = async (orgId: string, leadUserId: string | null | undefined) => {
+    if (!leadUserId) return null;
+    const [u] = await ctx.db.select({ id: users.id, role: users.role }).from(users).where(and(eq(users.id, leadUserId), eq(users.organizationId, orgId), eq(users.active, true))).limit(1);
+    if (!u || u.role === "customer" || u.role === "auditor") throw new HttpError(404, "Person für die Teamleitung nicht gefunden.");
+    return u.id;
+  };
+
+  app.post("/api/teams", async (req, reply) => {
+    const admin = requireRole(req, "admin");
+    const body = z.object({ name: z.string().trim().min(1).max(120), leadUserId: z.string().nullable().optional() }).parse(req.body);
+    const id = randomUUID();
+    await ctx.db.insert(teams).values({ id, organizationId: admin.organizationId, name: body.name, leadUserId: await teamLead(admin.organizationId, body.leadUserId) });
+    return reply.status(201).send({ id, name: body.name, leadUserId: body.leadUserId ?? null });
+  });
+
+  app.patch("/api/teams/:id", async (req) => {
+    const admin = requireRole(req, "admin");
+    const { id } = req.params as { id: string };
+    const body = z.object({ name: z.string().trim().min(1).max(120).optional(), leadUserId: z.string().nullable().optional() }).parse(req.body);
+    const [t] = await ctx.db.select().from(teams).where(and(eq(teams.id, id), eq(teams.organizationId, admin.organizationId))).limit(1);
+    if (!t) throw new HttpError(404, "Team nicht gefunden.");
+    const next = { name: body.name ?? t.name, leadUserId: body.leadUserId === undefined ? t.leadUserId : await teamLead(admin.organizationId, body.leadUserId) };
+    await ctx.db.update(teams).set(next).where(eq(teams.id, id));
+    return { id, ...next };
+  });
+
+  /** Removes a team; its members keep their account without a team. */
+  app.delete("/api/teams/:id", async (req) => {
+    const admin = requireRole(req, "admin");
+    const { id } = req.params as { id: string };
+    const [t] = await ctx.db.select().from(teams).where(and(eq(teams.id, id), eq(teams.organizationId, admin.organizationId))).limit(1);
+    if (!t) throw new HttpError(404, "Team nicht gefunden.");
+    await ctx.db.update(users).set({ teamId: null }).where(eq(users.teamId, id));
+    await ctx.db.delete(teams).where(eq(teams.id, id));
     return { ok: true };
   });
 }

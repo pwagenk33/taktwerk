@@ -1,9 +1,9 @@
 import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, rateOn } from "@taktwerk/domain";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, notInArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { HttpError, requireRole, requireUser, type AppContext, type SessionUser } from "../app";
+import { HttpError, assertManages, isLead, managedUserIds, managesPeople, managesUser, requireRole, requireUser, type AppContext, type SessionUser } from "../app";
 import { auditLog, customerRates, customers, expenses, monthClosings, organizations, projects, subProjects, timeEntries, users } from "../db/schema";
 import { reportFile, sendCustomerReport } from "../reports/export";
 import { closingReminderMail } from "../jobs";
@@ -11,7 +11,6 @@ import { closingReminderMail } from "../jobs";
 const monthParam = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Monat im Format JJJJ-MM");
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT");
 const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Uhrzeit im Format HH:MM");
-const isLead = (u: SessionUser) => u.role === "admin" || u.role === "consultant";
 
 export async function audit(
   ctx: AppContext,
@@ -35,10 +34,11 @@ export async function monthStatus(ctx: AppContext, userId: string, month: string
  * Open: owner and leads. Submitted: only leads (corrections during review). Approved: nobody until reopened.
  */
 export async function assertBookable(ctx: AppContext, actor: SessionUser, ownerId: string, date: string) {
-  if (ownerId !== actor.id && !isLead(actor)) throw new HttpError(403, "Du kannst nur eigene Buchungen ändern.");
+  if (actor.role === "auditor") throw new HttpError(403, "Dein Zugang ist nur lesend (Treuhand).");
+  if (ownerId !== actor.id && !(await managesUser(ctx, actor, ownerId))) throw new HttpError(403, "Du kannst nur eigene Buchungen ändern.");
   const status = await monthStatus(ctx, ownerId, date.slice(0, 7));
   if (status === "approved") throw new HttpError(409, `Der Monat ${date.slice(0, 7)} ist abgeschlossen. Eine Admin-Person kann ihn wieder öffnen.`);
-  if (status === "submitted" && !isLead(actor)) throw new HttpError(409, `Der Monat ${date.slice(0, 7)} ist eingereicht. Änderungen nur noch durch die Freigabe-Person.`);
+  if (status === "submitted" && ownerId === actor.id && !isLead(actor)) throw new HttpError(409, `Der Monat ${date.slice(0, 7)} ist eingereicht. Änderungen nur noch durch die Freigabe-Person.`);
 }
 
 async function subProjectCustomer(ctx: AppContext, org: string, subProjectId: string) {
@@ -157,7 +157,7 @@ export async function billingRoutes(app: FastifyInstance) {
       .where(and(eq(auditLog.organizationId, user.organizationId), eq(auditLog.entityId, entityId)))
       .orderBy(desc(auditLog.createdAt));
     const ownerId = (rows[0]?.log.before ?? rows[0]?.log.after) as { userId?: string } | null;
-    if (!isLead(user) && ownerId?.userId && ownerId.userId !== user.id) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+    if (ownerId?.userId && !(await managesUser(ctx, user, ownerId.userId))) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
     return rows.map((r) => ({ ...r.log, actorName: r.actor }));
   });
 
@@ -167,17 +167,19 @@ export async function billingRoutes(app: FastifyInstance) {
   app.get("/api/closings", async (req) => {
     const user = requireUser(req);
     const rows = await ctx.db.select().from(monthClosings).where(eq(monthClosings.organizationId, user.organizationId));
-    return rows.filter((r) => isLead(user) || r.userId === user.id).map((r) => ({ userId: r.userId, month: r.month, status: r.status }));
+    const scope = await managedUserIds(ctx, user);
+    return rows.filter((r) => !scope || scope.has(r.userId)).map((r) => ({ userId: r.userId, month: r.month, status: r.status }));
   });
 
   /** Status of every active person for a month (leads) or only the own status (employees). */
   app.get("/api/months/:month", async (req) => {
     const user = requireUser(req);
     const month = monthParam.parse((req.params as { month: string }).month);
-    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, user.organizationId), eq(users.active, true), ne(users.role, "customer")));
+    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, user.organizationId), eq(users.active, true), notInArray(users.role, ["customer", "auditor"])));
     const closings = await ctx.db.select().from(monthClosings).where(and(eq(monthClosings.organizationId, user.organizationId), eq(monthClosings.month, month)));
+    const scope = await managedUserIds(ctx, user);
     return people
-      .filter((p) => isLead(user) || p.id === user.id)
+      .filter((p) => !scope || scope.has(p.id))
       .map((p) => {
         const c = closings.find((x) => x.userId === p.id);
         return { userId: p.id, name: p.name, status: c?.status ?? "open", submittedAt: c?.submittedAt ?? null, approvedAt: c?.approvedAt ?? null };
@@ -194,9 +196,11 @@ export async function billingRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/months/:month/approve", async (req) => {
-    const lead = requireRole(req, "admin", "consultant");
+    const lead = requireUser(req);
     const month = monthParam.parse((req.params as { month: string }).month);
     const { userId } = z.object({ userId: z.string() }).parse(req.body);
+    if (userId === lead.id && !isLead(lead)) throw new HttpError(403, "Den eigenen Monat kann nur eine vorgesetzte Person freigeben.");
+    await assertManages(ctx, lead, userId);
     const [person] = await ctx.db.select().from(users).where(and(eq(users.id, userId), eq(users.organizationId, lead.organizationId))).limit(1);
     if (!person) throw new HttpError(404, "Person nicht gefunden.");
     const status = await monthStatus(ctx, userId, month);
@@ -212,9 +216,11 @@ export async function billingRoutes(app: FastifyInstance) {
 
   /** Reject a submission (leads) or reopen an approved month (admins only). */
   app.post("/api/months/:month/reopen", async (req) => {
-    const lead = requireRole(req, "admin", "consultant");
+    const lead = requireUser(req);
     const month = monthParam.parse((req.params as { month: string }).month);
     const { userId } = z.object({ userId: z.string() }).parse(req.body);
+    if (userId === lead.id && !isLead(lead)) throw new HttpError(403, "Den eigenen Monat kann nur eine vorgesetzte Person zurückweisen.");
+    await assertManages(ctx, lead, userId);
     const status = await monthStatus(ctx, userId, month);
     if (status === null) throw new HttpError(409, "Dieser Monat ist bereits offen.");
     if (status === "approved" && lead.role !== "admin") throw new HttpError(403, "Nur Admins können einen freigegebenen Monat wieder öffnen.");
@@ -225,12 +231,16 @@ export async function billingRoutes(app: FastifyInstance) {
 
   /** Leads: approve every submitted month of the organization in one go. */
   app.post("/api/months/:month/approve-all", async (req) => {
-    const lead = requireRole(req, "admin", "consultant");
+    const lead = requireUser(req);
+    if (!managesPeople(lead)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
     const month = monthParam.parse((req.params as { month: string }).month);
-    const rows = await ctx.db
-      .select()
-      .from(monthClosings)
-      .where(and(eq(monthClosings.organizationId, lead.organizationId), eq(monthClosings.month, month), eq(monthClosings.status, "submitted")));
+    const scope = await managedUserIds(ctx, lead);
+    const rows = (
+      await ctx.db
+        .select()
+        .from(monthClosings)
+        .where(and(eq(monthClosings.organizationId, lead.organizationId), eq(monthClosings.month, month), eq(monthClosings.status, "submitted")))
+    ).filter((r) => (!scope || scope.has(r.userId)) && (r.userId !== lead.id || isLead(lead)));
     for (const r of rows) {
       await ctx.db.update(monthClosings).set({ status: "approved", approvedBy: lead.id, approvedAt: new Date() }).where(and(eq(monthClosings.userId, r.userId), eq(monthClosings.month, month), eq(monthClosings.organizationId, lead.organizationId)));
       await audit(ctx, lead, "month", `${r.userId}:${month}`, "approve", { status: "submitted" }, { status: "approved" });
@@ -240,9 +250,11 @@ export async function billingRoutes(app: FastifyInstance) {
 
   /** Leads: send the «please submit» mail to one person right now. */
   app.post("/api/months/:month/remind", async (req) => {
-    const lead = requireRole(req, "admin", "consultant");
+    const lead = requireUser(req);
     const month = monthParam.parse((req.params as { month: string }).month);
     const { userId } = z.object({ userId: z.string() }).parse(req.body);
+    if (userId === lead.id && !isLead(lead)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+    await assertManages(ctx, lead, userId);
     const [person] = await ctx.db.select().from(users).where(and(eq(users.id, userId), eq(users.organizationId, lead.organizationId))).limit(1);
     if (!person) throw new HttpError(404, "Person nicht gefunden.");
     if ((await monthStatus(ctx, userId, month)) !== null) throw new HttpError(409, "Dieser Monat ist bereits eingereicht.");

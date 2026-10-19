@@ -1,5 +1,5 @@
 import { WorkCalendar, addMonths, fmtCHF, fmtDate, fmtMonthLong, projectReports } from "@taktwerk/domain";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, notInArray } from "drizzle-orm";
 import type { AppContext } from "./app";
 import { budgetAlerts, customers, jobRuns, monthClosings, organizations, users, type OrgSettings, type ReminderSettings } from "./db/schema";
 import type { ChatMessage } from "./notify/webhooks";
@@ -133,7 +133,7 @@ export async function sendHoursReminders(ctx: AppContext, now = new Date()) {
   for (const org of await ctx.db.select().from(organizations)) {
     if (org.settings.hoursReminder === false) continue;
     const data = await loadDataset(ctx, { id: "", organizationId: org.id, name: "", username: "", email: "", role: "admin" });
-    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, org.id), eq(users.active, true), ne(users.role, "customer")));
+    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, org.id), eq(users.active, true), notInArray(users.role, ["customer", "auditor"])));
     for (const u of people) {
       const emp = data.employees.find((e) => e.id === u.id);
       if (!emp || (emp.trackingStart ?? "") > week.to) continue;
@@ -194,7 +194,7 @@ export async function sendClosingReminders(ctx: AppContext, now = new Date()) {
   const sent: { kind: "person" | "digest"; to: string; month: string }[] = [];
   for (const org of await ctx.db.select().from(organizations)) {
     if (org.settings.closingReminder === false) continue;
-    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, org.id), eq(users.active, true), ne(users.role, "customer")));
+    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, org.id), eq(users.active, true), notInArray(users.role, ["customer", "auditor"])));
     const rows = await ctx.db.select().from(monthClosings).where(and(eq(monthClosings.organizationId, org.id), eq(monthClosings.month, month)));
     const data = await loadDataset(ctx, { id: "", organizationId: org.id, name: "", username: "", email: "", role: "admin" });
     const status = (id: string) => rows.find((r) => r.userId === id)?.status ?? "open";
@@ -295,7 +295,7 @@ export async function sendDailyReminders(ctx: AppContext, now = new Date()) {
   const z = zurichClock(now);
   const sent: { userId: string; channel: string }[] = [];
   for (const org of await ctx.db.select().from(organizations)) {
-    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, org.id), eq(users.active, true), ne(users.role, "customer")));
+    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, org.id), eq(users.active, true), notInArray(users.role, ["customer", "auditor"])));
     const due = people.filter((u) => u.reminder && u.reminder.channel !== "off" && u.reminder.days.includes(z.weekday) && u.reminder.time <= z.time);
     if (due.length === 0) continue;
     const data = await loadDataset(ctx, { id: "", organizationId: org.id, name: "", username: "", email: "", role: "admin" });

@@ -14,14 +14,13 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { HttpError, requireRole, requireUser, type AppContext, type SessionUser } from "../app";
+import { HttpError, assertManages, isLead, managesUser, requireRole, requireUser, type AppContext, type SessionUser } from "../app";
 import { absences, organizations, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { assertBookable, audit } from "./billing";
 import { todayZurich } from "./data";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT");
-const isLead = (u: SessionUser) => u.role === "admin" || u.role === "consultant";
 
 type AbsenceRow = typeof absences.$inferSelect;
 const toDomain = (a: AbsenceRow): Absence => ({
@@ -81,7 +80,7 @@ export async function worktimeRoutes(app: FastifyInstance) {
       })
       .parse(req.body);
     const ownerId = body.employeeId ?? user.id;
-    if (ownerId !== user.id && !isLead(user)) throw new HttpError(403, "Du kannst nur eigene Absenzen erfassen.");
+    if (ownerId !== user.id && !(await managesUser(ctx, user, ownerId))) throw new HttpError(403, "Du kannst nur eigene Absenzen erfassen.");
     const [owner] = await ctx.db.select().from(users).where(and(eq(users.id, ownerId), eq(users.organizationId, user.organizationId))).limit(1);
     if (!owner) throw new HttpError(404, "Person nicht gefunden.");
     await assertAbsenceEditable(ctx, user, ownerId, body);
@@ -91,7 +90,9 @@ export async function worktimeRoutes(app: FastifyInstance) {
     if (problem) throw new HttpError(400, problem);
 
     // Leads record absences directly; employees request vacation, compensation, training and «other».
-    const status = isLead(user) || !NEEDS_APPROVAL.includes(body.type) ? "approved" : "requested";
+    // Leads and team leads (for their members) approve directly; own requests of a team lead still need a decision.
+    const direct = isLead(user) || (ownerId !== user.id && (await managesUser(ctx, user, ownerId)));
+    const status = direct || !NEEDS_APPROVAL.includes(body.type) ? "approved" : "requested";
     const row = {
       id: randomUUID(),
       organizationId: user.organizationId,
@@ -133,11 +134,13 @@ export async function worktimeRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/absences/:id/decide", async (req) => {
-    const lead = requireRole(req, "admin", "consultant");
+    const lead = requireUser(req);
     const { id } = req.params as { id: string };
     const { approve } = z.object({ approve: z.boolean() }).parse(req.body);
     const [row] = await ctx.db.select().from(absences).where(and(eq(absences.id, id), eq(absences.organizationId, lead.organizationId))).limit(1);
     if (!row) throw new HttpError(404, "Absenz nicht gefunden.");
+    if (row.userId === lead.id && !isLead(lead)) throw new HttpError(403, "Über den eigenen Antrag entscheidet die vorgesetzte Person.");
+    await assertManages(ctx, lead, row.userId);
     if (row.status !== "requested") throw new HttpError(409, "Über diesen Antrag wurde bereits entschieden.");
     await assertAbsenceEditable(ctx, lead, row.userId, row);
     const status = approve ? "approved" : "rejected";
@@ -169,8 +172,8 @@ export async function worktimeRoutes(app: FastifyInstance) {
     const [row] = await ctx.db.select().from(absences).where(and(eq(absences.id, id), eq(absences.organizationId, user.organizationId))).limit(1);
     if (!row) throw new HttpError(404, "Absenz nicht gefunden.");
     if (!isLead(user)) {
-      if (row.userId !== user.id) throw new HttpError(403, "Du kannst nur eigene Absenzen löschen.");
-      if (row.status === "approved") throw new HttpError(409, "Eine bewilligte Absenz kann nur eine Admin-Person oder ein Consultant entfernen.");
+      if (row.userId !== user.id && !(await managesUser(ctx, user, row.userId))) throw new HttpError(403, "Du kannst nur eigene Absenzen löschen.");
+      if (row.status === "approved" && row.userId === user.id) throw new HttpError(409, "Eine bewilligte Absenz kann nur die vorgesetzte Person entfernen.");
     }
     await assertAbsenceEditable(ctx, user, row.userId, row);
     await ctx.db.delete(absences).where(eq(absences.id, id));

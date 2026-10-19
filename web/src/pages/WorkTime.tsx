@@ -105,8 +105,8 @@ export function WorkTiles({ employee }: { employee: Employee }) {
 const workModelHours = (data: { workModel?: { weeklyHours: number } }) => data.workModel?.weeklyHours ?? 42;
 
 function AbsenceForm() {
-  const { data, role, currentUserId, addAbsence, notify } = useStore();
-  const lead = role !== "employee";
+  const { data, scope, currentUserId, addAbsence, notify } = useStore();
+  const lead = scope.managesPeople;
   const [employeeId, setEmployeeId] = useState(currentUserId);
   const [type, setType] = useState<AbsenceType>("Ferien");
   const [startDate, setStart] = useState(addDays(data.today, 1));
@@ -161,14 +161,14 @@ function AbsenceForm() {
 }
 
 function MyAbsences({ employee }: { employee: Employee }) {
-  const { data, role, deleteAbsence, lockOf } = useStore();
+  const { data, scope, deleteAbsence, lockOf } = useStore();
   const { error, run } = useRun();
   const [confirm, setConfirm] = useState<string | null>(null);
   const year = data.today.slice(0, 4);
   const rows = (data.absences ?? [])
     .filter((a) => a.employeeId === employee.id && a.endDate >= `${year}-01-01`)
     .sort((a, b) => b.startDate.localeCompare(a.startDate));
-  const canDelete = (a: Absence) => !lockOf(a.employeeId, a.startDate) && (role !== "employee" || a.status !== "approved");
+  const canDelete = (a: Absence) => !lockOf(a.employeeId, a.startDate) && (scope.lead || a.status !== "approved");
 
   return (
     <section className="card" style={{ display: "flex", flexDirection: "column" }}>
@@ -194,7 +194,7 @@ function MyAbsences({ employee }: { employee: Employee }) {
               ) : canDelete(a) ? (
                 <button className="icon-btn" title={a.status === "requested" ? "Antrag zurückziehen" : "Löschen"} aria-label="Löschen" onClick={() => setConfirm(a.id)}><Icon.trash /></button>
               ) : (
-                <span className="lock" title={a.status === "approved" && role === "employee" ? "Bewilligt. Für Änderungen bitte an die Teamleitung wenden." : "Monat abgeschlossen"}><Icon.lock /></span>
+                <span className="lock" title={a.status === "approved" && !scope.lead ? "Bewilligt. Für Änderungen bitte an die Teamleitung wenden." : "Monat abgeschlossen"}><Icon.lock /></span>
               )}
             </div>
           </li>
@@ -383,9 +383,9 @@ function TeamCalendar() {
 }
 
 export function WorkTime() {
-  const { data, role, currentUserId } = useStore();
+  const { data, currentUserId, scope } = useStore();
   const me = data.employees.find((e) => e.id === currentUserId);
-  const lead = role !== "employee";
+  const lead = scope.managesPeople;
   return (
     <>
       <div className="page-head">

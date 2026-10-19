@@ -8,10 +8,26 @@ import { BurnUpChart, Icon, Money, StatusPill } from "../ui/components";
 /** Name, budget and JIRA key of a project or sub-project, editable in place by leads. */
 export interface HeadPatch { name: string; budget: number; jira: string; kind?: ProjectKind; retainerHours?: number }
 
+/** Who leads the project: admins and consultants pick an employee, everyone else sees the name. */
+function ProjectLead({ project, canSet, onChange }: { project: Project; canSet: boolean; onChange: (leadUserId: string | undefined) => Promise<void> }) {
+  const { data } = useStore();
+  const people = data.employees.filter((e) => e.role !== "customer" && e.role !== "auditor");
+  const lead = people.find((e) => e.id === project.leadUserId);
+  if (!canSet) return lead ? <p className="muted" style={{ fontSize: "0.82rem", margin: "6px 0 0" }}>Projektleitung {lead.name}</p> : null;
+  return (
+    <div className="tree-row" style={{ gap: 8, marginTop: 10, alignItems: "center" }}>
+      <span className="muted" style={{ fontSize: "0.82rem" }}>Projektleitung</span>
+      <Select id="p-lead" small ariaLabel="Projektleitung" value={project.leadUserId ?? ""} placeholder="Keine" onChange={(v) => void onChange(v || undefined)} options={[{ value: "", label: "Keine" }, ...people.map((e) => ({ value: e.id, label: e.name }))]} />
+      <span className="muted" style={{ fontSize: "0.78rem" }}>Sieht Budget und Buchungen dieses Projekts und plant es, ohne Consultant zu sein.</span>
+    </div>
+  );
+}
+
 const kindLabel = (k: ProjectKind | undefined) => PROJECT_KINDS.find((x) => x.id === (k ?? "tm"))!.label;
 
 function EditableHead({ item, kind, currency = "CHF", onSave }: { item: Project | SubProject; kind: "project" | "sub"; currency?: Currency; onSave: (p: HeadPatch) => Promise<void> }) {
-  const { role } = useStore();
+  const { scope } = useStore();
+  const projectId = kind === "project" ? item.id : (item as SubProject).projectId;
   const jiraKey = kind === "project" ? (item as Project).jiraProjectKey : (item as SubProject).jiraEpicKey;
   const project = kind === "project" ? (item as Project) : null;
   const [edit, setEdit] = useState(false);
@@ -42,7 +58,7 @@ function EditableHead({ item, kind, currency = "CHF", onSave }: { item: Project 
           {project && <span className="pill neutral" style={{ marginLeft: 6 }}>{kindLabel(project.kind)}{project.kind === "retainer" && project.retainerHours ? ` · ${fmtNum(project.retainerHours)} h/Monat` : ""}</span>}
           <div className="muted num" style={{ fontSize: "0.82rem" }}>{project?.kind === "fixed" ? "Fixpreis" : "Budget"} {fmtMoney(item.budget, currency)}</div>
         </div>
-        {role !== "employee" && <button className="btn small" onClick={() => setEdit(true)}>Bearbeiten</button>}
+        {scope.leadsProject(projectId) && !scope.readOnly && <button className="btn small" onClick={() => setEdit(true)}>Bearbeiten</button>}
       </div>
     );
   }
@@ -128,7 +144,7 @@ function ScenarioCard({ report, currency }: { report: ProjectReport; currency: C
 
 /** One project: figures, sub-projects with their JIRA issues, budgets editable. */
 function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () => void }) {
-  const { data, reports, updateProject, updateSubProject, notify } = useStore();
+  const { data, reports, updateProject, updateSubProject, notify, scope } = useStore();
   const [open, setOpen] = useState<string | null>(null);
   const project = data.projects.find((p) => p.id === projectId)!;
   const customer = data.customers.find((c) => c.id === project.customerId);
@@ -154,6 +170,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
       <section className="card card-pad" style={{ marginBottom: 16 }}>
         <EditableHead item={project} kind="project" currency={cur} onSave={async (p) => { await updateProject(project.id, { name: p.name, budget: p.budget, jiraProjectKey: p.jira || undefined, kind: p.kind, retainerHours: p.retainerHours }); notify("Projekt gespeichert"); }} />
         <p className="muted num" style={{ fontSize: "0.82rem", margin: "8px 0 0" }}>Auf Subprojekte verteilt {m(allocated)} · Reserve <Money v={project.budget - allocated} signed={project.budget - allocated < 0} currency={cur} /></p>
+        <ProjectLead project={project} canSet={scope.lead && !scope.readOnly} onChange={async (leadUserId) => { await updateProject(project.id, { leadUserId }); notify(leadUserId ? "Projektleitung gesetzt" : "Projektleitung entfernt"); }} />
       </section>
       {r?.retainer && (
         <div className="tiles">
@@ -381,7 +398,7 @@ function CustomerList({ onOpen }: { onOpen: (id: string) => void }) {
 
 /** One customer: rate, figures and the project tree with sub-projects. */
 function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Customer; onBack: () => void; onOpenProject: (id: string) => void }) {
-  const { data, reports, role, updateCustomer, notify } = useStore();
+  const { data, reports, scope, updateCustomer, notify } = useStore();
   const cur = currencyOf(customer);
   const m = (v: number) => fmtMoney(v, cur);
   const [draft, setDraft] = useState<Draft>(null);
@@ -409,7 +426,7 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
           </p>
         </div>
         <div className="toolbar">
-          {role !== "employee" && (
+          {scope.lead && (
             <Select id="c-currency" small ariaLabel="Währung" value={cur} onChange={async (v) => { await updateCustomer(customer.id, { currency: v as Currency }); notify(`Währung auf ${v} gestellt`); }} options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
           )}
           <button className="btn primary" onClick={() => setDraft({ kind: "project", customerId: customer.id })}>+ Projekt</button>
@@ -464,7 +481,7 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
           );
         })}
       </section>
-      {role !== "employee" && <PortalAccess customerId={customer.id} />}
+      {scope.lead && <PortalAccess customerId={customer.id} />}
     </>
   );
 }

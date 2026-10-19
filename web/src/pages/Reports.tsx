@@ -293,9 +293,9 @@ const marginCls = (v: number | null) => (v === null ? "" : v < 0 ? "neg" : v < 0
 
 /** Leads: revenue against internal cost per project and customer, everything converted to CHF. */
 function ProfitSection({ customerId }: { customerId: string }) {
-  const { profit, data, role } = useStore();
+  const { profit, data, scope } = useStore();
   const [by, setBy] = useState<"projects" | "customers">(customerId ? "projects" : "customers");
-  if (role === "employee") return null;
+  if (!scope.seesAll) return null;
   const rows: ProfitRow[] = (by === "projects" ? profit.projects : profit.customers).filter((r) => !customerId || r.customerId === customerId);
   const sum = rows.reduce((t, r) => ({ hours: t.hours + r.hours, revenue: t.revenue + r.revenue, cost: t.cost + r.cost, margin: t.margin + r.margin }), { hours: 0, revenue: 0, cost: 0, margin: 0 });
   const estimated = rows.some((r) => r.estimated);
@@ -361,12 +361,14 @@ function ProfitSection({ customerId }: { customerId: string }) {
 }
 
 export function Reports() {
-  const { data, reports, factor, velocitySettings, role } = useStore();
-  const [customerId, setCustomerId] = useState(data.customers[0]?.id ?? "");
+  const { data, reports, factor, velocitySettings, scope } = useStore();
+  // Project leads only see the customers of the projects they lead.
+  const customers = data.customers.filter((c) => scope.seesAll || data.projects.some((p) => p.customerId === c.id && scope.leadsProject(p.id)));
+  const [customerId, setCustomerId] = useState(customers[0]?.id ?? "");
   const [open, setOpen] = useState<Set<string>>(() => new Set(reports.filter((r) => r.customer.id === customerId).map((r) => r.project.id)));
   const [selected, setSelected] = useState<string | null>(null);
 
-  const rows = reports.filter((r) => !customerId || r.customer.id === customerId);
+  const rows = reports.filter((r) => (!customerId || r.customer.id === customerId) && (scope.seesAll || scope.leadsProject(r.project.id)));
   const sum = (k: keyof Figures) => rows.reduce((s, r) => s + (r[k] as number), 0);
   const total = { budget: sum("budget"), actual: sum("actualCost"), forecast: sum("forecastCost") };
   const chart = rows.find((r) => r.project.id === selected) ?? rows[0];
@@ -395,13 +397,13 @@ export function Reports() {
             id="r-customer"
             value={customerId}
             onChange={(v) => { setCustomerId(v); setSelected(null); setOpen(new Set(reports.filter((r) => r.customer.id === v).map((r) => r.project.id))); }}
-            options={[{ value: "", label: "Alle Kunden" }, ...data.customers.map((c) => ({ value: c.id, label: c.name }))]}
+            options={[{ value: "", label: "Alle Kunden" }, ...customers.map((c) => ({ value: c.id, label: c.name }))]}
           />
         </label>
       </div>
 
-      {customerId && <ReportExport customerId={customerId} />}
-      {customerId && role !== "employee" && <Invoices customerId={customerId} />}
+      {customerId && scope.lead && <ReportExport customerId={customerId} />}
+      {customerId && scope.lead && <Invoices customerId={customerId} />}
 
       <div className="tiles">
         <div className="card tile"><span className="label">Gesamtbudget</span><span className="value num">{m(total.budget)}</span>{!customerId && data.customers.some((c) => currencyOf(c) !== "CHF") && <span className="delta">Fremdwährungen nominal addiert</span>}</div>

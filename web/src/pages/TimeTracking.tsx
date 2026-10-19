@@ -340,7 +340,7 @@ function TimeForm() {
 }
 
 function ExpenseForm({ compact = false, initialDate, onDone }: { compact?: boolean; initialDate?: string; onDone?: () => void } = {}) {
-  const { data, addExpenseWithReceipt, currentUserId, notify, mode, role } = useStore();
+  const { data, addExpenseWithReceipt, currentUserId, notify, mode, scope } = useStore();
   const target = useTarget();
   const kmRate = data.rates?.kmRate ?? DEFAULT_RATES.kmRate;
   const [date, setDate] = useState(initialDate ?? data.today);
@@ -407,7 +407,7 @@ function ExpenseForm({ compact = false, initialDate, onDone }: { compact?: boole
     setReason("");
     setFile(null);
     if (fileInput.current) fileInput.current.value = "";
-    notify(role === "employee" ? `Spesen über ${fmtCHF2(a)} eingereicht` : `Spesen über ${fmtCHF2(a)} erfasst`);
+    notify(!scope.lead ? `Spesen über ${fmtCHF2(a)} eingereicht` : `Spesen über ${fmtCHF2(a)} erfasst`);
     onDone?.();
   };
 
@@ -450,13 +450,13 @@ function ExpenseForm({ compact = false, initialDate, onDone }: { compact?: boole
           <Icon.camera />{scan ? scan.step : file && file.type.startsWith("image/") ? "Beleg auslesen" : phone ? "Beleg fotografieren" : "Beleg scannen"}
         </button>
         <label className="check"><input id="x-billable" type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />An Kunden weiterverrechnen</label>
-        <button className="btn primary" onClick={save}>{role === "employee" ? "Spesen einreichen" : "Spesen speichern"}</button>
+        <button className="btn primary" onClick={save}>{!scope.lead ? "Spesen einreichen" : "Spesen speichern"}</button>
       </div>
       {scan && <div className="scan-bar" role="progressbar" aria-valuenow={Math.round(scan.progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.round(scan.progress * 100)}%` }} /></div>}
       {scanned.length > 0 && <p id="x-scanned" className="notice" style={{ margin: 0 }}>Aus dem Beleg gelesen: {scanned.join(" · ")}. Bitte kurz prüfen.</p>}
       <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>
         {isKm ? `Kilometerpauschale ${fmtCHF2(kmRate)} pro km, ohne MwSt. ` : ""}
-        {role === "employee" ? "Spesen werden von Consultants oder Admins bewilligt, bevor sie in Report und Rechnung erscheinen." : "Als Consultant oder Admin erfasste Spesen gelten als bewilligt."}
+        {!scope.lead ? "Spesen werden von Consultants oder Admins bewilligt, bevor sie in Report und Rechnung erscheinen." : "Als Consultant oder Admin erfasste Spesen gelten als bewilligt."}
         {mode === "demo" && file ? " Im Prototyp bleibt der Beleg nur im Browser." : ""}
       </p>
       {error && <p className="error">{error}</p>}
@@ -572,7 +572,7 @@ type EntryProps =
 
 /** One booking in the list, with inline edit, delete and change history. */
 function EntryRow(props: EntryProps) {
-  const { lockOf, updateTimeEntry, deleteTimeEntry, updateExpense, deleteExpense, uploadReceipt, deleteReceipt, resubmitExpense, notify, mode, currentUserId, role } = useStore();
+  const { lockOf, updateTimeEntry, deleteTimeEntry, updateExpense, deleteExpense, uploadReceipt, deleteReceipt, resubmitExpense, notify, mode, currentUserId, scope } = useStore();
   const { item, kind } = props;
   const expense = kind === "expense" ? props.item : null;
   const status = expense ? expense.status ?? "approved" : null;
@@ -677,7 +677,7 @@ function EntryRow(props: EntryProps) {
             <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <label className="check"><input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />Verrechenbar</label>
               {expense?.receipt && <button className="btn small ghost" onClick={() => run(() => deleteReceipt(expense.id), "Beleg entfernt")}>Beleg entfernen</button>}
-              {expense && status === "rejected" && (expense.employeeId === currentUserId || role !== "employee") && (
+              {expense && status === "rejected" && (expense.employeeId === currentUserId || scope.lead) && (
                 <button className="btn small" onClick={() => run(() => resubmitExpense(expense.id), "Spese erneut eingereicht")}>Erneut einreichen</button>
               )}
             </div>
@@ -744,13 +744,13 @@ function layoutDay(entries: TimeEntry[]): Placed[] {
 
 /** Thread of comments under a booking; leads can ask a question that stays open until the owner answers. */
 function Comments({ entry }: { entry: TimeEntry }) {
-  const { comments, addComment, currentUserId, role, notify } = useStore();
+  const { comments, addComment, currentUserId, scope, notify } = useStore();
   const [rows, setRows] = useState<EntryComment[] | null>(null);
   const [text, setText] = useState("");
   const [question, setQuestion] = useState(false);
   const [error, setError] = useState("");
   const owner = entry.employeeId === currentUserId;
-  const canAsk = !owner && role !== "employee";
+  const canAsk = !owner && scope.managesPeople;
   const load = () => comments(entry.id).then(setRows).catch((e) => setError((e as Error).message));
   useEffect(() => { void load(); }, [entry.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = rows?.some((c) => c.kind === "question" && !c.resolvedAt) ?? false;

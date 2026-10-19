@@ -12,7 +12,65 @@ const PRESETS = [
   { name: "Gletscherblau", color: "#1E5F99" },
   { name: "Anthrazit", color: "#2E3136" },
 ];
-const ROLE_LABEL: Record<Role, string> = { admin: "Admin", consultant: "Consultant", employee: "Mitarbeitende", customer: "Kunde (Portal)" };
+const ROLE_LABEL: Record<Role, string> = { admin: "Admin", consultant: "Consultant", employee: "Mitarbeitende", auditor: "Treuhand (nur lesen)", customer: "Kunde (Portal)" };
+const ROLE_HINT = "Admin und Consultant sehen alles. Mitarbeitende sehen nur Eigenes, ausser sie leiten ein Projekt oder ein Team. Treuhand sieht alles, ändert nichts.";
+
+/** Teams with their leads; members are assigned in the user table. */
+function Teams({ users, onChanged }: { users: UserRow[] | null; onChanged: () => void }) {
+  const { data, mode, notify } = useStore();
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const people = (users ?? []).filter((u) => u.active && u.role !== "customer" && u.role !== "auditor");
+  const teams = data.teams;
+  const members = (teamId: string) => (users ?? []).filter((u) => u.teamId === teamId).length;
+  const run = (f: () => Promise<unknown>, msg: string) =>
+    f()
+      .then(() => { setError(""); notify(msg); onChanged(); })
+      .catch((e: Error) => setError(e.message));
+  const add = () => {
+    if (!name.trim()) return;
+    void run(() => api("/api/teams", { body: { name: name.trim() } }), `Team ${name.trim()} angelegt`).then(() => setName(""));
+  };
+  return (
+    <section className="card card-pad" id="teams" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div>
+        <h3>Teams und Teamleitung</h3>
+        <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>Die Teamleitung bewilligt Absenzen, schliesst Monate ab und sieht die Wochen ihres Teams. Projektleitung vergibst du auf der Projektseite.</p>
+      </div>
+      {mode === "demo" ? (
+        <ul className="muted" style={{ margin: 0, paddingLeft: 18 }}>
+          {teams.map((t) => <li key={t.id}>{t.name} · Leitung {data.employees.find((e) => e.id === t.leadUserId)?.name ?? "keine"}</li>)}
+        </ul>
+      ) : (
+        <>
+          <div className="table-wrap">
+            <table className="data">
+              <thead><tr><th>Team</th><th>Teamleitung</th><th className="r">Personen</th><th /></tr></thead>
+              <tbody>
+                {teams.map((t) => (
+                  <tr key={t.id}>
+                    <td>{t.name}</td>
+                    <td>
+                      <Select small ariaLabel={`Teamleitung von ${t.name}`} value={t.leadUserId ?? ""} placeholder="Keine" onChange={(v) => void run(() => api(`/api/teams/${t.id}`, { method: "PATCH", body: { leadUserId: v || null } }), "Teamleitung gespeichert")} options={[{ value: "", label: "Keine" }, ...people.map((u) => ({ value: u.id, label: u.name }))]} />
+                    </td>
+                    <td className="r num">{members(t.id)}</td>
+                    <td className="r"><button className="btn small ghost" onClick={() => { if (confirm(`Team ${t.name} löschen? Die Personen bleiben ohne Team.`)) void run(() => api(`/api/teams/${t.id}`, { method: "DELETE" }), "Team gelöscht"); }}>Löschen</button></td>
+                  </tr>
+                ))}
+                {teams.length === 0 && <tr><td colSpan={4} className="muted">Noch keine Teams.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div className="toolbar">
+            <input id="team-name" className="input" placeholder="Neues Team, z. B. Beratung" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} style={{ maxWidth: 280 }} />
+            <button id="team-add" className="btn" onClick={add}>Team anlegen</button>
+          </div>
+        </>
+      )}
+      {error && <p className="error">{error}</p>}
+    </section>
+  );
+}
 
 function Appearance() {
   const { branding, setBranding, setLogo, notify } = useStore();
@@ -101,7 +159,7 @@ function Appearance() {
 }
 
 function Users() {
-  const { mode, notify } = useStore();
+  const { mode, notify, data, reload: reloadData } = useStore();
   const [rows, setRows] = useState<UserRow[] | null>(null);
   const [form, setForm] = useState({ name: "", email: "", username: "", role: "employee" as Role });
   const [error, setError] = useState("");
@@ -110,7 +168,13 @@ function Users() {
     if (mode === "api") reload();
   }, [mode]);
 
-  if (mode === "demo") return <p className="notice">Im Prototyp gibt es keine Benutzerverwaltung. In der installierten Version lädst du hier Personen per E-Mail ein und vergibst Rollen.</p>;
+  if (mode === "demo")
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <p className="notice">Im Prototyp gibt es keine Benutzerverwaltung. In der installierten Version lädst du hier Personen per E-Mail ein und vergibst Rollen. {ROLE_HINT}</p>
+        <Teams users={null} onChanged={() => undefined} />
+      </div>
+    );
 
   const invite = async () => {
     try {
@@ -150,7 +214,7 @@ function Users() {
       <section className="card">
         <div className="table-wrap">
           <table className="data">
-            <thead><tr><th>Name</th><th>Benutzername</th><th>E-Mail</th><th>Rolle</th><th className="r">Kostensatz CHF/h</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>Name</th><th>Benutzername</th><th>E-Mail</th><th>Rolle</th><th>Team</th><th className="r">Kostensatz CHF/h</th><th>Status</th><th /></tr></thead>
             <tbody>
               {rows?.map((u) => (
                 <tr key={u.id}>
@@ -159,6 +223,9 @@ function Users() {
                   <td>{u.email}</td>
                   <td>
                     <Select small ariaLabel={`Rolle von ${u.name}`} value={u.role} onChange={(v) => patch(u.id, { role: v })} options={(Object.keys(ROLE_LABEL) as Role[]).filter((r) => r !== "customer").map((r) => ({ value: r, label: ROLE_LABEL[r] }))} />
+                  </td>
+                  <td>
+                    <Select small ariaLabel={`Team von ${u.name}`} value={u.teamId ?? ""} placeholder="Kein Team" onChange={(v) => patch(u.id, { teamId: v || null })} options={[{ value: "", label: "Kein Team" }, ...data.teams.map((t) => ({ value: t.id, label: t.name }))]} />
                   </td>
                   <td className="r">
                     <input className="input num" type="number" min={0} step={5} style={{ width: 90, textAlign: "right" }} aria-label={`Kostensatz von ${u.name}`} placeholder="Standard" defaultValue={u.costRate ?? ""} onBlur={(e) => { const v = e.target.value.trim(); const next = v === "" ? null : Number(v); if ((u.costRate ?? null) !== next) patch(u.id, { costRate: next }); }} />
@@ -174,6 +241,8 @@ function Users() {
           </table>
         </div>
       </section>
+      <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>{ROLE_HINT}</p>
+      <Teams users={rows} onChanged={() => { reload(); void reloadData(); }} />
     </div>
   );
 }

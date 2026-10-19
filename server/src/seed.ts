@@ -69,7 +69,7 @@ export async function seedSample(db: Db, password: string) {
       },
     },
   });
-  await db.insert(teams).values(data.teams.map((t) => ({ id: idFor(t.id), organizationId: orgId, name: t.name })));
+  await db.insert(teams).values(data.teams.map((t) => ({ id: idFor(t.id), organizationId: orgId, name: t.name, leadUserId: t.leadUserId ? idFor(t.leadUserId) : null })));
   await db.insert(users).values(
     data.employees.map((e) => ({
       id: idFor(e.id),
@@ -102,7 +102,7 @@ export async function seedSample(db: Db, password: string) {
     role: "customer", passwordHash: hash,
   });
   await db.insert(customerRates).values(data.customers.flatMap((c) => c.rates.map((r) => ({ customerId: idFor(c.id), ...r }))));
-  await db.insert(projects).values(data.projects.map((p) => ({ id: idFor(p.id), organizationId: orgId, customerId: idFor(p.customerId), name: p.name, budget: p.budget, jiraProjectKey: p.jiraProjectKey })));
+  await db.insert(projects).values(data.projects.map((p) => ({ id: idFor(p.id), organizationId: orgId, customerId: idFor(p.customerId), name: p.name, budget: p.budget, jiraProjectKey: p.jiraProjectKey, leadUserId: p.leadUserId ? idFor(p.leadUserId) : null })));
   await db.insert(subProjects).values(data.subProjects.map((s) => ({ id: idFor(s.id), organizationId: orgId, projectId: idFor(s.projectId), name: s.name, budget: s.budget, jiraEpicKey: s.jiraEpicKey })));
   await db.insert(jiraIssues).values(data.issues.map((i) => ({ organizationId: orgId, key: i.key, subProjectId: idFor(i.subProjectId), summary: i.summary, storyPoints: i.storyPoints, status: i.status, resolvedAt: i.resolvedAt ?? null })));
   for (let i = 0; i < data.timeEntries.length; i += 500) {

@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { HttpError, requireRole } from "../app";
+import { HttpError, leadsProject, requireUser } from "../app";
 import { allocations, projects, users } from "../db/schema";
 
 const weekKey = z.string().regex(/^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$/, "Woche im Format JJJJ-Www");
@@ -14,13 +14,14 @@ export async function planningRoutes(app: FastifyInstance) {
 
   /** Sets (or with 0 hours removes) one reservation. Returns the stored allocation. */
   app.put("/api/planning", async (req) => {
-    const lead = requireRole(req, "admin", "consultant");
+    const lead = requireUser(req);
     const body = z
       .object({ employeeId: z.string(), projectId: z.string(), week: weekKey, hours: z.number().min(0).max(100), note: z.string().trim().max(200).optional() })
       .parse(req.body);
+    if (!leadsProject(lead, body.projectId)) throw new HttpError(403, "Planen kann nur die Projektleitung oder ein Lead.");
     const org = lead.organizationId;
     const [person] = await ctx.db.select({ id: users.id, role: users.role }).from(users).where(and(eq(users.id, body.employeeId), eq(users.organizationId, org), eq(users.active, true))).limit(1);
-    if (!person || person.role === "customer") throw new HttpError(404, "Mitarbeitende Person nicht gefunden.");
+    if (!person || person.role === "customer" || person.role === "auditor") throw new HttpError(404, "Mitarbeitende Person nicht gefunden.");
     const [project] = await ctx.db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, body.projectId), eq(projects.organizationId, org))).limit(1);
     if (!project) throw new HttpError(404, "Projekt nicht gefunden.");
 

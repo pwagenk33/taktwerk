@@ -110,6 +110,8 @@ export const teams = mysqlTable("teams", {
   id: id().primaryKey(),
   organizationId: orgId(),
   name: varchar("name", { length: 120 }).notNull(),
+  /** Team lead (see users.id; no FK because users references teams). */
+  leadUserId: id("lead_user_id"),
 });
 
 /** Personal reminder when nothing is booked on a work day: channel, time and weekdays (1 = Monday). */
@@ -130,7 +132,7 @@ export const users = mysqlTable(
     username: varchar("username", { length: 80 }).notNull(),
     email: varchar("email", { length: 254 }).notNull(),
     name: varchar("name", { length: 160 }).notNull(),
-    role: mysqlEnum("role", ["admin", "consultant", "employee", "customer"]).notNull().default("employee"),
+    role: mysqlEnum("role", ["admin", "consultant", "employee", "auditor", "customer"]).notNull().default("employee"),
     /** Portal accounts (role "customer") belong to one customer and only see that customer's data. */
     customerId: id("customer_id").references(() => customers.id, { onDelete: "cascade" }),
     /** scrypt hash; null for SSO-only accounts and invited users who have not set a password yet. */
@@ -223,6 +225,8 @@ export const projects = mysqlTable("projects", {
   name: varchar("name", { length: 200 }).notNull(),
   budget: money("budget").notNull().default(0),
   jiraProjectKey: varchar("jira_project_key", { length: 20 }),
+  /** Project lead (an employee who manages this project). */
+  leadUserId: id("lead_user_id").references(() => users.id, { onDelete: "set null" }),
   /** Contract type: time & material, fixed price or monthly retainer. */
   kind: mysqlEnum("kind", ["tm", "fixed", "retainer"]).notNull().default("tm"),
   /** Retainer: hours included per month. */

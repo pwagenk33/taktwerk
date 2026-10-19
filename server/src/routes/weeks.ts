@@ -1,12 +1,11 @@
 import { WorkCalendar, isoWeekKey, weekFigures } from "@taktwerk/domain";
-import { and, eq, gte, lte, ne } from "drizzle-orm";
+import { and, eq, gte, lte, notInArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { HttpError, requireUser, type SessionUser } from "../app";
+import { HttpError, managedUserIds, managesPeople, requireUser, seesAll } from "../app";
 import { users, weekSubmissions } from "../db/schema";
 import { loadDataset } from "./data";
 
-const isLead = (u: SessionUser) => u.role === "admin" || u.role === "consultant";
 const weekParam = z.string().regex(/^\d{4}-W\d{2}$/, "Ungültige Woche");
 
 /** Weekly submission: people confirm a week is complete, leads see at a glance who is missing hours. */
@@ -21,16 +20,18 @@ export async function weekRoutes(app: FastifyInstance) {
       .select()
       .from(weekSubmissions)
       .where(and(eq(weekSubmissions.organizationId, user.organizationId), gte(weekSubmissions.week, q.from), lte(weekSubmissions.week, q.to)));
-    return rows.filter((r) => isLead(user) || r.userId === user.id).map((r) => ({ userId: r.userId, week: r.week, hours: r.hours, submittedAt: r.submittedAt }));
+    const scope = await managedUserIds(ctx, user);
+    return rows.filter((r) => !scope || scope.has(r.userId)).map((r) => ({ userId: r.userId, week: r.week, hours: r.hours, submittedAt: r.submittedAt }));
   });
 
   /** Team overview for leads: per person and week, hours due, worked and whether submitted. */
   app.get("/api/weeks/overview", async (req) => {
     const user = requireUser(req);
-    if (!isLead(user)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+    if (!managesPeople(user) && !seesAll(user)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
     const q = z.object({ from: weekParam, to: weekParam }).parse(req.query);
     const data = await loadDataset(ctx, user);
-    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, user.organizationId), eq(users.active, true), ne(users.role, "customer")));
+    const scope = await managedUserIds(ctx, user);
+    const people = (await ctx.db.select().from(users).where(and(eq(users.organizationId, user.organizationId), eq(users.active, true), notInArray(users.role, ["customer", "auditor"])))).filter((p) => !scope || scope.has(p.id));
     const subs = await ctx.db
       .select()
       .from(weekSubmissions)

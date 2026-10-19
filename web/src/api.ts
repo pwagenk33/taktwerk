@@ -24,6 +24,9 @@ export interface Me {
   customerId?: string | null;
   /** Operator of the installation: may manage the companies on it. */
   platformAdmin?: boolean;
+  /** Employees: projects and teams they lead. */
+  leadsProjects?: string[];
+  leadsTeams?: string[];
 }
 
 /** A company on this installation (operator view). */
@@ -139,6 +142,7 @@ export interface UserRow {
   hasPassword: boolean;
   lastLoginAt: string | null;
   costRate?: number | null;
+  teamId?: string | null;
 }
 
 export class ApiError extends Error {

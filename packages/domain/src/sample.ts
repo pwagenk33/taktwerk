@@ -36,8 +36,8 @@ const employees: Employee[] = [
   { id: "e3", name: "Lea Meier", initials: "LM", role: "employee", teamId: "t1", workload: 100, vacationDays: 25, overtimeCarry: -4, costRate: 92 },
   { id: "e4", name: "Jonas Weber", initials: "JW", role: "employee", teamId: "t1", workload: 80, vacationDays: 20, costRate: 88 },
   { id: "e5", name: "Sara Frei", initials: "SF", role: "employee", teamId: "t1", workload: 100, vacationDays: 25, vacationCarry: 2, costRate: 98 },
-  { id: "e6", name: "Luca Schmid", initials: "LS", role: "employee", teamId: "t1", workload: 60, vacationDays: 15, costRate: 78 },
-  { id: "e7", name: "Nina Huber", initials: "NH", role: "employee", teamId: "t1", workload: 80, vacationDays: 20, costRate: 85 },
+  { id: "e6", name: "Luca Schmid", initials: "LS", role: "employee", teamId: "t2", workload: 60, vacationDays: 15, costRate: 78 },
+  { id: "e7", name: "Nina Huber", initials: "NH", role: "employee", teamId: "t2", workload: 80, vacationDays: 20, costRate: 85 },
 ].map((e) => ({ ...e, role: e.role as Employee["role"], trackingStart: TRACKING_START }));
 
 /** Tendency to work more or less than the target, so the example shows different overtime balances. */
@@ -112,7 +112,7 @@ const customers: Customer[] = [
 const projects: Project[] = [
   { id: "p1", customerId: "c1", name: "Kundenportal Relaunch", budget: 0, jiraProjectKey: "KPR" },
   { id: "p2", customerId: "c2", name: "Flottenmanagement", budget: 0, jiraProjectKey: "FLT", kind: "retainer", retainerHours: 120 },
-  { id: "p3", customerId: "c3", name: "QMS Digitalisierung", budget: 0, jiraProjectKey: "QMS" },
+  { id: "p3", customerId: "c3", name: "QMS Digitalisierung", budget: 0, jiraProjectKey: "QMS", leadUserId: "e4" },
   { id: "p4", customerId: "c4", name: "Störungsmeldung App", budget: 0, jiraProjectKey: "SWA", kind: "fixed" },
   { id: "p5", customerId: "c5", name: "Interne Arbeit", budget: 0 },
 ];
@@ -327,7 +327,10 @@ export function buildDataset(): Dataset {
   const away = (e: TimeEntry) =>
     ABSENCES.some((a) => a.status === "approved" && !a.halfDay && a.employeeId === e.employeeId && a.startDate <= e.date && a.endDate >= e.date);
   const draft: Dataset = {
-    teams: [{ id: "t1", name: "Delivery Team" }],
+    teams: [
+      { id: "t1", name: "Delivery Team", leadUserId: "e2" },
+      { id: "t2", name: "Support und Betrieb", leadUserId: "e5" },
+    ],
     employees,
     customers,
     projects: projects.map((p) => ({ ...p })),

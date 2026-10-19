@@ -87,7 +87,9 @@ const PAGES = [
 ] as const;
 
 type PageId = (typeof PAGES)[number]["id"];
-const ROLE_LABEL: Record<Role, string> = { admin: "Admin · Anna Keller", consultant: "Consultant · Marco Brunner", employee: "Mitarbeiterin · Lea Meier", customer: "Kundin · Claudia Steiner" };
+const ROLE_LABEL: Record<Role, string> = { admin: "Admin · Anna Keller", consultant: "Consultant · Marco Brunner", employee: "Mitarbeiterin · Lea Meier", auditor: "Treuhand (nur lesen) · Anna Keller", customer: "Kundin · Claudia Steiner" };
+/** Lead pages a project lead may open as well. */
+const PROJECT_LEAD_PAGES: PageId[] = ["projekte", "planung", "reports"];
 /** Pages shown in the phone tab bar; the rest sit behind "Mehr". */
 const PHONE_TABS: PageId[] = ["dashboard", "zeit", "arbeitszeit", "projekte"];
 
@@ -143,7 +145,7 @@ function HeaderTimer() {
 const isTyping = (el: EventTarget | null) => el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.closest("[role=dialog]") !== null);
 
 export function App() {
-  const { role, setRole, toast, branding, mode, me, logout, pending, flushOutbox } = useStore();
+  const { role, setRole, toast, branding, mode, me, logout, pending, flushOutbox, scope } = useStore();
   const [page, setPage] = useState<PageId>(readHash);
   const [theme, setTheme] = useTheme();
   const [palette, setPalette] = useState(false);
@@ -165,7 +167,7 @@ export function App() {
   // Portal accounts get their own, reduced application.
   if (role === "customer") return <><Portal />{toast && <div className="toast" role="status">{toast}</div>}</>;
 
-  const allowed = PAGES.filter((p) => !(role === "employee" && p.lead) && !("admin" in p && role !== "admin"));
+  const allowed = PAGES.filter((p) => (!p.lead || scope.seesAll || (scope.leadsProjects.length > 0 && PROJECT_LEAD_PAGES.includes(p.id))) && !("admin" in p && role !== "admin"));
   const visible = allowed.filter((p) => !("hidden" in p));
   const current = allowed.some((p) => p.id === page) ? page : "dashboard";
   const name = me?.name ?? ROLE_LABEL[role].split(" · ")[1];
@@ -181,7 +183,7 @@ export function App() {
   );
 
   return (
-    <div className="shell">
+    <div className="shell" data-readonly={scope.readOnly || undefined}>
       <aside className="rail">
         <div className="brand"><BrandMark logo={branding.logo} /><span>{branding.appName}</span></div>
         <nav className="nav">
@@ -214,10 +216,16 @@ export function App() {
             <kbd>⌘K</kbd>
           </button>
           {pending > 0 && <button className="btn small offline-chip" title="Buchungen, die auf Netz warten. Klick versucht es erneut." onClick={() => void flushOutbox()}>⇅ {pending} offline</button>}
-          <HeaderTimer />
-          <button id="topbar-new" className="btn primary new-btn" onClick={() => requestNewEntry()}>
-            <span className="plus">+</span><span>Buchen</span><kbd>N</kbd>
-          </button>
+          {scope.readOnly ? (
+            <span className="ro-chip" title="Treuhand-Zugang: alles einsehen, nichts ändern">Nur lesen</span>
+          ) : (
+            <>
+              <HeaderTimer />
+              <button id="topbar-new" className="btn primary new-btn" onClick={() => requestNewEntry()}>
+                <span className="plus">+</span><span>Buchen</span><kbd>N</kbd>
+              </button>
+            </>
+          )}
           <a href="#profil" className={`avatar-link ${current === "profil" ? "active" : ""}`} title={`${name} · Profil`} aria-label="Profil">
             <span className="who">{initials}</span>
           </a>

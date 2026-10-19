@@ -1,9 +1,10 @@
 import { DEFAULT_RATES, DEFAULT_WEEKLY_HOURS, EXPENSE_CATEGORIES, VAT_RATES, defaultHolidays, projectReports, rateOn, type Dataset, type VelocitySettings } from "@taktwerk/domain";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, or, type ColumnBaseConfig, type SQL } from "drizzle-orm";
+import type { MySqlColumn } from "drizzle-orm/mysql-core";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { HttpError, requireRole, requireUser, type AppContext, type SessionUser } from "../app";
+import { HttpError, isLead, leadsProject, managedUserIds, requireRole, requireUser, seesAll, type AppContext, type SessionUser } from "../app";
 import {
   absences,
   allocations,
@@ -45,6 +46,20 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
   const org = user.organizationId;
   const db = ctx.db;
   const own = user.role === "employee";
+  // Employees see their own data, plus the people of teams they lead and the projects they lead.
+  const scope = own ? await managedUserIds(ctx, user) : null;
+  const scopeIds = scope ? [...scope] : [];
+  const ledProjects = own ? (user.leadsProjects ?? []) : [];
+  const ledSubIds = ledProjects.length ? (await db.select({ id: subProjects.id }).from(subProjects).where(inArray(subProjects.projectId, ledProjects))).map((r) => r.id) : [];
+  type Col = MySqlColumn<ColumnBaseConfig<"string", string>>;
+  const orgOf = (t: { organizationId: Col }) => eq(t.organizationId, org);
+  const byPerson = (t: { organizationId: Col; userId: Col }) => (own ? and(orgOf(t), inArray(t.userId, scopeIds)) : orgOf(t));
+  const byPersonOrProject = (t: { organizationId: Col; userId: Col; subProjectId: Col }) => {
+    if (!own) return orgOf(t);
+    const parts: SQL[] = [inArray(t.userId, scopeIds)];
+    if (ledSubIds.length) parts.push(inArray(t.subProjectId, ledSubIds));
+    return and(orgOf(t), or(...parts));
+  };
   const [teamRows, userRows, customerRows, rateRows, projectRows, subRows, entryRows, expenseRows, issueRows, absenceRows, [orgRow], allocationRows] = await Promise.all([
     db.select().from(teams).where(eq(teams.organizationId, org)),
     db.select().from(users).where(eq(users.organizationId, org)),
@@ -52,21 +67,23 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
     db.select({ r: customerRates }).from(customerRates).innerJoin(customers, eq(customers.id, customerRates.customerId)).where(eq(customers.organizationId, org)),
     db.select().from(projects).where(eq(projects.organizationId, org)),
     db.select().from(subProjects).where(eq(subProjects.organizationId, org)),
-    db.select().from(timeEntries).where(own ? and(eq(timeEntries.organizationId, org), eq(timeEntries.userId, user.id)) : eq(timeEntries.organizationId, org)),
-    db.select().from(expenses).where(own ? and(eq(expenses.organizationId, org), eq(expenses.userId, user.id)) : eq(expenses.organizationId, org)),
+    db.select().from(timeEntries).where(byPersonOrProject(timeEntries)),
+    db.select().from(expenses).where(byPersonOrProject(expenses)),
     db.select().from(jiraIssues).where(eq(jiraIssues.organizationId, org)),
-    db.select().from(absences).where(own ? and(eq(absences.organizationId, org), eq(absences.userId, user.id)) : eq(absences.organizationId, org)),
+    db.select().from(absences).where(byPerson(absences)),
     db.select().from(organizations).where(eq(organizations.id, org)).limit(1),
-    db.select().from(allocations).where(own ? and(eq(allocations.organizationId, org), eq(allocations.userId, user.id)) : eq(allocations.organizationId, org)),
+    db.select().from(allocations).where(own ? and(eq(allocations.organizationId, org), ledProjects.length ? or(inArray(allocations.userId, scopeIds), inArray(allocations.projectId, ledProjects)) : inArray(allocations.userId, scopeIds)) : eq(allocations.organizationId, org)),
   ]);
+  const seesPerson = (id: string) => !own || scope!.has(id);
+  const seesBudget = (projectId: string) => !own || ledProjects.includes(projectId);
   const today = todayZurich();
   const year = Number(today.slice(0, 4));
 
   return {
     today,
-    teams: teamRows.map((t) => ({ id: t.id, name: t.name })),
+    teams: teamRows.map((t) => ({ id: t.id, name: t.name, leadUserId: t.leadUserId ?? undefined })),
     employees: userRows
-      .filter((u) => u.active && u.role !== "customer")
+      .filter((u) => u.active && u.role !== "customer" && u.role !== "auditor")
       .sort((a, b) => a.name.localeCompare(b.name, "de"))
       .map((u) => ({
         id: u.id,
@@ -75,7 +92,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
         role: u.role,
         teamId: u.teamId ?? "",
         // Work model and balances of colleagues stay private for employees; cost rates only for leads.
-        ...(own && u.id !== user.id
+        ...(!seesPerson(u.id)
           ? {}
           : { workload: u.workload, vacationDays: u.vacationDays, trackingStart: u.trackingStart ?? undefined, overtimeCarry: u.overtimeCarry, vacationCarry: u.vacationCarry }),
         ...(own ? {} : { costRate: u.costRate ?? undefined }),
@@ -86,8 +103,8 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
       currency: c.currency,
       rates: rateRows.filter((r) => r.r.customerId === c.id).map((r) => ({ validFrom: r.r.validFrom, hourlyRate: r.r.hourlyRate })),
     })),
-    projects: projectRows.map((p) => ({ id: p.id, customerId: p.customerId, name: p.name, budget: own ? 0 : p.budget, jiraProjectKey: p.jiraProjectKey ?? undefined, kind: p.kind, retainerHours: p.retainerHours ?? undefined })),
-    subProjects: subRows.map((s) => ({ id: s.id, projectId: s.projectId, name: s.name, budget: own ? 0 : s.budget, jiraEpicKey: s.jiraEpicKey ?? undefined })),
+    projects: projectRows.map((p) => ({ id: p.id, customerId: p.customerId, name: p.name, budget: seesBudget(p.id) ? p.budget : 0, jiraProjectKey: p.jiraProjectKey ?? undefined, leadUserId: p.leadUserId ?? undefined, kind: p.kind, retainerHours: p.retainerHours ?? undefined })),
+    subProjects: subRows.map((s) => ({ id: s.id, projectId: s.projectId, name: s.name, budget: seesBudget(s.projectId) ? s.budget : 0, jiraEpicKey: s.jiraEpicKey ?? undefined })),
     timeEntries: entryRows.map((e) => ({
       id: e.id,
       employeeId: e.userId,
@@ -171,13 +188,17 @@ export async function dataRoutes(app: FastifyInstance) {
 
   app.get("/api/dataset", async (req) => loadDataset(ctx, requireUser(req)));
 
+  /** Project reports: leads and the auditor see all, project leads the projects they lead. */
   app.get("/api/reports", async (req) => {
-    const user = requireRole(req, "admin", "consultant");
+    const user = requireUser(req);
+    const led = user.leadsProjects ?? [];
+    if (!seesAll(user) && led.length === 0) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
     const q = z
       .object({ customerId: z.string().optional(), method: z.enum(["rolling", "ewma"]).default("rolling"), window: z.coerce.number().int().min(1).max(12).default(3) })
       .parse(req.query);
     const settings: VelocitySettings = { method: q.method, window: q.window };
-    return projectReports(await loadDataset(ctx, user), settings, q.customerId);
+    const reports = projectReports(await loadDataset(ctx, user), settings, q.customerId);
+    return seesAll(user) ? reports : reports.filter((r) => led.includes(r.project.id));
   });
 
   app.post("/api/time-entries", async (req, reply) => {
@@ -314,12 +335,28 @@ export async function dataRoutes(app: FastifyInstance) {
     return reply.status(201).send({ id });
   });
 
+  /** Leads edit every project; a project lead the own ones (the lead person itself is set by admins and consultants). */
   app.patch("/api/projects/:id", async (req) => {
-    const user = requireRole(req, "admin", "consultant");
+    const user = requireUser(req);
     const { id } = req.params as { id: string };
-    const body = z.object({ name: z.string().trim().min(1).max(200).optional(), budget: z.number().min(0).optional(), jiraProjectKey: z.string().max(20).nullable().optional(), kind: projectKind.optional(), retainerHours: z.number().min(0).max(10000).nullable().optional() }).parse(req.body);
+    if (!leadsProject(user, id)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+    const body = z
+      .object({
+        name: z.string().trim().min(1).max(200).optional(),
+        budget: z.number().min(0).optional(),
+        jiraProjectKey: z.string().max(20).nullable().optional(),
+        kind: projectKind.optional(),
+        retainerHours: z.number().min(0).max(10000).nullable().optional(),
+        leadUserId: z.string().nullable().optional(),
+      })
+      .parse(req.body);
     const [p] = await ctx.db.select().from(projects).where(and(eq(projects.id, id), eq(projects.organizationId, user.organizationId))).limit(1);
     if (!p) throw new HttpError(404, "Projekt nicht gefunden.");
+    if (body.leadUserId !== undefined && !isLead(user)) throw new HttpError(403, "Die Projektleitung vergeben Admins und Consultants.");
+    if (body.leadUserId) {
+      const [lead] = await ctx.db.select({ id: users.id, role: users.role }).from(users).where(and(eq(users.id, body.leadUserId), eq(users.organizationId, user.organizationId), eq(users.active, true))).limit(1);
+      if (!lead || lead.role === "customer" || lead.role === "auditor") throw new HttpError(404, "Person für die Projektleitung nicht gefunden.");
+    }
     const kind = body.kind ?? p.kind;
     const next = {
       name: body.name ?? p.name,
@@ -327,17 +364,19 @@ export async function dataRoutes(app: FastifyInstance) {
       jiraProjectKey: body.jiraProjectKey === undefined ? p.jiraProjectKey : body.jiraProjectKey || null,
       kind,
       retainerHours: kind !== "retainer" ? null : body.retainerHours === undefined ? p.retainerHours : body.retainerHours,
+      leadUserId: body.leadUserId === undefined ? p.leadUserId : body.leadUserId,
     };
     await ctx.db.update(projects).set(next).where(eq(projects.id, id));
     return { id, ...next };
   });
 
   app.patch("/api/sub-projects/:id", async (req) => {
-    const user = requireRole(req, "admin", "consultant");
+    const user = requireUser(req);
     const { id } = req.params as { id: string };
     const body = z.object({ name: z.string().trim().min(1).max(200).optional(), budget: z.number().min(0).optional(), jiraEpicKey: z.string().max(40).nullable().optional() }).parse(req.body);
     const [sp] = await ctx.db.select().from(subProjects).where(and(eq(subProjects.id, id), eq(subProjects.organizationId, user.organizationId))).limit(1);
     if (!sp) throw new HttpError(404, "Subprojekt nicht gefunden.");
+    if (!leadsProject(user, sp.projectId)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
     const next = { name: body.name ?? sp.name, budget: body.budget ?? sp.budget, jiraEpicKey: body.jiraEpicKey === undefined ? sp.jiraEpicKey : body.jiraEpicKey || null };
     await ctx.db.update(subProjects).set(next).where(eq(subProjects.id, id));
     return { id, ...next };

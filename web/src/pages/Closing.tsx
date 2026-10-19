@@ -161,12 +161,12 @@ function TeamWeeks() {
 }
 
 export function Closing() {
-  const { data, closings, closeMonth, approveSubmitted, remindClosing, role, currentUserId, notify, mode } = useStore();
+  const { data, closings, closeMonth, approveSubmitted, remindClosing, role, currentUserId, notify, mode, scope } = useStore();
   const current = monthOf(data.today);
   const months = [0, 1, 2, 3, 4, 5].map((n) => addMonths(current, -n));
   const [month, setMonth] = useState(addMonths(current, -1));
   const [error, setError] = useState("");
-  const lead = role !== "employee";
+  const lead = scope.managesPeople;
 
   const statusOf = (userId: string, m: string): ClosingStatus => closings.find((c) => c.userId === userId && c.month === m)?.status ?? "open";
   const balances = new Map(data.employees.filter((e) => e.workload !== undefined || e.id === currentUserId).map((e) => [e.id, workBalance(data, e.id)]));

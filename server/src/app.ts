@@ -1,13 +1,13 @@
 import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, inArray } from "drizzle-orm";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { sha256 } from "./auth/crypto";
 import type { Config } from "./config";
 import type { Db } from "./db/client";
-import { organizations, sessions, users } from "./db/schema";
+import { organizations, projects, sessions, teams, users } from "./db/schema";
 import type { Mailer } from "./mail/mailer";
 import type { WebhookSender } from "./notify/webhooks";
 import { adminRoutes } from "./routes/admin";
@@ -28,7 +28,8 @@ import { platformRoutes } from "./routes/platform";
 import { statusRoutes } from "./routes/status";
 import { securityRoutes } from "./routes/security";
 
-export type Role = "admin" | "consultant" | "employee" | "customer";
+/** auditor (Treuhand/Revision) reads everything of the organization and changes nothing. */
+export type Role = "admin" | "consultant" | "employee" | "auditor" | "customer";
 
 export interface SessionUser {
   id: string;
@@ -43,6 +44,44 @@ export interface SessionUser {
   platformAdmin?: boolean;
   /** Hash of the current session token (for the session overview). */
   sessionId?: string;
+  /** Projects this person leads (employees only; admins and consultants lead everything). */
+  leadsProjects?: string[];
+  /** Teams this person leads (employees only). */
+  leadsTeams?: string[];
+}
+
+/** Admins and consultants: full read and write access to the organization. */
+export const isLead = (u: SessionUser) => u.role === "admin" || u.role === "consultant";
+/** Sees the whole organization (leads and the read-only auditor role). */
+export const seesAll = (u: SessionUser) => isLead(u) || u.role === "auditor";
+/** Leads a project: organization leads, or an employee set as project lead. */
+export const leadsProject = (u: SessionUser, projectId: string) => isLead(u) || (u.leadsProjects ?? []).includes(projectId);
+/** Manages people: organization leads, or an employee who leads at least one team. */
+export const managesPeople = (u: SessionUser) => isLead(u) || (u.leadsTeams ?? []).length > 0;
+
+/**
+ * Ids of the people whose bookings, absences and closings the actor may see and handle:
+ * null = everyone of the organization; otherwise the actor plus the members of the teams they lead.
+ */
+export async function managedUserIds(ctx: AppContext, actor: SessionUser): Promise<Set<string> | null> {
+  if (seesAll(actor)) return null;
+  const ids = new Set([actor.id]);
+  if (actor.leadsTeams?.length) {
+    const rows = await ctx.db.select({ id: users.id }).from(users).where(and(eq(users.organizationId, actor.organizationId), inArray(users.teamId, actor.leadsTeams)));
+    for (const r of rows) ids.add(r.id);
+  }
+  return ids;
+}
+
+/** Whether the actor may act for this person (self, organization lead, or lead of the person's team). */
+export async function managesUser(ctx: AppContext, actor: SessionUser, userId: string): Promise<boolean> {
+  if (userId === actor.id || isLead(actor)) return true;
+  const ids = await managedUserIds(ctx, actor);
+  return ids === null || ids.has(userId);
+}
+
+export async function assertManages(ctx: AppContext, actor: SessionUser, userId: string) {
+  if (actor.role === "auditor" || !(await managesUser(ctx, actor, userId))) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
 }
 
 /** Portal accounts only reach the portal, auth and branding routes. */
@@ -77,11 +116,19 @@ export function requireUser(req: FastifyRequest): SessionUser {
   return req.user;
 }
 
+/**
+ * Requires one of the roles. The read-only auditor passes wherever a consultant would (its writes are refused
+ * globally in the preHandler), so every lead report is visible to the Treuhand.
+ */
 export function requireRole(req: FastifyRequest, ...roles: Role[]): SessionUser {
   const user = requireUser(req);
-  if (!roles.includes(user.role)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+  const ok = roles.includes(user.role) || (user.role === "auditor" && roles.includes("consultant"));
+  if (!ok) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
   return user;
 }
+
+/** Writes the read-only auditor may still do: sign in/out and manage the own account. */
+const AUDITOR_WRITE_PREFIXES = ["/api/auth/", "/api/me/", "/api/dashboard"];
 
 /**
  * The organization a request belongs to, by host name: an organization with this `domain`, else the only organization
@@ -144,6 +191,16 @@ export async function buildApp(ctx: AppContext) {
     if (row) {
       const u = row.user;
       req.user = { id: u.id, organizationId: u.organizationId, name: u.name, username: u.username, email: u.email, role: u.role, customerId: u.customerId, platformAdmin: u.platformAdmin, sessionId: sid };
+      if (u.role === "employee") {
+        const [led, teamRows] = await Promise.all([
+          ctx.db.select({ id: projects.id }).from(projects).where(and(eq(projects.organizationId, u.organizationId), eq(projects.leadUserId, u.id))),
+          ctx.db.select({ id: teams.id }).from(teams).where(and(eq(teams.organizationId, u.organizationId), eq(teams.leadUserId, u.id))),
+        ]);
+        req.user.leadsProjects = led.map((p) => p.id);
+        req.user.leadsTeams = teamRows.map((t) => t.id);
+      }
+      if (u.role === "auditor" && req.url.startsWith("/api/") && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !AUDITOR_WRITE_PREFIXES.some((p) => req.url.startsWith(p)))
+        throw new HttpError(403, "Dein Zugang ist nur lesend (Treuhand).");
       if (!row.lastSeenAt || Date.now() - row.lastSeenAt.getTime() > 5 * 60_000) await ctx.db.update(sessions).set({ lastSeenAt: new Date(), ip: req.ip }).where(eq(sessions.id, sid));
       if (u.role === "customer" && req.url.startsWith("/api/") && !PORTAL_PREFIXES.some((p) => req.url.startsWith(p))) throw new HttpError(403, "Dieser Bereich ist für das Kundenportal nicht zugänglich.");
     }

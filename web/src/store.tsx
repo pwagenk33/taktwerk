@@ -46,12 +46,48 @@ export interface Closing {
 }
 
 /** Same rules as the server: approved locks everyone, submitted locks the person themselves. */
-export function lockReason(closings: Closing[], actor: { id: string; role: Role }, ownerId: string, date: string): string | null {
-  if (ownerId !== actor.id && actor.role === "employee") return "Nur eigene Buchungen können geändert werden.";
+export function lockReason(closings: Closing[], actor: { id: string; role: Role; manages?: (userId: string) => boolean }, ownerId: string, date: string): string | null {
+  if (actor.role === "auditor") return "Nur-Lesen-Zugang";
+  const lead = actor.role === "admin" || actor.role === "consultant";
+  if (ownerId !== actor.id && !lead && !actor.manages?.(ownerId)) return "Nur eigene Buchungen können geändert werden.";
   const status = closings.find((c) => c.userId === ownerId && c.month === date.slice(0, 7))?.status;
   if (status === "approved") return "Monat abgeschlossen";
-  if (status === "submitted" && actor.role === "employee") return "Monat eingereicht";
+  if (status === "submitted" && ownerId === actor.id && !lead) return "Monat eingereicht";
   return null;
+}
+
+/** What the signed-in person may see and do beyond the own bookings. */
+export interface Scope {
+  /** Admin or consultant: everything of the company. */
+  lead: boolean;
+  /** Lead or auditor: sees every report and budget. */
+  seesAll: boolean;
+  /** Auditor (Treuhand): nothing can be changed. */
+  readOnly: boolean;
+  /** Lead or team lead: approves absences and months of other people. */
+  managesPeople: boolean;
+  leadsProjects: string[];
+  leadsTeams: string[];
+  leadsProject: (projectId: string) => boolean;
+  /** Whether bookings and absences of this person may be handled. */
+  manages: (userId: string) => boolean;
+}
+
+export function scopeOf(role: Role, userId: string, data: Pick<Dataset, "projects" | "teams" | "employees">): Scope {
+  const lead = role === "admin" || role === "consultant";
+  const leadsProjects = lead ? [] : data.projects.filter((p) => p.leadUserId === userId).map((p) => p.id);
+  const leadsTeams = lead ? [] : data.teams.filter((t) => t.leadUserId === userId).map((t) => t.id);
+  const members = new Set(data.employees.filter((e) => leadsTeams.includes(e.teamId)).map((e) => e.id));
+  return {
+    lead,
+    seesAll: lead || role === "auditor",
+    readOnly: role === "auditor",
+    managesPeople: lead || leadsTeams.length > 0,
+    leadsProjects,
+    leadsTeams,
+    leadsProject: (id) => lead || leadsProjects.includes(id),
+    manages: (id) => lead || id === userId || members.has(id),
+  };
 }
 
 interface Store {
@@ -61,6 +97,9 @@ interface Store {
   me: Me | null;
   role: Role;
   currentUserId: string;
+  scope: Scope;
+  /** Installed version: fetch the dataset again (after changes made outside the store). */
+  reload: () => Promise<void>;
   setRole: (r: Role) => void;
   branding: Branding;
   setBranding: (b: Branding) => Promise<void>;
@@ -255,11 +294,14 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
 
   const role = me?.role ?? demoRole;
   // Demo: admin and consultant act as Anna/Marco, the employee view as Lea.
-  const currentUserId = me?.id ?? (role === "admin" ? "e1" : role === "consultant" ? "e2" : "e3");
+  const currentUserId = me?.id ?? (role === "admin" || role === "auditor" ? "e1" : role === "consultant" ? "e2" : "e3");
+  const scope = scopeOf(role, currentUserId, data);
   const store: Store = {
     data,
     mode,
     me,
+    scope,
+    reload: async () => { if (mode === "api") setData(await loadDataset()); },
     role,
     currentUserId,
     setRole: (r) => {
@@ -304,7 +346,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
         return;
       }
       // Demo: employees' expenses wait for approval, like on the server; the receipt stays in the browser only.
-      const status = role === "employee" ? "requested" : "approved";
+      const status = scope.lead ? "approved" : "requested";
       const item = { ...e, status, receipt: receipt ? { name: receipt.name, mime: receipt.type } : undefined, id: uid("x") } as Expense;
       setData((d) => ({ ...d, expenses: [...d.expenses, item] }));
     },
@@ -383,7 +425,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     updateSubProject: mode === "api" ? (id, p) => send("PATCH", `/api/sub-projects/${id}`, p) : localPatch("subProjects"),
     deleteExpense: mode === "api" ? (id) => send("DELETE", `/api/expenses/${id}`) : localDelete("expenses"),
     closings,
-    lockOf: (ownerId, date) => lockReason(closings, { id: currentUserId, role }, ownerId, date),
+    lockOf: (ownerId, date) => lockReason(closings, { id: currentUserId, role, manages: scope.manages }, ownerId, date),
     closeMonth: async (action, month, userId) => {
       if (mode === "api") {
         await api(`/api/months/${month}/${action}`, { body: action === "submit" ? {} : { userId } });
@@ -465,7 +507,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
               const e = data.timeEntries.find((x) => x.id === c.entryId);
               return e ? { entryId: e.id, ownerId: e.employeeId, date: e.date, reason: e.reason, text: c.text, askedBy: c.authorName, createdAt: c.createdAt } : null;
             })
-            .filter((q): q is OpenQuestion => q !== null && (role !== "employee" || q.ownerId === currentUserId)),
+            .filter((q): q is OpenQuestion => q !== null && (scope.managesPeople || q.ownerId === currentUserId)),
     comments: async (entryId) => (mode === "api" ? api<EntryComment[]>(`/api/time-entries/${entryId}/comments`) : localRef.current.filter((c) => c.entryId === entryId)),
     addComment: async (entryId, text, question) => {
       if (mode === "api") {
@@ -478,7 +520,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
       const author = data.employees.find((x) => x.id === currentUserId)?.name ?? "Ich";
       const now = new Date().toISOString();
       const resolved = localRef.current.map((c) => (owner && c.entryId === entryId && c.kind === "question" && !c.resolvedAt ? { ...c, resolvedAt: now } : c));
-      const next = [...resolved, { id: uid("c"), entryId, kind: question && !owner && role !== "employee" ? ("question" as const) : ("comment" as const), text, authorId: currentUserId, authorName: author, createdAt: now, resolvedAt: null }];
+      const next = [...resolved, { id: uid("c"), entryId, kind: question && !owner && scope.managesPeople ? ("question" as const) : ("comment" as const), text, authorId: currentUserId, authorName: author, createdAt: now, resolvedAt: null }];
       setLocalComments(next);
       saveLocal("rt.comments", next);
     },
@@ -489,7 +531,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
         return res.status;
       }
       // Demo: same rules as the server.
-      const lead = role !== "employee";
+      const lead = scope.lead || (a.employeeId !== currentUserId && scope.manages(a.employeeId));
       for (const m of monthRange(a.startDate.slice(0, 7), a.endDate.slice(0, 7))) {
         const lock = lockReason(closings, { id: currentUserId, role }, a.employeeId, `${m}-01` < a.startDate ? a.startDate : `${m}-01`);
         if (lock) throw new Error(lock);

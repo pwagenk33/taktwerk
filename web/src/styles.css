@@ -723,3 +723,7 @@ table.plan td:first-child a:hover { color: var(--accent); }
 .totp-setup { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
 .totp-setup img { border-radius: 8px; border: 1px solid var(--line); background: #fff; }
 .codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 4px 12px; margin: 8px 0; }
+
+/* ---------- read-only access (auditor / Treuhand) ---------- */
+.ro-chip { font-size: 0.78rem; font-weight: 600; padding: 5px 10px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--warn) 60%, var(--line)); background: color-mix(in srgb, var(--warn) 14%, var(--surface)); color: var(--warn-ink); white-space: nowrap; }
+.shell[data-readonly] .btn.primary, .shell[data-readonly] .btn.danger, .shell[data-readonly] .cal-add, .shell[data-readonly] .phone-fab { display: none !important; }

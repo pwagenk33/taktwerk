@@ -42,7 +42,7 @@ function CellBar({ c }: { c: PlanCell }) {
 
 /** Editor for one person and week: hours per project, saved on change. */
 function CellEditor({ employeeId, week, onClose }: { employeeId: string; week: string; onClose: () => void }) {
-  const { data, setAllocation, notify } = useStore();
+  const { data, setAllocation, notify, scope } = useStore();
   const person = data.employees.find((e) => e.id === employeeId);
   const rows = allocationsOf(data, employeeId, week);
   const [adding, setAdding] = useState("");
@@ -51,7 +51,7 @@ function CellEditor({ employeeId, week, onClose }: { employeeId: string; week: s
     const c = data.customers.find((x) => x.id === p?.customerId);
     return p ? `${p.name}${c ? ` · ${c.name}` : ""}` : "?";
   };
-  const free = data.projects.filter((p) => !rows.some((a) => a.projectId === p.id)).sort((a, b) => projectName(a.id).localeCompare(projectName(b.id), "de"));
+  const free = data.projects.filter((p) => scope.leadsProject(p.id) && !rows.some((a) => a.projectId === p.id)).sort((a, b) => projectName(a.id).localeCompare(projectName(b.id), "de"));
   const { from, to } = weekRange(week);
   const save = async (projectId: string, hours: number) => {
     await setAllocation(employeeId, projectId, week, hours);
@@ -84,7 +84,7 @@ function CellEditor({ employeeId, week, onClose }: { employeeId: string; week: s
 }
 
 export function Planning() {
-  const { data, reports, role } = useStore();
+  const { data, reports, scope } = useStore();
   const [offset, setOffset] = useState(0);
   const [view, setView] = useState<"people" | "projects">("people");
   const [pick, setPick] = useState<{ employeeId: string; week: string } | null>(null);
@@ -92,7 +92,7 @@ export function Planning() {
   const people = useMemo(() => data.employees.filter((e) => e.role !== "customer"), [data.employees]);
   const plan = useMemo(() => capacityPlan(data, weeks, reports, people), [data, weeks, reports, people]);
   const thisWeek = planningWeeks(data.today, 1)[0];
-  const lead = role !== "employee";
+  const lead = scope.lead || scope.leadsProjects.length > 0;
   const head = (k: string) => {
     const { from } = weekRange(k);
     return <th key={k} className={`r ${k === thisWeek ? "wk-now" : ""}`}>{weekLabel(k)}<small>{fmtDate(from).slice(0, 5)}</small></th>;

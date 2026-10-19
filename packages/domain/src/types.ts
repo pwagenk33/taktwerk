@@ -1,6 +1,7 @@
 // Core domain model. Money is in CHF, durations in hours, months as "YYYY-MM".
 
-export type Role = "admin" | "consultant" | "employee" | "customer";
+/** auditor = Treuhand / Revision: sees everything of the organization, changes nothing. */
+export type Role = "admin" | "consultant" | "employee" | "auditor" | "customer";
 
 export interface Employee {
   id: string;
@@ -25,6 +26,8 @@ export interface Employee {
 export interface Team {
   id: string;
   name: string;
+  /** Team lead: approves absences and month closings of the members. */
+  leadUserId?: string;
 }
 
 /** Hourly rate valid from a date; time entries snapshot the rate at booking time. */
@@ -76,6 +79,8 @@ export interface Project {
   name: string;
   budget: number; // in the customer's currency, may exceed the sum of sub-project budgets (reserve)
   jiraProjectKey?: string;
+  /** Project lead: sees budget and bookings of this project and plans it, without being a consultant. */
+  leadUserId?: string;
   /** Contract type. Default «Zeit und Material». */
   kind?: ProjectKind;
   /** Retainer: hours included per month. */

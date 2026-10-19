@@ -8,7 +8,7 @@ import { Icon } from "../ui/components";
 import { createPasskey, passkeysSupported } from "../webauthn";
 import { useFavorites, useLabels } from "./TimeTracking";
 
-const ROLE_LABEL: Record<Role, string> = { admin: "Admin", consultant: "Consultant", employee: "Mitarbeitende", customer: "Kunde (Portal)" };
+const ROLE_LABEL: Record<Role, string> = { admin: "Admin", consultant: "Consultant", employee: "Mitarbeitende", auditor: "Treuhand (nur lesen)", customer: "Kunde (Portal)" };
 const THEMES: { id: Theme; label: string; hint: string; icon: () => JSX.Element }[] = [
   { id: "light", label: "Hell", hint: "Weisse Flächen, dunkle Schrift", icon: Icon.sun },
   { id: "dark", label: "Dunkel", hint: "Dunkle Flächen, helle Schrift", icon: Icon.moon },
