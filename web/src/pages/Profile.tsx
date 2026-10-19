@@ -5,6 +5,7 @@ import { loadLocal, saveLocal, useStore } from "../store";
 import { Select } from "../ui/Select";
 import { useTheme, type Theme } from "../theme";
 import { Icon } from "../ui/components";
+import { createPasskey, passkeysSupported } from "../webauthn";
 import { useFavorites, useLabels } from "./TimeTracking";
 
 const ROLE_LABEL: Record<Role, string> = { admin: "Admin", consultant: "Consultant", employee: "Mitarbeitende", customer: "Kunde (Portal)" };
@@ -48,6 +49,134 @@ function PasswordCard() {
       <p className="muted" style={{ fontSize: "0.82rem" }}>Mindestens 10 Zeichen. Wer sich mit Microsoft oder Google anmeldet, braucht kein Passwort.</p>
       {error && <p className="error">{error}</p>}
       <div className="toolbar"><button id="p-save" className="btn primary" disabled={busy || !current || !next} onClick={save}>Passwort speichern</button></div>
+    </section>
+  );
+}
+
+interface SecurityInfo {
+  totp: boolean;
+  recoveryCodesLeft: number;
+  passkeys: { id: string; name: string; createdAt: string; lastUsedAt: string | null; backedUp: boolean }[];
+  hasPassword: boolean;
+}
+interface SessionRow { id: string; current: boolean; device: string; ip: string | null; lastSeenAt: string; createdAt: string }
+const when = (iso: string) => new Date(iso).toLocaleString("de-CH", { dateStyle: "medium", timeStyle: "short" });
+
+/** Second factor (authenticator app, passkeys) and the list of signed-in devices. */
+function SecurityCard() {
+  const { notify } = useStore();
+  const [info, setInfo] = useState<SecurityInfo | null>(null);
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [setup, setSetup] = useState<{ secret: string; url: string; qr: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const [pw, setPw] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [keyName, setKeyName] = useState("");
+  const reload = async () => {
+    setInfo(await api<SecurityInfo>("/api/me/security"));
+    setSessions(await api<SessionRow[]>("/api/me/sessions"));
+  };
+  useEffect(() => { reload().catch((e: Error) => setError(e.message)); }, []);
+  const run = async (fn: () => Promise<void>, msg?: string) => {
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+      if (msg) notify(msg);
+      await reload();
+    } catch (e) {
+      setError((e as Error).name === "NotAllowedError" ? "Abgebrochen." : (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const startTotp = () => run(async () => setSetup(await api("/api/me/totp/setup", { body: {} })));
+  const enableTotp = () => run(async () => { const r = await api<{ recoveryCodes: string[] }>("/api/me/totp/enable", { body: { code } }); setCodes(r.recoveryCodes); setSetup(null); setCode(""); }, "Authenticator-App aktiviert");
+  const disableTotp = () => { if (confirm("Zweiten Faktor per App wirklich ausschalten?")) void run(() => api("/api/me/totp", { method: "DELETE", body: { password: pw } }).then(() => setPw("")), "Authenticator-App entfernt"); };
+  const newCodes = () => run(async () => { const r = await api<{ recoveryCodes: string[] }>("/api/me/totp/recovery", { body: { password: pw } }); setCodes(r.recoveryCodes); setPw(""); });
+  const addKey = () => run(async () => {
+    if (!passkeysSupported()) throw new Error("Dieser Browser unterstützt keine Passkeys.");
+    const options = await api<Record<string, unknown>>("/api/me/passkeys/options", { body: {} });
+    const response = await createPasskey(options);
+    await api("/api/me/passkeys", { body: { name: keyName.trim() || "Mein Passkey", response } });
+    setKeyName("");
+  }, "Passkey gespeichert");
+  const delKey = (id: string, name: string) => { if (confirm(`Passkey «${name}» entfernen?`)) void run(() => api(`/api/me/passkeys/${encodeURIComponent(id)}`, { method: "DELETE" }), "Passkey entfernt"); };
+  const endSession = (s: SessionRow) => run(() => api(`/api/me/sessions/${s.id}`, { method: "DELETE" }), "Gerät abgemeldet");
+  const logoutOthers = () => run(() => api("/api/me/sessions/logout-others", { body: {} }).then((r) => notify(`${(r as { closed: number }).closed} andere Geräte abgemeldet`)));
+
+  if (!info) return <section className="card card-pad"><h2>Sicherheit</h2><p className="muted">{error || "Lade …"}</p></section>;
+  return (
+    <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 14 }} id="security">
+      <h2><Icon.shield /> Sicherheit</h2>
+
+      <div className="sec-block">
+        <div className="sec-head"><strong>Authenticator-App</strong>{info.totp ? <span className="pill ok">Aktiv · {info.recoveryCodesLeft} Wiederherstellungscodes</span> : <span className="pill neutral">Aus</span>}</div>
+        {!info.totp && !setup && <p className="muted">Zweiter Schritt bei der Anmeldung mit einem Code aus Google Authenticator, Microsoft Authenticator, 1Password oder einer anderen TOTP-App.</p>}
+        {!info.totp && !setup && <div><button id="totp-start" className="btn" disabled={busy} onClick={() => void startTotp()}>Einrichten</button></div>}
+        {setup && (
+          <div className="totp-setup">
+            <img src={setup.qr} alt="QR-Code für die Authenticator-App" width={160} height={160} />
+            <div>
+              <p className="muted" style={{ marginTop: 0 }}>QR-Code mit der App scannen oder den Schlüssel von Hand eingeben: <code className="mono">{setup.secret}</code></p>
+              <label className="field"><span>Code aus der App</span><input id="totp-code" className="input" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} /></label>
+              <div className="toolbar" style={{ marginTop: 8 }}>
+                <button id="totp-enable" className="btn primary" disabled={busy || code.trim().length < 6} onClick={() => void enableTotp()}>Aktivieren</button>
+                <button className="btn ghost" onClick={() => setSetup(null)}>Abbrechen</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {codes && (
+          <div className="notice" id="recovery-codes">
+            <strong>Wiederherstellungscodes</strong> – jeder gilt einmal, falls die App nicht verfügbar ist. Jetzt sicher ablegen; sie werden nicht noch einmal angezeigt.
+            <div className="codes mono">{codes.map((c) => <span key={c}>{c}</span>)}</div>
+            <button className="btn small" onClick={() => { navigator.clipboard?.writeText(codes.join("\n")); notify("Codes kopiert"); }}>Kopieren</button>
+            <button className="btn small ghost" onClick={() => setCodes(null)}>Ausblenden</button>
+          </div>
+        )}
+        {info.totp && info.hasPassword && (
+          <div className="toolbar">
+            <input className="input" type="password" placeholder="Passwort zur Bestätigung" aria-label="Passwort" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} style={{ maxWidth: 240 }} />
+            <button className="btn small" disabled={busy || !pw} onClick={() => void newCodes()}>Neue Wiederherstellungscodes</button>
+            <button id="totp-disable" className="btn small ghost" disabled={busy || !pw} onClick={disableTotp}>Ausschalten</button>
+          </div>
+        )}
+      </div>
+
+      <div className="sec-block">
+        <div className="sec-head"><strong>Passkeys</strong><span className="muted" style={{ fontSize: "0.8rem" }}>Anmeldung ohne Passwort mit Face ID, Touch ID, Windows Hello oder Sicherheitsschlüssel</span></div>
+        {info.passkeys.length > 0 && (
+          <ul className="fav-list">
+            {info.passkeys.map((k) => (
+              <li key={k.id}>
+                <div><strong>{k.name}</strong><div className="muted" style={{ fontSize: "0.78rem" }}>erstellt {when(k.createdAt)}{k.lastUsedAt ? ` · zuletzt ${when(k.lastUsedAt)}` : ""}{k.backedUp ? " · synchronisiert" : ""}</div></div>
+                <button className="icon-btn" aria-label="Passkey entfernen" title="Entfernen" onClick={() => delKey(k.id, k.name)}><Icon.trash /></button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="toolbar">
+          <input id="pk-name" className="input" placeholder="Name, z. B. MacBook" aria-label="Name des Passkeys" value={keyName} onChange={(e) => setKeyName(e.target.value)} style={{ maxWidth: 220 }} />
+          <button id="pk-add" className="btn" disabled={busy} onClick={() => void addKey()}><Icon.key />Passkey hinzufügen</button>
+        </div>
+        {info.passkeys.length > 0 && <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>Mit Passkey gilt auch die Passwort-Anmeldung als zweistufig: nach dem Passwort wird der Passkey verlangt.</p>}
+      </div>
+
+      <div className="sec-block">
+        <div className="sec-head"><strong>Angemeldete Geräte</strong>{sessions.length > 1 && <button id="logout-others" className="btn small" disabled={busy} onClick={() => void logoutOthers()}>Überall sonst abmelden</button>}</div>
+        <ul className="fav-list" id="sessions">
+          {sessions.map((s) => (
+            <li key={s.id}>
+              <div><strong>{s.device}</strong>{s.current && <span className="pill ok" style={{ marginLeft: 8 }}>Dieses Gerät</span>}<div className="muted" style={{ fontSize: "0.78rem" }}>zuletzt {when(s.lastSeenAt)}{s.ip ? ` · ${s.ip}` : ""} · angemeldet seit {when(s.createdAt)}</div></div>
+              {!s.current && <button className="icon-btn" aria-label="Abmelden" title="Dieses Gerät abmelden" onClick={() => void endSession(s)}><Icon.logout /></button>}
+            </li>
+          ))}
+        </ul>
+      </div>
+      {error && <p className="error">{error}</p>}
     </section>
   );
 }
@@ -194,6 +323,13 @@ export function Profile() {
           <p className="muted" style={{ fontSize: "0.82rem" }}>Gilt für diesen Browser. Das Logo und die Hauptfarbe legen Admins unter Einstellungen → Erscheinungsbild fest.</p>
         </section>
         <ReminderCard />
+        {mode === "api" && <SecurityCard />}
+        {mode === "demo" && (
+          <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <h2><Icon.shield /> Sicherheit</h2>
+            <p className="muted" style={{ fontSize: "0.85rem" }}>In der installierten Version: Zwei-Faktor-Anmeldung mit Authenticator-App und Wiederherstellungscodes, Passkeys (Face ID, Touch ID, Windows Hello), Übersicht der angemeldeten Geräte mit «Überall sonst abmelden».</p>
+          </section>
+        )}
         {mode === "api" ? <PasswordCard /> : (
           <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <h2>Passwort ändern</h2>

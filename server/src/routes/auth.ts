@@ -1,12 +1,12 @@
 import { todayZurich } from "./data";
 import { Google, MicrosoftEntraId, decodeIdToken, generateCodeVerifier, generateState } from "arctic";
-import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { HttpError, SESSION_COOKIE, appOrigin, organizationForHost, requireUser, type AppContext } from "../app";
 import { hashPassword, newToken, passwordProblem, sha256, verifyPassword } from "../auth/crypto";
-import { DEFAULT_BRANDING, oauthAccounts, organizations, passwordTokens, sessions, users } from "../db/schema";
+import { DEFAULT_BRANDING, oauthAccounts, organizations, passkeys, passwordTokens, sessions, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 
 type Provider = "microsoft" | "google";
@@ -25,10 +25,10 @@ function oauthClient(ctx: AppContext, provider: Provider) {
   return null;
 }
 
-export async function startSession(ctx: AppContext, reply: FastifyReply, userId: string) {
+export async function startSession(ctx: AppContext, reply: FastifyReply, userId: string, req?: { headers: { "user-agent"?: string }; ip: string }) {
   const token = newToken();
   const expiresAt = new Date(Date.now() + ctx.config.SESSION_DAYS * 86400_000);
-  await ctx.db.insert(sessions).values({ id: sha256(token), userId, expiresAt });
+  await ctx.db.insert(sessions).values({ id: sha256(token), userId, expiresAt, userAgent: req?.headers["user-agent"]?.slice(0, 255) ?? null, ip: req?.ip ?? null, lastSeenAt: new Date() });
   await ctx.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, userId));
   reply.setCookie(SESSION_COOKIE, token, {
     path: "/",
@@ -40,9 +40,9 @@ export async function startSession(ctx: AppContext, reply: FastifyReply, userId:
 }
 
 /** Creates a one-time link token (invite: 7 days, reset: 1 hour) and returns the plain token. */
-export async function createPasswordToken(ctx: AppContext, userId: string, purpose: "invite" | "reset") {
+export async function createPasswordToken(ctx: AppContext, userId: string, purpose: "invite" | "reset" | "2fa") {
   const token = newToken();
-  const hours = purpose === "invite" ? 24 * 7 : 1;
+  const hours = purpose === "invite" ? 24 * 7 : purpose === "2fa" ? 5 / 60 : 1;
   await ctx.db.insert(passwordTokens).values({ id: sha256(token), userId, purpose, expiresAt: new Date(Date.now() + hours * 3600_000) });
   return token;
 }
@@ -87,7 +87,13 @@ export async function authRoutes(app: FastifyInstance) {
     if (hostOrg?.domain && hostOrg.id !== user.organizationId) throw new HttpError(403, "Dieses Konto gehört zu einer anderen Firma. Bitte die Adresse deiner Firma verwenden.");
     const [own] = await ctx.db.select({ active: organizations.active }).from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
     if (own && !own.active) throw new HttpError(403, "Diese Firma ist deaktiviert. Bitte den Betreiber kontaktieren.");
-    await startSession(ctx, reply, user.id);
+    // Second factor: the password alone opens no session; the client completes with a code or a passkey.
+    const keys = await ctx.db.select({ id: passkeys.id }).from(passkeys).where(eq(passkeys.userId, user.id));
+    if (user.totpEnabledAt || keys.length > 0) {
+      const token = await createPasswordToken(ctx, user.id, "2fa");
+      return { ok: false, second: { token, totp: !!user.totpEnabledAt, passkey: keys.length > 0 } };
+    }
+    await startSession(ctx, reply, user.id, req);
     return { ok: true };
   });
 
@@ -147,7 +153,7 @@ export async function authRoutes(app: FastifyInstance) {
     const [row] = await ctx.db
       .select()
       .from(passwordTokens)
-      .where(and(eq(passwordTokens.id, sha256(body.token)), isNull(passwordTokens.usedAt), gt(passwordTokens.expiresAt, new Date())))
+      .where(and(eq(passwordTokens.id, sha256(body.token)), isNull(passwordTokens.usedAt), gt(passwordTokens.expiresAt, new Date()), ne(passwordTokens.purpose, "2fa")))
       .limit(1);
     if (!row) throw new HttpError(400, "Der Link ist abgelaufen oder wurde schon verwendet. Bitte fordere einen neuen an.");
     await ctx.db.update(passwordTokens).set({ usedAt: new Date() }).where(eq(passwordTokens.id, row.id));
@@ -196,7 +202,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       const userId = await resolveOAuthUser(ctx, provider, subject, email, name);
       if (!userId) return fail("unbekannt");
-      await startSession(ctx, reply, userId);
+      await startSession(ctx, reply, userId, req);
       return reply.redirect(`${new URL(ctx.config.APP_URL).origin}/`);
     });
   }

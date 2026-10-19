@@ -718,3 +718,8 @@ table.plan td:first-child a:hover { color: var(--accent); }
 .changelog ul { margin: 0 0 6px; padding-left: 18px; }
 .changelog li { margin: 3px 0; font-size: 0.88rem; }
 .changelog p { font-size: 0.85rem; color: var(--ink-2); }
+.sec-block { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.sec-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.totp-setup { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.totp-setup img { border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+.codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 4px 12px; margin: 8px 0; }

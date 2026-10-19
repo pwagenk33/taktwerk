@@ -85,6 +85,13 @@
       "when": 1792441958267,
       "tag": "0011_tenants",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1792442579377,
+      "tag": "0012_second_factor",
+      "breakpoints": true
     }
   ]
 }

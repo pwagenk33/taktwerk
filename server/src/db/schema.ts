@@ -148,6 +148,10 @@ export const users = mysqlTable(
     costRate: decimal("cost_rate", { precision: 7, scale: 2, mode: "number" }),
     /** Operator of the installation: may create and manage organizations. */
     platformAdmin: boolean("platform_admin").notNull().default(false),
+    /** Second factor: TOTP secret (base32) once enabled, plus hashed one-time recovery codes. */
+    totpSecret: varchar("totp_secret", { length: 64 }),
+    totpEnabledAt: datetime("totp_enabled_at", { mode: "date" }),
+    recoveryCodes: json<string[]>("recovery_codes"),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("users_username_uq").on(t.username), uniqueIndex("users_email_uq").on(t.email)],
@@ -171,6 +175,10 @@ export const sessions = mysqlTable(
     id: char("id", { length: 64 }).primaryKey(),
     userId: id("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     expiresAt: datetime("expires_at", { mode: "date" }).notNull(),
+    /** For the session overview: browser/device, IP and last activity (updated at most every few minutes). */
+    userAgent: varchar("user_agent", { length: 255 }),
+    ip: varchar("ip", { length: 45 }),
+    lastSeenAt: datetime("last_seen_at", { mode: "date" }),
     createdAt: createdAt(),
   },
   (t) => [index("sessions_user_idx").on(t.userId)],
@@ -179,7 +187,7 @@ export const sessions = mysqlTable(
 export const passwordTokens = mysqlTable("password_tokens", {
   id: char("id", { length: 64 }).primaryKey(), // SHA-256 of the token in the e-mail link
   userId: id("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  purpose: mysqlEnum("purpose", ["invite", "reset"]).notNull(),
+  purpose: mysqlEnum("purpose", ["invite", "reset", "2fa"]).notNull(),
   expiresAt: datetime("expires_at", { mode: "date" }).notNull(),
   usedAt: datetime("used_at", { mode: "date" }),
   createdAt: createdAt(),
@@ -456,4 +464,22 @@ export const allocations = mysqlTable(
     updatedAt: datetime("updated_at", { mode: "date" }).notNull().$defaultFn(() => new Date()),
   },
   (t) => [uniqueIndex("alloc_uq").on(t.userId, t.projectId, t.week), index("alloc_org_week_idx").on(t.organizationId, t.week)],
+);
+
+/** Passkeys (WebAuthn credentials): passwordless sign-in or second factor. */
+export const passkeys = mysqlTable(
+  "passkeys",
+  {
+    /** Credential id, base64url. */
+    id: varchar("id", { length: 512 }).primaryKey(),
+    userId: id("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    publicKey: varchar("public_key", { length: 1024 }).notNull(), // base64url
+    counter: int("counter").notNull().default(0),
+    transports: json<string[]>("transports"),
+    name: varchar("name", { length: 80 }).notNull(),
+    backedUp: boolean("backed_up").notNull().default(false),
+    lastUsedAt: datetime("last_used_at", { mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("passkeys_user_idx").on(t.userId)],
 );

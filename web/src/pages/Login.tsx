@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
+import { passkeysSupported, usePasskey } from "../webauthn";
 import { api, type Branding, type Providers } from "../api";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
+import { Icon } from "../ui/components";
 
 const SSO_ERRORS: Record<string, string> = {
   abgebrochen: "Die Anmeldung wurde abgebrochen. Bitte erneut versuchen.",
@@ -52,7 +54,9 @@ interface Props {
 
 export function Login({ branding, providers, demo, onLoggedIn }: Props) {
   const ssoError = new URLSearchParams(location.search).get("anmeldung");
-  const [view, setView] = useState<"login" | "forgot" | "sent" | "register">(location.pathname === "/registrieren" ? "register" : "login");
+  const [view, setView] = useState<"login" | "forgot" | "sent" | "register" | "second">(location.pathname === "/registrieren" ? "register" : "login");
+  const [second, setSecond] = useState<{ token: string; totp: boolean; passkey: boolean } | null>(null);
+  const [code, setCode] = useState("");
   const [company, setCompany] = useState("");
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState(demo ? "anna.keller" : "");
@@ -67,7 +71,13 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
     if (demo) return onLoggedIn();
     setBusy(true);
     try {
-      await api("/api/auth/login", { body: { username, password } });
+      const res = await api<{ ok: boolean; second?: { token: string; totp: boolean; passkey: boolean } }>("/api/auth/login", { body: { username, password } });
+      if (!res.ok && res.second) {
+        setSecond(res.second);
+        setView("second");
+        setCode("");
+        return;
+      }
       history.replaceState(null, "", "/");
       onLoggedIn();
     } catch (err) {
@@ -88,6 +98,41 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
       }
     }
     setView("sent");
+  };
+
+  const finishTotp = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!second) return;
+    setError("");
+    setBusy(true);
+    try {
+      await api("/api/auth/2fa/totp", { body: { token: second.token, code } });
+      history.replaceState(null, "", "/");
+      onLoggedIn();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Passkey: as second step (token) or passwordless from the login form. */
+  const withPasskey = async (token?: string) => {
+    setError("");
+    if (demo) return setError("Im Prototyp gibt es keine Passkeys. Bitte mit Benutzername und Passwort anmelden.");
+    if (!passkeysSupported()) return setError("Dieser Browser unterstützt keine Passkeys.");
+    setBusy(true);
+    try {
+      const options = await api<Record<string, unknown>>("/api/auth/passkey/options", { body: token ? { token } : {} });
+      const response = await usePasskey(options);
+      await api("/api/auth/passkey/verify", { body: { token, response } });
+      history.replaceState(null, "", "/");
+      onLoggedIn();
+    } catch (err) {
+      setError((err as Error).name === "NotAllowedError" ? "Abgebrochen oder kein passender Passkey." : (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const register = async (e: FormEvent) => {
@@ -136,6 +181,7 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
           </label>
           {error && <p className="error" role="alert">{error}</p>}
           <button className="btn primary block" disabled={busy}>{busy ? "Anmelden …" : "Anmelden"}</button>
+          {!demo && <button type="button" id="l-passkey" className="btn block" disabled={busy} onClick={() => void withPasskey()}><Icon.key />Mit Passkey anmelden</button>}
           <button type="button" className="link" onClick={() => { setView("forgot"); setError(""); }}>Passwort vergessen?</button>
           {providers.registration && !demo && <button type="button" id="to-register" className="link" onClick={() => { setView("register"); setError(""); }}>Neue Firma registrieren</button>}
           {demo && <p className="notice">Prototyp mit Beispieldaten: Die Felder sind vorausgefüllt, einfach auf «Anmelden» klicken.</p>}
@@ -153,6 +199,23 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
           {error && <p className="error" role="alert">{error}</p>}
           <button className="btn primary block">Link senden</button>
           <button type="button" className="link" onClick={() => setView("login")}>Zurück zur Anmeldung</button>
+        </form>
+      )}
+      {view === "second" && second && (
+        <form onSubmit={finishTotp} className="login-form">
+          <div>
+            <h2>Zweiter Schritt</h2>
+            <p className="muted">{second.totp ? "Gib den sechsstelligen Code aus deiner Authenticator-App ein, oder einen deiner Wiederherstellungscodes." : "Bestätige die Anmeldung mit deinem Passkey."}</p>
+          </div>
+          {second.totp && (
+            <label className="field"><span>Code</span>
+              <input id="l-code" className="input" inputMode="numeric" autoComplete="one-time-code" autoFocus value={code} onChange={(e) => setCode(e.target.value)} required />
+            </label>
+          )}
+          {error && <p className="error" role="alert">{error}</p>}
+          {second.totp && <button id="l-code-submit" className="btn primary block" disabled={busy || code.trim().length < 6}>{busy ? "Prüfe …" : "Bestätigen"}</button>}
+          {second.passkey && <button type="button" className={`btn block ${second.totp ? "" : "primary"}`} disabled={busy} onClick={() => void withPasskey(second.token)}><Icon.key />Mit Passkey bestätigen</button>}
+          <button type="button" className="link" onClick={() => { setView("login"); setSecond(null); setError(""); }}>Abbrechen</button>
         </form>
       )}
       {view === "register" && (

@@ -26,6 +26,7 @@ import { planningRoutes } from "./routes/planning";
 import { portalRoutes } from "./routes/portal";
 import { platformRoutes } from "./routes/platform";
 import { statusRoutes } from "./routes/status";
+import { securityRoutes } from "./routes/security";
 
 export type Role = "admin" | "consultant" | "employee" | "customer";
 
@@ -40,10 +41,12 @@ export interface SessionUser {
   customerId?: string | null;
   /** Operator of the installation (may manage organizations). */
   platformAdmin?: boolean;
+  /** Hash of the current session token (for the session overview). */
+  sessionId?: string;
 }
 
 /** Portal accounts only reach the portal, auth and branding routes. */
-const PORTAL_PREFIXES = ["/api/portal", "/api/auth/", "/api/branding", "/api/health"];
+const PORTAL_PREFIXES = ["/api/portal", "/api/auth/", "/api/branding", "/api/health", "/api/me/security", "/api/me/sessions", "/api/me/totp", "/api/me/passkeys"];
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -131,15 +134,17 @@ export async function buildApp(ctx: AppContext) {
   app.addHook("preHandler", async (req) => {
     const token = req.cookies[SESSION_COOKIE];
     if (!token) return;
+    const sid = sha256(token);
     const [row] = await ctx.db
-      .select({ user: users })
+      .select({ user: users, lastSeenAt: sessions.lastSeenAt })
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
-      .where(and(eq(sessions.id, sha256(token)), gt(sessions.expiresAt, new Date()), eq(users.active, true)))
+      .where(and(eq(sessions.id, sid), gt(sessions.expiresAt, new Date()), eq(users.active, true)))
       .limit(1);
     if (row) {
       const u = row.user;
-      req.user = { id: u.id, organizationId: u.organizationId, name: u.name, username: u.username, email: u.email, role: u.role, customerId: u.customerId, platformAdmin: u.platformAdmin };
+      req.user = { id: u.id, organizationId: u.organizationId, name: u.name, username: u.username, email: u.email, role: u.role, customerId: u.customerId, platformAdmin: u.platformAdmin, sessionId: sid };
+      if (!row.lastSeenAt || Date.now() - row.lastSeenAt.getTime() > 5 * 60_000) await ctx.db.update(sessions).set({ lastSeenAt: new Date(), ip: req.ip }).where(eq(sessions.id, sid));
       if (u.role === "customer" && req.url.startsWith("/api/") && !PORTAL_PREFIXES.some((p) => req.url.startsWith(p))) throw new HttpError(403, "Dieser Bereich ist für das Kundenportal nicht zugänglich.");
     }
   });
@@ -169,6 +174,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(planningRoutes);
   await app.register(portalRoutes);
   await app.register(platformRoutes);
+  await app.register(securityRoutes);
 
   // Production: serve the built web app with SPA fallback.
   const webDist = ctx.config.WEB_DIST ? resolve(ctx.config.WEB_DIST) : null;

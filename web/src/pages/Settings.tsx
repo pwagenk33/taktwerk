@@ -164,7 +164,10 @@ function Users() {
                     <input className="input num" type="number" min={0} step={5} style={{ width: 90, textAlign: "right" }} aria-label={`Kostensatz von ${u.name}`} placeholder="Standard" defaultValue={u.costRate ?? ""} onBlur={(e) => { const v = e.target.value.trim(); const next = v === "" ? null : Number(v); if ((u.costRate ?? null) !== next) patch(u.id, { costRate: next }); }} />
                   </td>
                   <td>{!u.active ? <span className="pill neutral">Deaktiviert</span> : u.lastLoginAt ? <span className="pill ok">Aktiv</span> : <span className="pill risk">Eingeladen</span>}</td>
-                  <td className="r"><button className="btn small ghost" onClick={() => patch(u.id, { active: !u.active })}>{u.active ? "Deaktivieren" : "Aktivieren"}</button></td>
+                  <td className="r" style={{ whiteSpace: "nowrap" }}>
+                    <button className="btn small ghost" title="Zweiten Faktor und Passkeys entfernen, alle Geräte abmelden" onClick={() => { if (confirm(`Zweiten Faktor von ${u.name} zurücksetzen? Alle Geräte werden abgemeldet.`)) void api(`/api/users/${u.id}/security/reset`, { body: {} }).then(() => notify("Zweiter Faktor zurückgesetzt")).catch((e: Error) => setError(e.message)); }}>2FA zurücksetzen</button>
+                    <button className="btn small ghost" onClick={() => patch(u.id, { active: !u.active })}>{u.active ? "Deaktivieren" : "Aktivieren"}</button>
+                  </td>
                 </tr>
               ))}
             </tbody>

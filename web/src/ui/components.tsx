@@ -255,6 +255,8 @@ export const Icon = {
   moon: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>,
   monitor: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></svg>,
   logout: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l5 4-5 4M20 12H9" /></svg>,
+  key: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><circle cx="8" cy="14" r="4" /><path d="M11 11l9-9M16 6l3 3M13 9l3 3" /></svg>,
+  shield: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /><path d="M9 12l2 2 4-4" /></svg>,
   plan: () => <svg viewBox="0 0 24 24" {...P}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M9 10v10M15 10v10M6 15h1M12 14h1M18 16h1" /></svg>,
   users: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4.5-6.2" /></svg>,
   back: () => <svg viewBox="0 0 24 24" width="15" height="15" {...P}><path d="M15 5l-7 7 7 7" /></svg>,
