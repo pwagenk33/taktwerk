@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { CURRENCIES, PROJECT_KINDS, currencyOf, fmt1, fmtCHF, fmtMoney, fmtMonth, fmtNum, rateOn, scenario, scenarioBand, type BudgetStatus, type Currency, type Customer, type Project, type ProjectKind, type ProjectReport, type SubProject } from "@taktwerk/domain";
+import { CURRENCIES, PROJECT_KINDS, currencyOf, fmt1, fmtCHF, fmtDate, fmtMoney, fmtMonth, fmtNum, rateOn, scenario, scenarioBand, type BudgetStatus, type Currency, type Customer, type Project, type ProjectKind, type ProjectReport, type SubProject } from "@taktwerk/domain";
 import { Select } from "../ui/Select";
 import { useStore } from "../store";
+import type { PortalAccount } from "../api";
 import { BurnUpChart, Icon, Money, StatusPill } from "../ui/components";
 
 /** Name, budget and JIRA key of a project or sub-project, editable in place by leads. */
@@ -463,7 +464,72 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
           );
         })}
       </section>
+      {role !== "employee" && <PortalAccess customerId={customer.id} />}
     </>
+  );
+}
+
+/** Portal accounts of a customer: who can sign in to the customer portal, invite and revoke. */
+function PortalAccess({ customerId }: { customerId: string }) {
+  const { portalAccounts, invitePortal, revokePortal, notify, mode } = useStore();
+  const [accounts, setAccounts] = useState<PortalAccount[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const reload = () => portalAccounts(customerId).then(setAccounts).catch(() => setAccounts([]));
+  useEffect(() => { void reload(); }, [customerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const invite = async () => {
+    setBusy(true);
+    try {
+      await invitePortal(customerId, name.trim(), email.trim());
+      notify(mode === "api" ? `Einladung an ${email.trim()} geschickt` : "Zugang angelegt (Demo: ohne E-Mail)");
+      setName(""); setEmail(""); setOpen(false); setError("");
+      await reload();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const revoke = async (a: PortalAccount) => {
+    if (!confirm(`Zugang von ${a.name} zum Kundenportal entziehen?`)) return;
+    await revokePortal(customerId, a.id);
+    notify("Zugang entzogen");
+    await reload();
+  };
+  return (
+    <section className="card" style={{ marginTop: 16 }} id="portal-access">
+      <div className="card-head">
+        <h2><Icon.users /> Kundenportal</h2>
+        <button className="btn small" id="portal-invite" onClick={() => setOpen((o) => !o)}>+ Zugang</button>
+      </div>
+      <div className="card-pad" style={{ paddingTop: 10 }}>
+        {open && (
+          <form className="portal-invite" onSubmit={(e) => { e.preventDefault(); void invite(); }}>
+            <label className="field"><span>Name</span><input id="pi-name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Vorname Nachname" /></label>
+            <label className="field"><span>E-Mail</span><input id="pi-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="name@kunde.ch" /></label>
+            <button className="btn primary" id="pi-send" disabled={busy || !name.trim() || !email.trim()}>Einladen</button>
+            {error && <span className="error">{error}</span>}
+            <span className="muted" style={{ fontSize: "0.8rem", flexBasis: "100%" }}>Die Person erhält eine E-Mail mit Link zum Setzen des Passworts und sieht danach Budget, Restbudget, Prognose, Monatsreports und Rechnungen dieses Kunden.</span>
+          </form>
+        )}
+        {accounts === null && <p className="muted">Lade …</p>}
+        {accounts?.length === 0 && !open && <p className="muted" style={{ margin: 0 }}>Noch niemand hat Zugang zum Portal. Mit «+ Zugang» eine Kontaktperson einladen.</p>}
+        {accounts && accounts.length > 0 && (
+          <ul className="portal-list">
+            {accounts.map((a) => (
+              <li key={a.id}>
+                <span className="who small">{a.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("")}</span>
+                <span><strong>{a.name}</strong><br /><span className="muted" style={{ fontSize: "0.8rem" }}>{a.email}{a.hasPassword ? (a.lastLoginAt ? ` · zuletzt ${fmtDate(a.lastLoginAt.slice(0, 10))}` : " · noch nie angemeldet") : " · Einladung offen"}</span></span>
+                <button className="btn small ghost" onClick={() => void revoke(a)} title="Zugang entziehen" aria-label="Zugang entziehen"><Icon.trash /></button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
 

@@ -1,5 +1,5 @@
 import { WorkCalendar, isoWeekKey, weekFigures } from "@taktwerk/domain";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, lte, ne } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { HttpError, requireUser, type SessionUser } from "../app";
@@ -30,7 +30,7 @@ export async function weekRoutes(app: FastifyInstance) {
     if (!isLead(user)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
     const q = z.object({ from: weekParam, to: weekParam }).parse(req.query);
     const data = await loadDataset(ctx, user);
-    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, user.organizationId), eq(users.active, true)));
+    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, user.organizationId), eq(users.active, true), ne(users.role, "customer")));
     const subs = await ctx.db
       .select()
       .from(weekSubmissions)

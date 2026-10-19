@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { Role } from "@taktwerk/domain";
 import { Closing } from "./pages/Closing";
 import { Dashboard } from "./pages/Dashboard";
+import { Planning } from "./pages/Planning";
+import { Portal } from "./pages/Portal";
 import { Profile } from "./pages/Profile";
 import { Projects } from "./pages/Projects";
 import { Reports } from "./pages/Reports";
@@ -23,6 +25,7 @@ const PAGES = [
   { id: "arbeitszeit", label: "Absenzen", icon: Icon.balance, lead: false },
   { id: "abschluss", label: "Monatsabschluss", icon: Icon.check, lead: false },
   { id: "projekte", label: "Kunden & Projekte", icon: Icon.folder, lead: true },
+  { id: "planung", label: "Planung", icon: Icon.plan, lead: true },
   { id: "reports", label: "Reports", icon: Icon.report, lead: true },
   { id: "velocity", label: "Velocity", icon: Icon.velocity, lead: true },
   { id: "einstellungen", label: "Einstellungen", icon: Icon.settings, lead: true, admin: true },
@@ -30,7 +33,7 @@ const PAGES = [
 ] as const;
 
 type PageId = (typeof PAGES)[number]["id"];
-const ROLE_LABEL: Record<Role, string> = { admin: "Admin · Anna Keller", consultant: "Consultant · Marco Brunner", employee: "Mitarbeiterin · Lea Meier" };
+const ROLE_LABEL: Record<Role, string> = { admin: "Admin · Anna Keller", consultant: "Consultant · Marco Brunner", employee: "Mitarbeiterin · Lea Meier", customer: "Kundin · Claudia Steiner" };
 /** Pages shown in the phone tab bar; the rest sit behind "Mehr". */
 const PHONE_TABS: PageId[] = ["dashboard", "zeit", "arbeitszeit", "projekte"];
 
@@ -105,6 +108,9 @@ export function App() {
     return () => { window.removeEventListener("hashchange", onHash); window.removeEventListener("keydown", onKey); };
   }, []);
 
+  // Portal accounts get their own, reduced application.
+  if (role === "customer") return <><Portal />{toast && <div className="toast" role="status">{toast}</div>}</>;
+
   const allowed = PAGES.filter((p) => !(role === "employee" && p.lead) && !("admin" in p && role !== "admin"));
   const visible = allowed.filter((p) => !("hidden" in p));
   const current = allowed.some((p) => p.id === page) ? page : "dashboard";
@@ -168,6 +174,7 @@ export function App() {
           {current === "arbeitszeit" && <WorkTime />}
           {current === "abschluss" && <Closing />}
           {current === "projekte" && <Projects />}
+          {current === "planung" && <Planning />}
           {current === "reports" && <Reports />}
           {current === "velocity" && <Velocity />}
           {current === "einstellungen" && <Settings />}

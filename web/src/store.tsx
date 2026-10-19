@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, loadDataset, upload, type Branding, type Me, type EntryComment, type OpenQuestion, type WeekSubmission, type WeekOverviewRow } from "./api";
+import { api, loadDataset, upload, type Branding, type Me, type EntryComment, type OpenQuestion, type WeekSubmission, type WeekOverviewRow, type PortalAccount } from "./api";
 import { currentVelocity, profitability, projectReports, velocityByMonth, type Profitability, type ProjectReport, type VelocityFactor, type VelocityMonth } from "@taktwerk/domain";
 import { NEEDS_APPROVAL, WorkCalendar, absenceProblem, isoWeekKey, monthRange, weekFigures } from "@taktwerk/domain";
 import type { Absence, Customer, Dataset, Employee, Expense, Holiday, Project, Role, SubProject, TimeEntry, VelocitySettings } from "@taktwerk/domain";
@@ -87,6 +87,12 @@ interface Store {
   updateExpense: Patch<Expense>;
   updateProject: Patch<Project>;
   updateCustomer: (id: string, patch: { name?: string; currency?: Customer["currency"] }) => Promise<void>;
+  /** Resource planning: reserve `hours` of a person for a project in an ISO week (0 removes the reservation). */
+  setAllocation: (employeeId: string, projectId: string, week: string, hours: number) => Promise<void>;
+  /** Customer portal accounts of a customer (leads). */
+  portalAccounts: (customerId: string) => Promise<PortalAccount[]>;
+  invitePortal: (customerId: string, name: string, email: string) => Promise<PortalAccount>;
+  revokePortal: (customerId: string, userId: string) => Promise<void>;
   /** Margin per project and customer in CHF; leads only (employees get no cost rates). */
   profit: Profitability;
   updateSubProject: Patch<SubProject>;
@@ -136,7 +142,7 @@ interface ProviderProps {
 
 export function StoreProvider({ children, initial, me, branding, onBranding, onLogout }: ProviderProps) {
   const mode = me ? "api" : "demo";
-  const [data, setData] = useState<Dataset>(initial);
+  const [data, setData] = useState<Dataset>(() => (me ? initial : { ...initial, allocations: loadLocal<Dataset["allocations"] | null>("rt.allocations", null) ?? initial.allocations }));
   const [demoRole, setDemoRole] = useState<Role>(() => loadLocal<Role>("rt.role", "admin"));
   const [velocitySettings, setVS] = useState<VelocitySettings>(() =>
     loadLocal<VelocitySettings>("rt.velocity", { method: "rolling", window: 3 }),
@@ -166,7 +172,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
   const setLocalComments = (next: LocalComment[]) => { localRef.current = next; setLocalCommentsState(next); };
 
   useEffect(() => {
-    if (me) { loadClosings().catch(() => {}); loadQuestions().catch(() => {}); loadWeeks().catch(() => {}); }
+    if (me && me.role !== "customer") { loadClosings().catch(() => {}); loadQuestions().catch(() => {}); loadWeeks().catch(() => {}); }
   }, [me]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -331,6 +337,34 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
       mode === "api"
         ? (c) => remote("/api/customers", { name: c.name, hourlyRate: c.rates[0].hourlyRate, validFrom: c.rates[0].validFrom, currency: c.currency })
         : local("customers", "c"),
+    setAllocation: async (employeeId, projectId, week, hours) => {
+      const h = Math.round(hours * 2) / 2;
+      if (mode === "api") {
+        await api("/api/planning", { method: "PUT", body: { employeeId, projectId, week, hours: h } });
+        setData(await loadDataset());
+        return;
+      }
+      setData((d) => {
+        const rest = (d.allocations ?? []).filter((a) => !(a.employeeId === employeeId && a.projectId === projectId && a.week === week));
+        const next = h > 0 ? [...rest, { id: uid("al"), employeeId, projectId, week, hours: h }] : rest;
+        saveLocal("rt.allocations", next);
+        return { ...d, allocations: next };
+      });
+    },
+    portalAccounts: async (customerId) => (mode === "api" ? api<PortalAccount[]>(`/api/customers/${customerId}/portal`) : loadLocal<PortalAccount[]>("rt.portal", []).filter((a) => a.username.startsWith(`${customerId}:`))),
+    invitePortal: async (customerId, name, email) => {
+      if (mode === "api") return api<PortalAccount>(`/api/customers/${customerId}/portal`, { body: { name, email } });
+      const acc: PortalAccount = { id: uid("pu"), name, email: email.toLowerCase(), username: `${customerId}:${email.toLowerCase()}`, active: true, lastLoginAt: null, hasPassword: false };
+      saveLocal("rt.portal", [...loadLocal<PortalAccount[]>("rt.portal", []), acc]);
+      return acc;
+    },
+    revokePortal: async (customerId, userId) => {
+      if (mode === "api") {
+        await api(`/api/customers/${customerId}/portal/${userId}`, { method: "DELETE" });
+        return;
+      }
+      saveLocal("rt.portal", loadLocal<PortalAccount[]>("rt.portal", []).filter((a) => a.id !== userId));
+    },
     updateCustomer: async (id, patch) => {
       if (mode === "api") {
         await api(`/api/customers/${id}`, { method: "PATCH", body: patch });

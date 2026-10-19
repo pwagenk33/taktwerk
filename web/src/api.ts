@@ -1,4 +1,4 @@
-import type { Dataset, Holiday, PostalAddress, Role } from "@taktwerk/domain";
+import type { Dataset, Holiday, PostalAddress, ProjectReport, Role } from "@taktwerk/domain";
 
 /** Demo mode runs entirely in the browser with example data (shareable prototype build). */
 export const DEMO = import.meta.env.VITE_DEMO === "1" || import.meta.env.MODE === "single";
@@ -20,6 +20,29 @@ export interface Me {
   username: string;
   email: string;
   role: Role;
+  /** Portal accounts: the customer they belong to. */
+  customerId?: string | null;
+}
+
+/** A customer's portal account (role "customer"), managed on the customer page. */
+export interface PortalAccount {
+  id: string;
+  name: string;
+  email: string;
+  username: string;
+  active: boolean;
+  lastLoginAt: string | null;
+  hasPassword: boolean;
+}
+
+export type PortalInvoiceStatus = "sent" | "paid";
+export interface PortalOverview {
+  customer: { id: string; name: string; currency: "CHF" | "EUR" | "USD" };
+  orgName: string;
+  today: string;
+  projects: ProjectReport[];
+  months: { month: string; label: string; hours: number; amount: number }[];
+  invoices: { id: string; number: string; month: string; issueDate: string; dueDate: string; status: PortalInvoiceStatus; net: number; gross: number }[];
 }
 
 export interface Providers {

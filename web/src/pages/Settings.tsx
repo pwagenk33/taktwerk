@@ -12,7 +12,7 @@ const PRESETS = [
   { name: "Gletscherblau", color: "#1E5F99" },
   { name: "Anthrazit", color: "#2E3136" },
 ];
-const ROLE_LABEL: Record<Role, string> = { admin: "Admin", consultant: "Consultant", employee: "Mitarbeitende" };
+const ROLE_LABEL: Record<Role, string> = { admin: "Admin", consultant: "Consultant", employee: "Mitarbeitende", customer: "Kunde (Portal)" };
 
 function Appearance() {
   const { branding, setBranding, setLogo, notify } = useStore();
@@ -141,7 +141,7 @@ function Users() {
           <label className="field"><span>E-Mail</span><input id="u-email" type="email" className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
           <label className="field"><span>Benutzername</span><input id="u-username" className="input" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="z. B. vorname.nachname" /></label>
           <label className="field"><span>Rolle</span>
-            <Select id="u-role" value={form.role} onChange={(v) => setForm({ ...form, role: v as Role })} options={(Object.keys(ROLE_LABEL) as Role[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))} />
+            <Select id="u-role" value={form.role} onChange={(v) => setForm({ ...form, role: v as Role })} options={(Object.keys(ROLE_LABEL) as Role[]).filter((r) => r !== "customer").map((r) => ({ value: r, label: ROLE_LABEL[r] }))} />
           </label>
           <button className="btn primary" onClick={invite}>Einladung senden</button>
         </div>
@@ -158,7 +158,7 @@ function Users() {
                   <td className="mono">{u.username}</td>
                   <td>{u.email}</td>
                   <td>
-                    <Select small ariaLabel={`Rolle von ${u.name}`} value={u.role} onChange={(v) => patch(u.id, { role: v })} options={(Object.keys(ROLE_LABEL) as Role[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))} />
+                    <Select small ariaLabel={`Rolle von ${u.name}`} value={u.role} onChange={(v) => patch(u.id, { role: v })} options={(Object.keys(ROLE_LABEL) as Role[]).filter((r) => r !== "customer").map((r) => ({ value: r, label: ROLE_LABEL[r] }))} />
                   </td>
                   <td className="r">
                     <input className="input num" type="number" min={0} step={5} style={{ width: 90, textAlign: "right" }} aria-label={`Kostensatz von ${u.name}`} placeholder="Standard" defaultValue={u.costRate ?? ""} onBlur={(e) => { const v = e.target.value.trim(); const next = v === "" ? null : Number(v); if ((u.costRate ?? null) !== next) patch(u.id, { costRate: next }); }} />

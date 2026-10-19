@@ -1,5 +1,5 @@
 import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, rateOn } from "@taktwerk/domain";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -174,7 +174,7 @@ export async function billingRoutes(app: FastifyInstance) {
   app.get("/api/months/:month", async (req) => {
     const user = requireUser(req);
     const month = monthParam.parse((req.params as { month: string }).month);
-    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, user.organizationId), eq(users.active, true)));
+    const people = await ctx.db.select().from(users).where(and(eq(users.organizationId, user.organizationId), eq(users.active, true), ne(users.role, "customer")));
     const closings = await ctx.db.select().from(monthClosings).where(and(eq(monthClosings.organizationId, user.organizationId), eq(monthClosings.month, month)));
     return people
       .filter((p) => isLead(user) || p.id === user.id)

@@ -121,7 +121,9 @@ export const users = mysqlTable(
     username: varchar("username", { length: 80 }).notNull(),
     email: varchar("email", { length: 254 }).notNull(),
     name: varchar("name", { length: 160 }).notNull(),
-    role: mysqlEnum("role", ["admin", "consultant", "employee"]).notNull().default("employee"),
+    role: mysqlEnum("role", ["admin", "consultant", "employee", "customer"]).notNull().default("employee"),
+    /** Portal accounts (role "customer") belong to one customer and only see that customer's data. */
+    customerId: id("customer_id").references(() => customers.id, { onDelete: "cascade" }),
     /** scrypt hash; null for SSO-only accounts and invited users who have not set a password yet. */
     passwordHash: varchar("password_hash", { length: 255 }),
     active: boolean("active").notNull().default(true),
@@ -428,3 +430,19 @@ export const weekSubmissions = mysqlTable(
   (t) => [primaryKey({ columns: [t.userId, t.week] }), index("ws_org_week_idx").on(t.organizationId, t.week)],
 );
 
+
+/** Resource planning: hours a person is reserved for a project in an ISO week. */
+export const allocations = mysqlTable(
+  "allocations",
+  {
+    id: id().primaryKey(),
+    organizationId: orgId(),
+    userId: id("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    projectId: id("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    week: char("week", { length: 8 }).notNull(), // YYYY-Www
+    hours: decimal("hours", { precision: 5, scale: 1, mode: "number" }).notNull(),
+    note: varchar("note", { length: 200 }),
+    updatedAt: datetime("updated_at", { mode: "date" }).notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("alloc_uq").on(t.userId, t.projectId, t.week), index("alloc_org_week_idx").on(t.organizationId, t.week)],
+);

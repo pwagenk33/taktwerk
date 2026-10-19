@@ -33,7 +33,11 @@ function Root() {
     }
     try {
       const me = await api<Me>("/api/auth/me");
-      setState({ kind: "app", data: await loadDataset(), me });
+      // Portal accounts have no access to the organization's dataset; the portal loads its own overview.
+      const data: Dataset = me.role === "customer"
+        ? { teams: [], employees: [], customers: [], projects: [], subProjects: [], timeEntries: [], expenses: [], issues: [], today: new Date().toISOString().slice(0, 10) }
+        : await loadDataset();
+      setState({ kind: "app", data, me });
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) setState({ kind: "login" });
       else setState({ kind: "error", message: (e as Error).message });

@@ -643,3 +643,69 @@ table.profit .warn { color: var(--warn-ink); }
 .knob input[type=range] { width: 100%; accent-color: var(--accent); }
 .knob small { color: var(--ink-3); }
 .report-row { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 12px; }
+
+/* ---------- Resource planning ---------- */
+.plan-calm { color: var(--good-ink); font-size: 0.88rem; margin: 0 0 14px; }
+.plan-warnings { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 10px; margin-bottom: 16px; }
+.plan-warning { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: var(--radius-s); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 9%, var(--surface)); cursor: pointer; font: inherit; color: var(--ink); }
+.plan-warning.soon { border-color: color-mix(in srgb, var(--crit) 45%, var(--line)); background: color-mix(in srgb, var(--crit) 8%, var(--surface)); }
+.plan-warning strong { font-size: 0.86rem; }
+.plan-warning span { font-size: 0.82rem; color: var(--ink-2); }
+.plan-warning small { font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+table.plan th small { display: block; font-size: 0.66rem; letter-spacing: 0; text-transform: none; color: var(--ink-3); font-weight: 500; }
+table.plan td { padding: 5px 6px; }
+table.plan td:first-child { min-width: 140px; padding-left: 12px; white-space: nowrap; }
+table.plan td.picked { box-shadow: inset 0 0 0 2px var(--accent); border-radius: 6px; }
+.plan-cell-btn { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; width: 100%; border-radius: 6px; }
+.plan-cell-btn:hover .plan-cell { background: var(--surface-2); }
+.plan-cell { display: flex; flex-direction: column; gap: 3px; min-width: 56px; padding: 4px 6px; border-radius: 6px; }
+.plan-nums { font-variant-numeric: tabular-nums; font-size: 0.8rem; line-height: 1.1; text-align: right; }
+.plan-nums small { color: var(--ink-3); font-size: 0.7rem; }
+.plan-bar { height: 4px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.plan-bar span { display: block; height: 100%; border-radius: 99px; background: var(--good); }
+.plan-cell.idle .plan-bar span { background: var(--series-1-soft); }
+.plan-cell.tight .plan-bar span { background: var(--warn); }
+.plan-cell.over .plan-bar span { background: var(--crit); }
+.plan-cell.over .plan-nums b { color: var(--crit-ink); }
+.plan-cell.tight .plan-nums b { color: var(--warn-ink); }
+.plan-cell.none { opacity: 0.5; }
+.plan-legend { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.78rem; color: var(--ink-2); padding: 10px 16px 12px; margin: 0; }
+.plan-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-left: 8px; background: var(--good); }
+.plan-dot.idle { background: var(--series-1-soft); margin-left: 0; }
+.plan-dot.tight { background: var(--warn); }
+.plan-dot.over { background: var(--crit); }
+table.plan tr.plan-over td:first-child a { color: var(--crit-ink); }
+.plan-editor { margin-bottom: 16px; border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.plan-editor-rows { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; }
+.plan-editor-row { display: grid; grid-template-columns: 1fr 90px 16px 32px; gap: 8px; align-items: center; font-size: 0.88rem; }
+.plan-editor-row input { text-align: right; }
+.plan-editor-add { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid var(--line); }
+
+/* ---------- Customer portal ---------- */
+.portal { min-height: 100vh; background: var(--bg); display: flex; flex-direction: column; }
+.portal-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px max(24px, env(safe-area-inset-right, 0px)) 12px max(24px, env(safe-area-inset-left, 0px)); background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+.portal-org { color: var(--ink-2); font-weight: 400; font-size: 0.9rem; }
+.portal-who { font-size: 0.85rem; }
+.portal-main { width: 100%; max-width: 1180px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }
+.portal-projects { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.portal-project { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.portal-project:last-child { border-bottom: 0; }
+.portal-report { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.portal-report .select { min-width: 200px; }
+.portal-foot { text-align: center; font-size: 0.82rem; padding: 12px 0 24px; }
+.btn.disabled { opacity: 0.5; cursor: not-allowed; }
+.portal-invite { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.portal-invite .field { flex: 1 1 180px; }
+.portal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.portal-list li { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: center; font-size: 0.88rem; }
+@media (max-width: 700px) {
+  .portal-main { padding: 16px; }
+  .plan-editor-row { grid-template-columns: 1fr 70px 16px 32px; }
+}
+.portal-project { flex-direction: column; align-items: stretch; gap: 6px; }
+.portal-project-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.portal-main table.data td:first-child { min-width: 0; }
+table.plan td:first-child, table.plan th:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+table.plan tr.group td:first-child { background: var(--surface-2); }
+table.plan td:first-child a { color: var(--ink); text-decoration: none; font-weight: 600; }
+table.plan td:first-child a:hover { color: var(--accent); }

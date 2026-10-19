@@ -1,8 +1,9 @@
 // Deterministic example data: 4 customers, 11 months of history, team velocity drifting from 3.5 to 6.5 h/SP.
 import { addMonths, monthOf, monthRange, projectReports, rateOn } from "./calc";
-import { WorkCalendar, addDays, defaultHolidays } from "./worktime";
+import { WorkCalendar, addDays, defaultHolidays, isoWeekKey, mondayOf } from "./worktime";
 import type {
   Absence,
+  Allocation,
   Customer,
   Dataset,
   Employee,
@@ -64,6 +65,27 @@ const ABSENCES: Absence[] = [
   absence("a16", "e7", "Ferien", "2026-09-21", "2026-09-25"),
   absence("a17", "e7", "Kompensation", "2026-10-23", "2026-10-23", "requested", false, "Überzeit abbauen"),
 ];
+
+/** Resource plan for the coming weeks: Jonas is over-planned in two weeks, Sara's vacation week is still fully planned. */
+function sampleAllocations(): Allocation[] {
+  const week = (n: number) => isoWeekKey(addDays(mondayOf(TODAY), n * 7));
+  const plan: [string, string, number[]][] = [
+    ["e1", "p1", [8, 8, 8, 8, 8, 8, 4, 4]],
+    ["e2", "p2", [16, 16, 16, 16, 16, 16, 16, 16]],
+    ["e2", "p1", [12, 12, 12, 8, 8, 8, 8, 8]],
+    ["e3", "p1", [32, 32, 32, 32, 32, 24, 24, 24]],
+    ["e4", "p3", [24, 30, 30, 24, 24, 24, 16, 16]],
+    ["e4", "p4", [8, 12, 12, 8, 4, 4, 0, 0]],
+    ["e5", "p3", [30, 30, 30, 30, 36, 36, 30, 30]],
+    ["e5", "p4", [6, 6, 6, 6, 8, 8, 0, 0]],
+    ["e6", "p4", [20, 20, 20, 20, 20, 12, 12, 12]],
+    ["e7", "p2", [16, 16, 16, 16, 16, 16, 16, 16]],
+    ["e7", "p3", [12, 12, 12, 12, 12, 12, 8, 8]],
+  ];
+  return plan.flatMap(([employeeId, projectId, hours]) =>
+    hours.map((h, i) => ({ id: `al-${employeeId}-${projectId}-${i}`, employeeId, projectId, week: week(i), hours: h })).filter((a) => a.hours > 0),
+  );
+}
 
 const WORK_MODEL: WorkModel = {
   weeklyHours: 42,
@@ -314,6 +336,7 @@ export function buildDataset(): Dataset {
     expenses,
     issues,
     absences: ABSENCES.map((a) => ({ ...a })),
+    allocations: sampleAllocations(),
     workModel: WORK_MODEL,
     rates: SAMPLE_RATES,
     fx: { rates: { EUR: 0.94, USD: 0.8 }, asOf: TODAY, source: "Beispiel" },

@@ -22,8 +22,10 @@ import { exportRoutes } from "./routes/export";
 import { expenseRoutes } from "./routes/expenses";
 import { invoiceRoutes } from "./routes/invoices";
 import { worktimeRoutes } from "./routes/worktime";
+import { planningRoutes } from "./routes/planning";
+import { portalRoutes } from "./routes/portal";
 
-export type Role = "admin" | "consultant" | "employee";
+export type Role = "admin" | "consultant" | "employee" | "customer";
 
 export interface SessionUser {
   id: string;
@@ -32,7 +34,12 @@ export interface SessionUser {
   username: string;
   email: string;
   role: Role;
+  /** Set for portal accounts (role "customer"). */
+  customerId?: string | null;
 }
+
+/** Portal accounts only reach the portal, auth and branding routes. */
+const PORTAL_PREFIXES = ["/api/portal", "/api/auth/", "/api/branding", "/api/health"];
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -105,7 +112,8 @@ export async function buildApp(ctx: AppContext) {
       .limit(1);
     if (row) {
       const u = row.user;
-      req.user = { id: u.id, organizationId: u.organizationId, name: u.name, username: u.username, email: u.email, role: u.role };
+      req.user = { id: u.id, organizationId: u.organizationId, name: u.name, username: u.username, email: u.email, role: u.role, customerId: u.customerId };
+      if (u.role === "customer" && req.url.startsWith("/api/") && !PORTAL_PREFIXES.some((p) => req.url.startsWith(p))) throw new HttpError(403, "Dieser Bereich ist für das Kundenportal nicht zugänglich.");
     }
   });
 
@@ -130,6 +138,8 @@ export async function buildApp(ctx: AppContext) {
   await app.register(reminderRoutes);
   await app.register(exportRoutes);
   await app.register(invoiceRoutes);
+  await app.register(planningRoutes);
+  await app.register(portalRoutes);
 
   // Production: serve the built web app with SPA fallback.
   const webDist = ctx.config.WEB_DIST ? resolve(ctx.config.WEB_DIST) : null;

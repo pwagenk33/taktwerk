@@ -51,6 +51,8 @@ Schema ändern: `server/src/db/schema.ts` anpassen, dann `npm run db:generate -w
 - Forecast-Szenarien im Projekt: Velocity-Band optimistisch bis pessimistisch und Was-wäre-wenn mit Velocity, Stundensatz, Umfang, Budget und Teamgrösse.
 - Geplante Berichte: Wochenmail an die Projektleitung, Monatsmail an die Geschäftsführung, frei konfigurierbar (Einstellungen → Berichte & Export). Kompletter Datenexport als CSV oder JSON.
 - Dashboard-Widgets Auslastung, offene Rechnungen, Ferienplan und Top-Kunden.
+- Ressourcenplanung (Leitung → Planung): Personen × Wochen mit Kapazität nach Pensum, Ferien und Feiertagen gegen geplante Projektstunden, Projekte gegen Restbudget in Stunden, Engpässe werden Wochen im Voraus oben aufgelistet. Reservationen pro Person, Projekt und Woche (`PUT /api/planning`).
+- Kundenportal: Leads laden auf der Kundenseite Kontaktpersonen ein (Rolle «customer», Passwort per Mail-Link). Diese sehen nur ihren Kunden: Budget, Restbudget, Prognose, Stunden pro Monat, Monatsreports als PDF/Excel und gestellte Rechnungen (`/api/portal`). Beispielkonto `portal.medtech`.
 
 ## Arbeitszeit & Absenzen
 

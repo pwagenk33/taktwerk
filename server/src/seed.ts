@@ -82,6 +82,11 @@ export async function seedSample(db: Db, password: string) {
     })),
   );
   await db.insert(customers).values(data.customers.map((c) => ({ id: idFor(c.id), organizationId: orgId, name: c.name, billingAddress: c.address ?? null })));
+  // Portal account of a customer contact (role "customer"): sees only Medtech Basel AG.
+  await db.insert(users).values({
+    id: randomUUID(), organizationId: orgId, customerId: idFor("c3"), username: "portal.medtech", email: "portal@medtech-basel.example", name: "Claudia Steiner",
+    role: "customer", passwordHash: hash,
+  });
   await db.insert(customerRates).values(data.customers.flatMap((c) => c.rates.map((r) => ({ customerId: idFor(c.id), ...r }))));
   await db.insert(projects).values(data.projects.map((p) => ({ id: idFor(p.id), organizationId: orgId, customerId: idFor(p.customerId), name: p.name, budget: p.budget, jiraProjectKey: p.jiraProjectKey })));
   await db.insert(subProjects).values(data.subProjects.map((s) => ({ id: idFor(s.id), organizationId: orgId, projectId: idFor(s.projectId), name: s.name, budget: s.budget, jiraEpicKey: s.jiraEpicKey })));

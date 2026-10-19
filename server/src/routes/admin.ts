@@ -170,7 +170,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get("/api/users", async (req) => {
     const user = requireRole(req, "admin");
-    const rows = await ctx.db.select().from(users).where(eq(users.organizationId, user.organizationId));
+    const rows = await ctx.db.select().from(users).where(and(eq(users.organizationId, user.organizationId), ne(users.role, "customer")));
     return rows.map(({ passwordHash, ...u }) => ({ ...u, hasPassword: passwordHash !== null }));
   });
 

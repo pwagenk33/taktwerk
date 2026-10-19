@@ -6,6 +6,7 @@ import { z } from "zod";
 import { HttpError, requireRole, requireUser, type AppContext, type SessionUser } from "../app";
 import {
   absences,
+  allocations,
   customerRates,
   organizations,
   customers,
@@ -44,7 +45,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
   const org = user.organizationId;
   const db = ctx.db;
   const own = user.role === "employee";
-  const [teamRows, userRows, customerRows, rateRows, projectRows, subRows, entryRows, expenseRows, issueRows, absenceRows, [orgRow]] = await Promise.all([
+  const [teamRows, userRows, customerRows, rateRows, projectRows, subRows, entryRows, expenseRows, issueRows, absenceRows, [orgRow], allocationRows] = await Promise.all([
     db.select().from(teams).where(eq(teams.organizationId, org)),
     db.select().from(users).where(eq(users.organizationId, org)),
     db.select().from(customers).where(eq(customers.organizationId, org)),
@@ -56,6 +57,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
     db.select().from(jiraIssues).where(eq(jiraIssues.organizationId, org)),
     db.select().from(absences).where(own ? and(eq(absences.organizationId, org), eq(absences.userId, user.id)) : eq(absences.organizationId, org)),
     db.select().from(organizations).where(eq(organizations.id, org)).limit(1),
+    db.select().from(allocations).where(own ? and(eq(allocations.organizationId, org), eq(allocations.userId, user.id)) : eq(allocations.organizationId, org)),
   ]);
   const today = todayZurich();
   const year = Number(today.slice(0, 4));
@@ -64,7 +66,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
     today,
     teams: teamRows.map((t) => ({ id: t.id, name: t.name })),
     employees: userRows
-      .filter((u) => u.active)
+      .filter((u) => u.active && u.role !== "customer")
       .sort((a, b) => a.name.localeCompare(b.name, "de"))
       .map((u) => ({
         id: u.id,
@@ -131,6 +133,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser): Promise<D
       vatRate: orgRow?.settings.vatRate ?? DEFAULT_RATES.vatRate,
       ...(own ? {} : { costRate: orgRow?.settings.costRate }),
     },
+    allocations: allocationRows.map((a) => ({ id: a.id, employeeId: a.userId, projectId: a.projectId, week: a.week, hours: a.hours, note: a.note ?? undefined })),
     fx: orgRow?.settings.fx ? { rates: orgRow.settings.fx.rates, asOf: orgRow.settings.fx.asOf, source: orgRow.settings.fx.source } : undefined,
     issues: issueRows.map((i) => ({
       key: i.key,

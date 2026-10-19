@@ -1,6 +1,6 @@
 // Core domain model. Money is in CHF, durations in hours, months as "YYYY-MM".
 
-export type Role = "admin" | "consultant" | "employee";
+export type Role = "admin" | "consultant" | "employee" | "customer";
 
 export interface Employee {
   id: string;
@@ -196,7 +196,19 @@ export interface Dataset {
   rates?: OrgRates;
   /** Exchange rates for customers in EUR or USD. */
   fx?: FxRates;
+  /** Resource planning: hours a person is reserved for a project in an ISO week (leads; employees see their own). */
+  allocations?: Allocation[];
   today: string;
+}
+
+/** A planned reservation of a person's time for a project in one ISO week (YYYY-Www). */
+export interface Allocation {
+  id: string;
+  employeeId: string;
+  projectId: string;
+  week: string;
+  hours: number;
+  note?: string;
 }
 
 export type VelocityMethod = "rolling" | "ewma";
