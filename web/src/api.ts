@@ -144,3 +144,18 @@ export interface OpenQuestion {
   createdAt: string;
 }
 
+
+/** One submitted week of a person. */
+export interface WeekSubmission {
+  userId: string;
+  week: string;
+  hours: number;
+  submittedAt: string;
+}
+
+/** Leads' team overview: per person and week, hours due and worked plus whether the week was submitted. */
+export interface WeekOverviewRow {
+  userId: string;
+  name: string;
+  weeks: { week: string; due: number; worked: number; submitted: boolean; submittedAt: string | null }[];
+}

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, loadDataset, upload, type Branding, type Me, type EntryComment, type OpenQuestion } from "./api";
+import { api, loadDataset, upload, type Branding, type Me, type EntryComment, type OpenQuestion, type WeekSubmission, type WeekOverviewRow } from "./api";
 import { currentVelocity, projectReports, velocityByMonth, type ProjectReport, type VelocityFactor, type VelocityMonth } from "@taktwerk/domain";
-import { NEEDS_APPROVAL, absenceProblem, monthRange } from "@taktwerk/domain";
+import { NEEDS_APPROVAL, WorkCalendar, absenceProblem, isoWeekKey, monthRange, weekFigures } from "@taktwerk/domain";
 import type { Absence, Customer, Dataset, Employee, Expense, Holiday, Project, Role, SubProject, TimeEntry, VelocitySettings } from "@taktwerk/domain";
 
 export interface WorkSettingsPatch {
@@ -97,6 +97,12 @@ interface Store {
   remindClosing: (month: string, userId: string) => Promise<void>;
   /** Unanswered questions on bookings the viewer should see (own bookings; leads: all). */
   questions: OpenQuestion[];
+  /** Submitted weeks (own; leads: everyone) of the last months. */
+  weeks: WeekSubmission[];
+  submitWeek: (week: string) => Promise<void>;
+  withdrawWeek: (week: string) => Promise<void>;
+  /** Leads: team grid of the given ISO weeks. */
+  weekOverview: (from: string, to: string) => Promise<WeekOverviewRow[]>;
   /** Bookings made offline that still wait to be sent. */
   pending: number;
   /** Sends queued bookings; called on reconnect and start. */
@@ -137,6 +143,17 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
   const loadClosings = async () => setClosings(await api<Closing[]>("/api/closings"));
   const [questions, setQuestions] = useState<OpenQuestion[]>([]);
   const loadQuestions = async () => setQuestions(await api<OpenQuestion[]>("/api/comments/open"));
+  const [weeks, setWeeks] = useState<WeekSubmission[]>(() => (me ? [] : loadLocal<WeekSubmission[]>("rt.weeks", [])));
+  const weekSpan = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const d = new Date(today);
+    d.setDate(d.getDate() - 7 * 16);
+    return { from: isoWeekKey(d.toISOString().slice(0, 10)), to: isoWeekKey(today) };
+  };
+  const loadWeeks = async () => {
+    const { from, to } = weekSpan();
+    setWeeks(await api<WeekSubmission[]>(`/api/weeks?from=${from}&to=${to}`));
+  };
   // Demo mode keeps comments in the browser so the flow can be tried without a server.
   type LocalComment = EntryComment & { entryId: string };
   const [localComments, setLocalCommentsState] = useState<LocalComment[]>(() => (me ? [] : loadLocal<LocalComment[]>("rt.comments", [])));
@@ -145,7 +162,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
   const setLocalComments = (next: LocalComment[]) => { localRef.current = next; setLocalCommentsState(next); };
 
   useEffect(() => {
-    if (me) { loadClosings().catch(() => {}); loadQuestions().catch(() => {}); }
+    if (me) { loadClosings().catch(() => {}); loadQuestions().catch(() => {}); loadWeeks().catch(() => {}); }
   }, [me]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -347,6 +364,50 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     },
     pending: outbox.length,
     flushOutbox,
+    weeks,
+    submitWeek: async (week) => {
+      if (mode === "api") {
+        await api(`/api/weeks/${week}/submit`, { body: {} });
+        await loadWeeks();
+        return;
+      }
+      const emp = data.employees.find((e) => e.id === currentUserId);
+      const hours = emp ? weekFigures(new WorkCalendar(data, emp), week).worked : 0;
+      const next = [...weeks.filter((w) => !(w.userId === currentUserId && w.week === week)), { userId: currentUserId, week, hours, submittedAt: new Date().toISOString() }];
+      setWeeks(next);
+      saveLocal("rt.weeks", next);
+    },
+    withdrawWeek: async (week) => {
+      if (mode === "api") {
+        await api(`/api/weeks/${week}/submit`, { method: "DELETE" });
+        await loadWeeks();
+        return;
+      }
+      const next = weeks.filter((w) => !(w.userId === currentUserId && w.week === week));
+      setWeeks(next);
+      saveLocal("rt.weeks", next);
+    },
+    weekOverview: async (from, to) => {
+      if (mode === "api") return api<WeekOverviewRow[]>(`/api/weeks/overview?from=${from}&to=${to}`);
+      const keys: string[] = [];
+      for (let k = from; k <= to && keys.length < 12; ) {
+        keys.push(k);
+        const [y, w] = k.split("-W").map(Number);
+        k = w >= 52 ? `${y + 1}-W01` : `${y}-W${String(w + 1).padStart(2, "0")}`;
+      }
+      return data.employees.map((e) => {
+        const cal = new WorkCalendar(data, e);
+        return {
+          userId: e.id,
+          name: e.name,
+          weeks: keys.map((week) => {
+            const f = weekFigures(cal, week);
+            const sub = weeks.find((w) => w.userId === e.id && w.week === week);
+            return { week, due: f.due, worked: f.worked, submitted: Boolean(sub), submittedAt: sub?.submittedAt ?? null };
+          }),
+        };
+      });
+    },
     questions:
       mode === "api"
         ? questions

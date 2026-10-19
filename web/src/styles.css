@@ -597,3 +597,14 @@ table.data .btn.ghost { color: var(--ink-2); }
 .q-badge { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--warn); color: #3b2a00; font-size: 0.68rem; font-weight: 800; margin-right: 4px; vertical-align: -2px; }
 
 .offline-chip { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); background: color-mix(in srgb, var(--warn) 14%, var(--surface)); color: var(--warn-ink); }
+
+/* Weekly submission ------------------------------------------------------ */
+.btn.week-ok { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); background: color-mix(in srgb, var(--good) 10%, transparent); }
+table.wk th.wk-now, table.wk td.wk-now { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.wk-cell { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 0.82rem; }
+.wk-cell small { font-size: 0.74rem; color: var(--ink-3); }
+.wk-ok { color: var(--good-ink); font-weight: 600; }
+.wk-short { color: var(--warn-ink); font-weight: 600; }
+.wk-missing { color: var(--crit-ink); font-weight: 600; }
+.wk-open { color: var(--warn-ink); }
+.wk-none, .wk-now { color: var(--ink-3); }

@@ -391,3 +391,16 @@ export const entryComments = mysqlTable(
   (t) => [index("ec_entry_idx").on(t.entryId), index("ec_org_open_idx").on(t.organizationId, t.kind, t.resolvedAt)],
 );
 
+/** A person's statement that a week is complete. Informational for leads; locking stays with the month closing. */
+export const weekSubmissions = mysqlTable(
+  "week_submissions",
+  {
+    organizationId: orgId(),
+    userId: id("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    week: char("week", { length: 8 }).notNull(), // YYYY-Www
+    hours: decimal("hours", { precision: 6, scale: 2, mode: "number" }).notNull(),
+    submittedAt: datetime("submitted_at", { mode: "date" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.week] }), index("ws_org_week_idx").on(t.organizationId, t.week)],
+);
+

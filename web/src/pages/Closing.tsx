@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { addMonths, fmt1, fmtCHF2, fmtDate, fmtMonthLong, monthOf, workBalance } from "@taktwerk/domain";
+import { useEffect, useState } from "react";
+import { addMonths, fmt1, fmtCHF2, fmtDate, fmtMonthLong, isoWeekKey, monthOf, weekRange, workBalance } from "@taktwerk/domain";
+import type { WeekOverviewRow } from "../api";
 import { useStore, type ClosingStatus } from "../store";
 import { Icon } from "../ui/components";
 import { signedH } from "./WorkTime";
@@ -95,6 +96,68 @@ const STATUS: Record<ClosingStatus, { label: string; cls: string }> = {
 
 function Status({ s }: { s: ClosingStatus }) {
   return <span className={`pill ${STATUS[s].cls}`}>{STATUS[s].label}</span>;
+}
+
+/** Leads: who has submitted which of the last weeks, and where hours are missing. */
+function TeamWeeks() {
+  const { data, weekOverview, weeks } = useStore();
+  const [rows, setRows] = useState<WeekOverviewRow[] | null>(null);
+  const to = isoWeekKey(data.today);
+  const fromDate = new Date(data.today);
+  fromDate.setDate(fromDate.getDate() - 7 * 5);
+  const from = isoWeekKey(fromDate.toISOString().slice(0, 10));
+  useEffect(() => {
+    weekOverview(from, to).then(setRows).catch(() => setRows([]));
+  }, [from, to, weeks]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!rows || rows.length === 0) return null;
+  const keys = rows[0].weeks.map((w) => w.week);
+  const label = (k: string) => {
+    const { from: f } = weekRange(k);
+    return `KW ${Number(k.split("-W")[1])} · ${fmtDate(f).slice(0, 5)}`;
+  };
+  const missing = rows.reduce((n, r) => n + r.weeks.filter((w) => w.week !== to && !w.submitted && w.due > 0).length, 0);
+  return (
+    <section className="card" style={{ marginTop: 16 }}>
+      <div className="card-head" style={{ paddingBottom: 8, flexWrap: "wrap", gap: 12 }}>
+        <h2>Wochen im Team</h2>
+        <span className="muted" style={{ fontSize: "0.8rem" }}>
+          {missing === 0 ? "Alle vergangenen Wochen sind eingereicht" : `${missing} ${missing === 1 ? "Woche fehlt" : "Wochen fehlen"} noch`}
+        </span>
+      </div>
+      <div className="table-wrap">
+        <table className="data wk">
+          <thead>
+            <tr>
+              <th>Person</th>
+              {keys.map((k) => <th key={k} className={`r ${k === to ? "wk-now" : ""}`}>{label(k)}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.userId}>
+                <td>{r.name}</td>
+                {r.weeks.map((w) => {
+                  const gap = Math.round((w.due - w.worked) * 10) / 10;
+                  const kind = w.due <= 0 && w.worked === 0 ? "none" : w.submitted ? (gap > 1 ? "short" : "ok") : w.week === to ? "now" : gap > 1 ? "missing" : "open";
+                  const title = w.submitted ? `Eingereicht · ${fmt1(w.worked)} h von ${fmt1(w.due)} h` : `Nicht eingereicht · ${fmt1(w.worked)} h von ${fmt1(w.due)} h`;
+                  return (
+                    <td key={w.week} className={`r wk-cell wk-${kind} ${w.week === to ? "wk-now" : ""}`} title={title}>
+                      {kind === "none" && "–"}
+                      {kind === "ok" && "✓"}
+                      {kind === "short" && <>✓ <small>−{fmt1(gap)} h</small></>}
+                      {kind === "missing" && <>fehlen {fmt1(gap)} h</>}
+                      {kind === "open" && "offen"}
+                      {kind === "now" && <small>{fmt1(w.worked)} h</small>}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 }
 
 export function Closing() {
@@ -202,6 +265,8 @@ export function Closing() {
           </table>
         </div>
       </section>
+
+      {lead && <TeamWeeks />}
 
       {lead && <OpenExpenses />}
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, fmt1, fmtCHF, fmtCHF2, fmtDay, rateOn } from "@taktwerk/domain";
+import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, fmt1, fmtCHF, fmtCHF2, fmtDay, isoWeekKey, rateOn } from "@taktwerk/domain";
 import type { Expense, ExpenseCategory, TimeEntry } from "@taktwerk/domain";
 import { api, type EntryComment } from "../api";
 import { loadLocal, saveLocal, useStore } from "../store";
@@ -926,7 +926,7 @@ function usePhone() {
 
 /** Week calendar: columns are days, the vertical axis is the time of day. Drag on empty space to book. */
 function WeekCalendar() {
-  const { data, currentUserId, addTimeEntry, updateTimeEntry, lockOf, notify, questions } = useStore();
+  const { data, currentUserId, addTimeEntry, updateTimeEntry, lockOf, notify, questions, weeks, submitWeek, withdrawWeek } = useStore();
   const asked = useMemo(() => new Set(questions.map((q) => q.entryId)), [questions]);
   const labels = useLabels();
   const [monday, setMonday] = useState(() => mondayOf(data.today));
@@ -1037,6 +1037,22 @@ function WeekCalendar() {
   const holidayOn = (d: string) => cal?.holidays.get(d);
   const weekWorked = week.reduce((s, d) => s + hoursOf(d), 0);
   const weekTarget = week.reduce((s, d) => s + targetOf(d), 0);
+  const weekKey = isoWeekKey(monday);
+  const submission = weeks.find((w) => w.userId === currentUserId && w.week === weekKey);
+  const canSubmit = monday <= mondayOf(data.today) && !lockOf(currentUserId, monday);
+  const toggleWeek = async () => {
+    try {
+      if (submission) {
+        await withdrawWeek(weekKey);
+        notify(`KW ${isoWeek(monday)} zurückgezogen`);
+      } else {
+        await submitWeek(weekKey);
+        notify(`KW ${isoWeek(monday)} eingereicht: ${fmt1(weekWorked)} h`);
+      }
+    } catch (e) {
+      notify((e as Error).message);
+    }
+  };
   const height = (DAY_END - DAY_START) * PX_PER_MIN;
   const colorOf = (subId: string) => {
     const c = labels.customerOf(subId);
@@ -1193,6 +1209,19 @@ function WeekCalendar() {
               <span className="menu-hint">Nur leere, nicht gesperrte Tage werden gefüllt.</span>
             </div>
           </details>
+          {canSubmit && !phone && (
+            submission ? (
+              <details className="menu">
+                <summary id="cal-week-submitted" className="btn small ghost week-ok" title={`Eingereicht am ${new Date(submission.submittedAt).toLocaleDateString("de-CH")}`}>✓ Eingereicht</summary>
+                <div className="menu-list">
+                  <button onClick={(ev) => { (ev.currentTarget.closest("details") as HTMLDetailsElement).open = false; void toggleWeek(); }}>Woche zurückziehen</button>
+                  <span className="menu-hint">Zum Nachtragen einer vergessenen Buchung.</span>
+                </div>
+              </details>
+            ) : (
+              <button id="cal-week-submit" className="btn small ghost" title="Bestätigt, dass die Woche vollständig gebucht ist" onClick={() => void toggleWeek()}>Woche einreichen</button>
+            )
+          )}
           <button id="cal-new" className="btn small" onClick={() => setDialog({ date: days.includes(data.today) ? data.today : days[0], hours: 1 })}>+ Eintrag</button>
         </div>
       </div>

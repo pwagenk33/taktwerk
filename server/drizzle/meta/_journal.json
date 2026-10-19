@@ -50,6 +50,13 @@
       "when": 1792422949182,
       "tag": "0006_entry_comments",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1792423688677,
+      "tag": "0007_week_submissions",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ import { billingRoutes } from "./routes/billing";
 import { dataRoutes } from "./routes/data";
 import { brandingRoutes } from "./routes/branding";
 import { commentRoutes } from "./routes/comments";
+import { weekRoutes } from "./routes/weeks";
 import { expenseRoutes } from "./routes/expenses";
 import { invoiceRoutes } from "./routes/invoices";
 import { worktimeRoutes } from "./routes/worktime";
@@ -121,6 +122,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(expenseRoutes);
   await app.register(brandingRoutes);
   await app.register(commentRoutes);
+  await app.register(weekRoutes);
   await app.register(invoiceRoutes);
 
   // Production: serve the built web app with SPA fallback.

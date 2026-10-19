@@ -252,3 +252,43 @@ export function absenceProblem(data: Dataset, a: Omit<Absence, "id" | "status">,
 }
 
 export const fmtDate = (date: string) => `${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`;
+
+/** Monday of the ISO week containing `date` (YYYY-MM-DD). */
+export function mondayOf(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/** ISO week key such as 2026-W42 for a date. */
+export function isoWeekKey(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const start = Date.UTC(d.getUTCFullYear(), 0, 1);
+  const week = Math.ceil(((d.getTime() - start) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+/** Monday and Sunday of an ISO week key. */
+export function weekRange(key: string): { from: string; to: string } {
+  const [y, w] = key.split("-W").map(Number);
+  // 4 January is always in week 1.
+  const jan4 = new Date(Date.UTC(y, 0, 4));
+  const monday = new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() + 6) % 7) + (w - 1) * 7);
+  const from = monday.toISOString().slice(0, 10);
+  return { from, to: addDays(from, 6) };
+}
+
+/** Hours due (target minus credited absences) and worked in one ISO week for a person. */
+export function weekFigures(cal: WorkCalendar, key: string): { due: number; worked: number } {
+  const { from, to } = weekRange(key);
+  let due = 0;
+  let worked = 0;
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    due += cal.target(d) - cal.credit(d);
+    worked += cal.workedOn(d);
+  }
+  return { due: Math.round(due * 100) / 100, worked: Math.round(worked * 100) / 100 };
+}
+
