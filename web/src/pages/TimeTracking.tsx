@@ -868,6 +868,11 @@ function WeekCalendar() {
   const labels = useLabels();
   const [monday, setMonday] = useState(() => mondayOf(data.today));
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  useEffect(() => {
+    const open = () => setDialog({ date: days.includes(data.today) ? data.today : days[0], hours: 1 });
+    window.addEventListener("ti:new-entry", open);
+    return () => window.removeEventListener("ti:new-entry", open);
+  }); // re-bound each render so it sees the current week
   const [drag, setDrag] = useState<Drag | null>(null);
   const [error, setError] = useState("");
   const gridRef = useRef<HTMLDivElement>(null);

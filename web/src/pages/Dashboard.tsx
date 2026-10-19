@@ -70,7 +70,12 @@ function defaults(employee: boolean): DashboardState {
   return employee ? { items: EMPLOYEE_ITEMS, layouts: { lg: EMPLOYEE_LG } } : { items: DEFAULT_ITEMS, layouts: { lg: DEFAULT_LG } };
 }
 
-export function Dashboard() {
+function greeting(): string {
+  const h = new Date().getHours();
+  return h < 11 ? "Guten Morgen" : h < 17 ? "Guten Tag" : "Guten Abend";
+}
+
+export function Dashboard({ firstName }: { firstName: string }) {
   const { role, data, mode } = useStore();
   const employee = role === "employee";
   const key = `rt.dashboard.${employee ? "employee" : "lead"}`;
@@ -118,7 +123,7 @@ export function Dashboard() {
     <>
       <div className="page-head">
         <div>
-          <h1>Dashboard</h1>
+          <h1>{greeting()}, {firstName}</h1>
           <p className="sub">{fmtMonthLong(monthOf(data.today))} · {employee ? "Meine Zahlen" : "Alle Kunden und Projekte"}</p>
         </div>
         <div className="toolbar">

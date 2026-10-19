@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { fmt1, fmtCHF, fmtMonth, fmtNum, rateOn, type BudgetStatus, type Customer, type Project, type SubProject } from "@taktwerk/domain";
 import { useStore } from "../store";
 import { BurnUpChart, Icon, Money, StatusPill } from "../ui/components";
@@ -370,11 +370,24 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
   );
 }
 
+/** "#projekte/c/<id>" opens a customer, "#projekte/p/<id>" a project (used by the command palette). */
+function viewFromHash(): View {
+  const [, kind, id] = location.hash.replace("#", "").split("/");
+  if (kind === "c" && id) return { kind: "customer", id };
+  if (kind === "p" && id) return { kind: "project", id };
+  return { kind: "list" };
+}
+
 type View = { kind: "list" } | { kind: "customer"; id: string } | { kind: "project"; id: string; from?: string };
 
 export function Projects() {
   const { data } = useStore();
-  const [view, setView] = useState<View>({ kind: "list" });
+  const [view, setView] = useState<View>(() => viewFromHash());
+  useEffect(() => {
+    const onHash = () => setView(viewFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   if (view.kind === "project" && data.projects.some((p) => p.id === view.id)) {
     return <ProjectDetail projectId={view.id} onBack={() => setView(view.from ? { kind: "customer", id: view.from } : { kind: "list" })} />;
   }
