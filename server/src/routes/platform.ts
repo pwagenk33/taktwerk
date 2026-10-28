@@ -11,6 +11,7 @@ import { actionMail } from "../mail/mailer";
 import { RESERVED_SLUGS, createOrganization, slugOf } from "../seed";
 import { requireFeature, saasOn } from "../saas";
 import { createPasswordToken, passwordLink, signIn } from "./auth";
+import { periodEnd } from "./subscription";
 
 const slug = z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/, "Kürzel: Kleinbuchstaben, Ziffern und Bindestriche, 2–60 Zeichen");
 const host = z.string().trim().toLowerCase().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/, "Domain wie zeit.firma.ch, ohne https://");
@@ -112,9 +113,16 @@ export async function platformRoutes(app: FastifyInstance) {
       if (d) throw new HttpError(409, "Dieses Kürzel ist bereits vergeben.");
     }
     const { trialEndsAt, ...rest } = body;
+    // «Paid, set active» by hand: a new period starts unless one is still running.
+    const activating = body.subStatus === "active" && org.subStatus !== "active";
+    const periodRunning = org.currentPeriodEnd && org.currentPeriodEnd > new Date();
     await ctx.db
       .update(organizations)
-      .set({ ...rest, ...(trialEndsAt !== undefined ? { trialEndsAt: trialEndsAt ? new Date(`${trialEndsAt}T23:59:59Z`) : null } : {}) })
+      .set({
+        ...rest,
+        ...(trialEndsAt !== undefined ? { trialEndsAt: trialEndsAt ? new Date(`${trialEndsAt}T23:59:59Z`) : null } : {}),
+        ...(activating ? { trialEndsAt: null, canceledAt: null, ...(periodRunning ? {} : { currentPeriodEnd: periodEnd(new Date(), body.billingInterval ?? org.billingInterval) }) } : {}),
+      })
       .where(eq(organizations.id, id));
     if (body.active === false) {
       // Everyone of a deactivated company is signed out at once.

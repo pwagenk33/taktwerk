@@ -98,6 +98,10 @@ Die Buttons erscheinen auf der Anmeldeseite, sobald die Werte gesetzt sind.
 - **Arbeitszeitmodell** (Einstellungen → Arbeitszeit): vereinfacht nach Art. 73b ArGV 1 oder Kommen/Gehen mit Pausen; bei Kommen/Gehen erscheint in der Zeiterfassung die Stempelleiste.
 - **Lasttest:** `npm run loadtest -w server`, Ergebnisse in [docs/LASTTEST.md](docs/LASTTEST.md).
 
+## SaaS mit Abo
+
+Mit `SAAS=true` läuft die Installation als Abo-Dienst für viele Firmen: Pakete nach Teamgrösse (Start bis 10, Team bis 50, Business bis 200 Personen), 30 Tage Testphase, Bezahlung per Stripe oder auf Rechnung, jede Firma unter `<kürzel>.<SAAS_BASE_DOMAIN>`, Einrichtungsassistent und Umsatzübersicht für den Betreiber. Ohne `SAAS` gibt es keine Pakete und keine Grenzen. Einrichtung: [docs/BETRIEB.md](docs/BETRIEB.md), Abschnitt 15.
+
 ## Betrieb in der Schweiz
 
 Produktionsbetrieb auf einer Schweizer Cloud-VM (Infomaniak Public Cloud oder Exoscale) mit Docker Compose, automatischem TLS und nächtlichen Backups:

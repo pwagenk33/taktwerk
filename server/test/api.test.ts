@@ -132,7 +132,7 @@ describe("invitation and password reset by e-mail", () => {
 
 describe("Microsoft and Google sign-in", () => {
   it("lists configured providers and redirects with PKCE and state", async () => {
-    expect((await get("/api/auth/providers", "")).json()).toEqual({ password: true, microsoft: true, google: true, registration: false });
+    expect((await get("/api/auth/providers", "")).json()).toEqual({ password: true, microsoft: true, google: true, registration: false, saas: false });
     const g = await get("/api/auth/google", "");
     expect(g.statusCode).toBe(302);
     const url = new URL(g.headers.location as string);

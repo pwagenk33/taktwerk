@@ -4,6 +4,17 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 
 ## Unveröffentlicht
 
+### Neu
+- SaaS-Betrieb mit Abo (Umgebungsvariable `SAAS=true`): Pakete Start, Team und Business nach Teamgrösse, 30 Tage kostenlos testen, Bezahlung per Karte über Stripe oder auf Rechnung, monatlich oder jährlich mit zwei Gratismonaten.
+- Einstellungen → Abo: Paket wählen und wechseln, Personen im Paket, Kündigen und Kündigung zurücknehmen, Zahlungsdaten und Quittungen.
+- Hinweis oben in der App, wenn die Testphase bald endet oder eine Zahlung offen ist; ohne Paket bleiben alle Daten lesbar und exportierbar.
+- Jede Firma unter ihrer eigenen Adresse (firma.trackinsight.ch), Business auch unter einer eigenen Domain mit automatischem Zertifikat.
+- Einrichtungsassistent für neue Firmen: Name und Farbe, Arbeitszeit, erster Kunde mit Projekt, Team einladen.
+- Betreiber-Übersicht mit monatlichem Umsatz, zahlenden Firmen, Testphasen und Paket pro Firma.
+
+### Verbessert
+- Wer diesen Monat neu angefangen hat, sieht keinen Hinweis mehr auf einen offenen Vormonat.
+
 ## 1.0.0 – 2026-10-19
 
 ### Neu

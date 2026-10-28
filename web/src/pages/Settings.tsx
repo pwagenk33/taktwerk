@@ -1,11 +1,12 @@
-import { DEFAULT_RATES, EXPORT_ENTITIES, TIME_MODELS, VAT_RATES, defaultHolidays, type TimeModel, exportRows, fmt1, fmtCHF2, fmtDate, toCsv, type ExportEntity, type Holiday, type PostalAddress, type Role } from "@taktwerk/domain";
+import { DEFAULT_RATES, EXPORT_ENTITIES, PLANS, TIME_MODELS, VAT_RATES, defaultHolidays, type TimeModel, exportRows, fmt1, fmtCHF2, fmtDate, toCsv, type ExportEntity, type Holiday, type PostalAddress, type Role } from "@taktwerk/domain";
 import { useEffect, useState } from "react";
-import { api, type BillingSettings, type Branding, type PlatformOrg, type ScheduledReport, type Settings as OrgSettings, type UserRow } from "../api";
+import { api, type BillingSettings, type Branding, type PlatformOrg, type PlatformSummary, type ScheduledReport, type Settings as OrgSettings, type UserRow } from "../api";
 import { useStore } from "../store";
+import { STATUS_LABEL, SubscriptionTab, statusPill, useSubscription } from "./Subscription";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
 import { Select } from "../ui/Select";
 
-const PRESETS = [
+export const PRESETS = [
   { name: "Schweizer Rot", color: "#D52B1E" },
   { name: "Bordeaux", color: "#8C1D2F" },
   { name: "Tannengrün", color: "#1F6B4A" },
@@ -650,17 +651,26 @@ function ReportsAndExport() {
 /** Operator console: the companies on this installation, each strictly separated by organization. */
 function Operator() {
   const { mode, notify } = useStore();
-  const [data, setData] = useState<{ registrationOpen: boolean; mainOrigin: string; orgs: PlatformOrg[] } | null>(null);
+  const [data, setData] = useState<{ registrationOpen: boolean; saas?: boolean; mainOrigin: string; summary?: PlatformSummary; orgs: PlatformOrg[] } | null>(null);
   const [form, setForm] = useState({ name: "", domain: "", adminName: "", adminEmail: "" });
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const demoOrgs: PlatformOrg[] = [
-    { id: "o1", name: "Beispiel AG", slug: "beispiel", domain: "zeit.beispiel.ch", active: true, appName: "TrackInsight", users: 7, createdAt: "2026-01-05" },
-    { id: "o2", name: "Zweite GmbH", slug: "zweite-gmbh", domain: null, active: true, appName: "ZweiteZeit", users: 12, createdAt: "2026-06-12" },
-    { id: "o3", name: "Alte AG", slug: "alte-ag", domain: null, active: false, appName: "TrackInsight", users: 3, createdAt: "2025-11-20" },
+    { id: "o1", name: "Beispiel AG", slug: "beispiel", domain: "zeit.beispiel.ch", active: true, appName: "TrackInsight", users: 7, createdAt: "2026-01-05", plan: "business", status: "active", interval: "year", billing: "invoice", maxUsers: 200, mrr: 658.33, currentPeriodEnd: "2027-01-05T00:00:00Z" },
+    { id: "o2", name: "Zweite GmbH", slug: "zweite-gmbh", domain: null, active: true, appName: "ZweiteZeit", users: 12, createdAt: "2026-06-12", plan: "team", status: "active", interval: "month", billing: "stripe", maxUsers: 50, mrr: 290, currentPeriodEnd: "2026-11-12T00:00:00Z" },
+    { id: "o4", name: "Holzbau Gisler GmbH", slug: "holzbau-gisler", domain: null, active: true, appName: "TrackInsight", users: 6, createdAt: "2026-10-16", plan: "start", status: "trialing", interval: "month", billing: "invoice", maxUsers: 10, mrr: 0, trialEndsAt: "2026-11-15T00:00:00Z" },
+    { id: "o5", name: "Atelier Nord", slug: "atelier-nord", domain: null, active: true, appName: "TrackInsight", users: 9, createdAt: "2026-05-02", plan: "start", status: "past_due", interval: "month", billing: "stripe", maxUsers: 10, mrr: 79, currentPeriodEnd: "2026-10-02T00:00:00Z" },
+    { id: "o3", name: "Alte AG", slug: "alte-ag", domain: null, active: false, appName: "TrackInsight", users: 3, createdAt: "2025-11-20", plan: "start", status: "canceled", interval: "month", billing: "invoice", maxUsers: 10, mrr: 0 },
   ];
-  const load = () => (mode === "api" ? api<typeof data>("/api/platform/orgs").then(setData).catch((e: Error) => setError(e.message)) : Promise.resolve(setData({ registrationOpen: false, mainOrigin: "https://app.trackinsight.ch", orgs: demoOrgs })));
+  const demoSummary = (orgs: PlatformOrg[]): PlatformSummary => ({
+    mrr: orgs.reduce((s, o) => s + (o.active ? o.mrr ?? 0 : 0), 0),
+    active: orgs.filter((o) => o.active && o.status === "active").length,
+    trialing: orgs.filter((o) => o.active && o.status === "trialing").length,
+    pastDue: orgs.filter((o) => o.active && o.status === "past_due").length,
+    ended: orgs.filter((o) => o.status === "canceled" || o.status === "expired").length,
+  });
+  const load = () => (mode === "api" ? api<typeof data>("/api/platform/orgs").then(setData).catch((e: Error) => setError(e.message)) : Promise.resolve(setData({ registrationOpen: true, saas: true, mainOrigin: "https://trackinsight.ch", summary: demoSummary(demoOrgs), orgs: demoOrgs })));
   useEffect(() => { void load(); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
   const create = async () => {
     setBusy(true);
@@ -678,15 +688,28 @@ function Operator() {
       setBusy(false);
     }
   };
-  const patch = async (o: PlatformOrg, body: Partial<Pick<PlatformOrg, "active" | "domain">>) => {
+  const patch = async (o: PlatformOrg, body: Partial<Pick<PlatformOrg, "active" | "domain" | "plan" | "status">>) => {
     if (body.active === false && !confirm(`${o.name} deaktivieren? Alle Personen werden sofort abgemeldet und können sich nicht mehr anmelden.`)) return;
-    if (mode === "api") await api(`/api/platform/orgs/${o.id}`, { method: "PATCH", body });
-    setData((d) => d && { ...d, orgs: d.orgs.map((x) => (x.id === o.id ? { ...x, ...body } : x)) });
-    notify(body.active === false ? `${o.name} deaktiviert` : body.active === true ? `${o.name} aktiviert` : "Domain gespeichert");
+    const { status, ...rest } = body;
+    if (mode === "api") {
+      const after = await api<PlatformOrg>(`/api/platform/orgs/${o.id}`, { method: "PATCH", body: { ...rest, ...(status ? { subStatus: status } : {}) } });
+      await load();
+      void after;
+    } else setData((d) => { if (!d) return d; const orgs = d.orgs.map((x) => (x.id === o.id ? { ...x, ...body } : x)); return { ...d, orgs, summary: demoSummary(orgs) }; });
+    notify(body.active === false ? `${o.name} deaktiviert` : body.active === true ? `${o.name} aktiviert` : body.domain !== undefined ? "Domain gespeichert" : `${o.name} aktualisiert`);
   };
   if (!data) return <p className="muted">{error || "Lade …"}</p>;
+  const s = data.summary;
   return (
     <div className="stack">
+      {data.saas && s && (
+        <div className="tiles" id="op-tiles">
+          <div className="card tile"><span className="eyebrow">Monatlicher Umsatz</span><span className="value num">{fmtCHF2(s.mrr)}</span><span className="delta">{fmtCHF2(s.mrr * 12)} pro Jahr, zzgl. MWST</span></div>
+          <div className="card tile"><span className="eyebrow">Zahlende Firmen</span><span className="value num">{s.active}</span><span className="delta">{s.pastDue > 0 ? `${s.pastDue} mit offener Zahlung` : "alle Zahlungen aktuell"}</span></div>
+          <div className="card tile"><span className="eyebrow">In der Testphase</span><span className="value num">{s.trialing}</span><span className="delta">{s.active + s.trialing > 0 ? `${Math.round((s.active / Math.max(1, s.active + s.trialing + s.ended)) * 100)} % wandeln um` : "noch keine"}</span></div>
+          <div className="card tile"><span className="eyebrow">Beendet</span><span className="value num">{s.ended}</span><span className="delta">gekündigt oder Testphase abgelaufen</span></div>
+        </div>
+      )}
       <section className="card">
         <div className="card-head">
           <h2>Firmen auf dieser Installation</h2>
@@ -709,7 +732,7 @@ function Operator() {
           )}
           <div className="table-wrap">
             <table className="data" id="org-table">
-              <thead><tr><th>Firma</th><th>Kürzel</th><th>Domain</th><th className="r">Benutzer</th><th>Status</th><th /></tr></thead>
+              <thead><tr><th>Firma</th><th>Kürzel</th><th>Domain</th>{data.saas && <th>Paket</th>}<th className="r">Benutzer</th>{data.saas && <th className="r">MRR</th>}<th>Status</th><th /></tr></thead>
               <tbody>
                 {data.orgs.map((o) => (
                   <tr key={o.id} className={o.active ? "" : "muted"}>
@@ -718,9 +741,29 @@ function Operator() {
                     <td>
                       <input className="input-inline" defaultValue={o.domain ?? ""} placeholder="zeit.firma.ch" aria-label={`Domain von ${o.name}`} onBlur={(e) => { const v = e.target.value.trim().toLowerCase(); if (v !== (o.domain ?? "")) void patch(o, { domain: v || null }).catch((err: Error) => { setError(err.message); e.target.value = o.domain ?? ""; }); }} />
                     </td>
-                    <td className="r num">{o.users}</td>
-                    <td><span className={`pill ${o.active ? "ok" : "neutral"}`}>{o.active ? "Aktiv" : "Deaktiviert"}</span></td>
-                    <td className="r"><button className="btn small ghost" onClick={() => void patch(o, { active: !o.active })}>{o.active ? "Deaktivieren" : "Aktivieren"}</button></td>
+                    {data.saas && (
+                      <td>
+                        <select className="input-inline" aria-label={`Paket von ${o.name}`} value={o.plan} onChange={(e) => void patch(o, { plan: e.target.value as PlatformOrg["plan"] }).catch((err: Error) => setError(err.message))}>
+                          {PLANS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <div className="muted" style={{ fontSize: "0.74rem" }}>{o.billing === "stripe" ? "Karte" : "Rechnung"}{o.interval === "year" ? " · jährlich" : ""}</div>
+                      </td>
+                    )}
+                    <td className={`r num ${o.maxUsers && o.users > o.maxUsers ? "crit-text" : ""}`}>{o.users}{data.saas && o.maxUsers ? <span className="muted"> / {o.maxUsers}</span> : null}</td>
+                    {data.saas && <td className="r num">{o.mrr ? fmtCHF2(o.mrr) : "–"}</td>}
+                    <td>
+                      {!o.active ? <span className="pill neutral">Deaktiviert</span> : data.saas && o.status ? (
+                        <>
+                          <span className={`pill ${statusPill(o.status)}`}>{STATUS_LABEL[o.status]}</span>
+                          {o.status === "trialing" && o.trialEndsAt && <div className="muted" style={{ fontSize: "0.74rem" }}>bis {fmtDate(o.trialEndsAt.slice(0, 10))}</div>}
+                          {o.canceledAt && o.status === "active" && <div className="muted" style={{ fontSize: "0.74rem" }}>gekündigt</div>}
+                        </>
+                      ) : <span className="pill ok">Aktiv</span>}
+                    </td>
+                    <td className="r op-actions">
+                      {data.saas && o.active && o.status !== "active" && <button className="btn small" title="Zahlung erhalten, Abo aktiv setzen" onClick={() => void patch(o, { status: "active" }).catch((err: Error) => setError(err.message))}>Aktiv setzen</button>}
+                      <button className="btn small ghost" onClick={() => void patch(o, { active: !o.active })}>{o.active ? "Deaktivieren" : "Aktivieren"}</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -733,10 +776,19 @@ function Operator() {
   );
 }
 
+type Tab = "look" | "users" | "signin" | "work" | "billing" | "reports" | "abo" | "operator";
+const tabOfHash = (): Tab | null => (location.hash.startsWith("#einstellungen/") ? (location.hash.split("/")[1] as Tab) : null);
+
 export function Settings() {
   const { me, mode } = useStore();
   const operator = mode === "demo" || !!me?.platformAdmin;
-  const [tab, setTab] = useState<"look" | "users" | "signin" | "work" | "billing" | "reports" | "operator">("look");
+  const sub = useSubscription();
+  const [tab, setTab] = useState<Tab>(() => tabOfHash() ?? "look");
+  useEffect(() => {
+    const on = () => { const t = tabOfHash(); if (t) setTab(t); };
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
   return (
     <>
       <div className="page-head">
@@ -752,6 +804,7 @@ export function Settings() {
         <button role="tab" className={tab === "work" ? "on" : ""} onClick={() => setTab("work")}>Arbeitszeit</button>
         <button role="tab" className={tab === "billing" ? "on" : ""} onClick={() => setTab("billing")}>Rechnung</button>
         <button role="tab" className={tab === "reports" ? "on" : ""} onClick={() => setTab("reports")}>Berichte & Export</button>
+        {sub && <button role="tab" id="tab-abo" className={tab === "abo" ? "on" : ""} onClick={() => setTab("abo")}>Abo</button>}
         {operator && <button role="tab" id="tab-operator" className={tab === "operator" ? "on" : ""} onClick={() => setTab("operator")}>Betreiber</button>}
       </div>
       {tab === "look" && <Appearance />}
@@ -760,6 +813,7 @@ export function Settings() {
       {tab === "work" && <WorkSettings />}
       {tab === "billing" && <Billing />}
       {tab === "reports" && <ReportsAndExport />}
+      {tab === "abo" && sub && <SubscriptionTab onSetup={() => window.dispatchEvent(new CustomEvent("ti:setup"))} />}
       {tab === "operator" && operator && <Operator />}
     </>
   );

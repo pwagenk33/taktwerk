@@ -78,6 +78,7 @@ export async function authRoutes(app: FastifyInstance) {
     microsoft: oauthClient(ctx, "microsoft") !== null,
     google: oauthClient(ctx, "google") !== null,
     registration: ctx.config.REGISTRATION_OPEN === "true",
+    saas: ctx.config.SAAS === "true",
   }));
 
   /** Public branding so the login page can render in the corporate design (per host, see organizationForHost). */

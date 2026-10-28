@@ -379,7 +379,24 @@ docker compose -f deploy/docker-compose.prod.yml run --rm app node server/dist/c
 
 Das löscht die Firma mit allen Personen, Buchungen, Rechnungen und Protokollen. Belege unter `data/receipts` gehören zu Spesen-IDs und werden mit dem nächsten Backup-Lauf nicht mehr gebraucht; Backups der letzten 30 Tage enthalten die Daten noch.
 
-## 15. Kurzreferenz
+## 15. SaaS-Betrieb mit Abo
+
+Für den Verkauf als Abo an viele Firmen. Selbst gehostete Installationen überspringen diesen Abschnitt.
+
+1. **DNS:** zusätzlich zu `trackinsight.ch` einen Wildcard-Eintrag `*.trackinsight.ch` (A-Record) auf die IP der VM. Jede Firma ist danach unter `<kürzel>.trackinsight.ch` erreichbar; Caddy holt das Zertifikat beim ersten Aufruf, aber nur für Adressen, die die App kennt.
+2. **`deploy/.env.prod`:** `SAAS=true`, `SAAS_BASE_DOMAIN=trackinsight.ch`, `REGISTRATION_OPEN=true`, `OPERATOR_EMAIL=…`.
+3. **Bezahlung:**
+   - *Ohne Stripe* (Start): Firmen wählen ein Paket, es ist sofort aktiv, und an `OPERATOR_EMAIL` geht «Rechnung stellen». Bei jeder Verlängerung kommt die Meldung wieder. Bleibt eine Rechnung offen, unter Einstellungen → Betreiber den Status anpassen.
+   - *Mit Stripe:* in Stripe drei Produkte mit je einem Monats- und Jahrespreis anlegen, die Preis-IDs in `STRIPE_PRICES` eintragen, den Webhook auf `https://trackinsight.ch/api/billing/webhook` einrichten (Ereignisse siehe `.env.prod.example`) und `STRIPE_SECRET_KEY` und `STRIPE_WEBHOOK_SECRET` setzen. Firmen zahlen dann per Karte, Quittungen und Kartenwechsel laufen über das Stripe-Kundenportal.
+4. `docker compose -f deploy/docker-compose.prod.yml up -d` (Caddy liest das neue Caddyfile).
+
+**Ablauf für eine Firma:** Registrierung unter `/registrieren` (ein Paket vorwählbar mit `?paket=start|team|business`) → 30 Tage Testphase → Erinnerung 7 Tage und 1 Tag vor Ende → nach dem Ende noch 7 Tage Schonfrist → danach nur lesend, bis ein Paket gewählt ist. Daten werden nie automatisch gelöscht.
+
+**Grenzen pro Paket:** Start bis 10, Team bis 50, Business bis 200 aktive Personen (Kundenportal und Treuhand zählen nicht). Ressourcenplanung, Kundenportal und Forecast ab Team; Treuhand-Zugang und eigene Domain ab Business. Bestehende Firmen beim Umstellen auf `SAAS=true` starten mit Business, Status aktiv.
+
+**Eigene Domain (Business):** Die Firma trägt sie unter Einstellungen → Abo ein und setzt bei ihrem Domain-Anbieter einen CNAME auf `<kürzel>.trackinsight.ch`.
+
+## 16. Kurzreferenz
 
 | Aufgabe | Befehl (im Ordner `~/trackinsight`) |
 |---|---|

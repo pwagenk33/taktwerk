@@ -1,4 +1,4 @@
-import type { Dataset, Holiday, PostalAddress, ProjectReport, Role } from "@taktwerk/domain";
+import type { BillingInterval, Dataset, Holiday, Plan, PlanId, PostalAddress, ProjectReport, Role, Subscription, SubscriptionStatus } from "@taktwerk/domain";
 
 /** Demo mode runs entirely in the browser with example data (shareable prototype build). */
 export const DEMO = import.meta.env.VITE_DEMO === "1" || import.meta.env.MODE === "single";
@@ -27,6 +27,18 @@ export interface Me {
   /** Employees: projects and teams they lead. */
   leadsProjects?: string[];
   leadsTeams?: string[];
+  /** SaaS: package and state of the company's subscription (absent on self-hosted installations). */
+  subscription?: Subscription;
+}
+
+/** The company's subscription as the admin sees it (Settings → Abo). */
+export interface SubscriptionInfo {
+  subscription: Subscription;
+  canceledAt: string | null;
+  seats: number;
+  payment: "stripe" | "invoice";
+  cardOnFile: boolean;
+  plans: Plan[];
 }
 
 /** A company on this installation (operator view). */
@@ -39,6 +51,24 @@ export interface PlatformOrg {
   appName: string;
   users: number;
   createdAt: string;
+  origin?: string;
+  plan?: PlanId;
+  status?: SubscriptionStatus;
+  interval?: BillingInterval;
+  billing?: "stripe" | "invoice";
+  maxUsers?: number;
+  trialEndsAt?: string | null;
+  currentPeriodEnd?: string | null;
+  canceledAt?: string | null;
+  mrr?: number;
+}
+
+export interface PlatformSummary {
+  mrr: number;
+  active: number;
+  trialing: number;
+  pastDue: number;
+  ended: number;
 }
 
 /** A customer's portal account (role "customer"), managed on the customer page. */
@@ -68,6 +98,8 @@ export interface Providers {
   google: boolean;
   /** Companies may register themselves (REGISTRATION_OPEN). */
   registration?: boolean;
+  /** SaaS: registration starts a trial of a package. */
+  saas?: boolean;
 }
 
 export interface BillingSettings {
@@ -90,6 +122,8 @@ export interface Settings {
   hoursReminder?: boolean;
   closingReminder?: boolean;
   timeModel?: "simplified" | "full";
+  /** New companies: «open» shows the setup wizard to admins until they finish or skip it. */
+  onboarding?: "open" | "done";
   billing?: BillingSettings;
   costRate?: number;
   fx?: { rates: { EUR?: number; USD?: number }; asOf: string; source?: string; manual?: boolean };

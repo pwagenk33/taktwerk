@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { passkeysSupported, usePasskey } from "../webauthn";
+import { PLANS, TRIAL_DAYS, type PlanId } from "@taktwerk/domain";
 import { api, type Branding, type Providers } from "../api";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
 import { Icon } from "../ui/components";
@@ -9,6 +10,15 @@ const SSO_ERRORS: Record<string, string> = {
   fehlgeschlagen: "Die Anmeldung beim Anbieter ist fehlgeschlagen. Bitte erneut versuchen.",
   unbekannt: "Zu diesem Konto gibt es keinen Zugang. Bitte lass dich von einer Admin-Person einladen.",
   email_unbestaetigt: "Die E-Mail-Adresse des Google-Kontos ist nicht bestätigt.",
+  abgelaufen: "Der Anmeldelink ist abgelaufen. Bitte melde dich hier noch einmal an.",
+};
+
+/** SaaS: a sign-in on the shared address continues on the company's own address. */
+type SignedIn = { ok: boolean; redirect?: string; second?: { token: string; totp: boolean; passkey: boolean } };
+const follow = (res: SignedIn | null | undefined) => {
+  if (!res?.redirect) return false;
+  location.href = res.redirect;
+  return true;
 };
 
 function BrandPanel({ branding }: { branding: Branding }) {
@@ -62,6 +72,7 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
   const [username, setUsername] = useState(demo ? "anna.keller" : "");
   const [password, setPassword] = useState(demo ? "demo-passwort" : "");
   const [email, setEmail] = useState("");
+  const [plan, setPlan] = useState<PlanId>(() => (PLANS.find((p) => p.id === new URLSearchParams(location.search).get("paket"))?.id ?? "team"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(ssoError ? SSO_ERRORS[ssoError] ?? SSO_ERRORS.fehlgeschlagen : "");
 
@@ -71,7 +82,8 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
     if (demo) return onLoggedIn();
     setBusy(true);
     try {
-      const res = await api<{ ok: boolean; second?: { token: string; totp: boolean; passkey: boolean } }>("/api/auth/login", { body: { username, password } });
+      const res = await api<SignedIn>("/api/auth/login", { body: { username, password } });
+      if (follow(res)) return;
       if (!res.ok && res.second) {
         setSecond(res.second);
         setView("second");
@@ -106,7 +118,7 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
     setError("");
     setBusy(true);
     try {
-      await api("/api/auth/2fa/totp", { body: { token: second.token, code } });
+      if (follow(await api<SignedIn>("/api/auth/2fa/totp", { body: { token: second.token, code } }))) return;
       history.replaceState(null, "", "/");
       onLoggedIn();
     } catch (err) {
@@ -125,7 +137,7 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
     try {
       const options = await api<Record<string, unknown>>("/api/auth/passkey/options", { body: token ? { token } : {} });
       const response = await usePasskey(options);
-      await api("/api/auth/passkey/verify", { body: { token, response } });
+      if (follow(await api<SignedIn>("/api/auth/passkey/verify", { body: { token, response } }))) return;
       history.replaceState(null, "", "/");
       onLoggedIn();
     } catch (err) {
@@ -141,7 +153,7 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
     if (demo) return setError("Im Prototyp gibt es keine Registrierung. Melde dich mit den Beispieldaten an.");
     setBusy(true);
     try {
-      await api("/api/orgs/register", { body: { company, name: fullName, email, password } });
+      if (follow(await api<SignedIn>("/api/orgs/register", { body: { company, name: fullName, email, password, ...(providers.saas ? { plan } : {}) } }))) return;
       history.replaceState(null, "", "/");
       onLoggedIn();
     } catch (err) {
@@ -222,14 +234,28 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
         <form onSubmit={register} className="login-form">
           <div>
             <h2>Firma registrieren</h2>
-            <p className="muted">Deine Firma bekommt einen eigenen, getrennten Bereich. Du bist Admin und lädst dein Team selbst ein.</p>
+            <p className="muted">
+              Deine Firma bekommt einen eigenen, getrennten Bereich. Du bist Admin und lädst dein Team selbst ein.
+              {providers.saas && ` ${TRIAL_DAYS} Tage kostenlos testen, ohne Kreditkarte; danach wählst du ein Paket oder es endet von selbst.`}
+            </p>
           </div>
+          {providers.saas && (
+            <div className="plan-pick" role="radiogroup" aria-label="Paket für die Testphase">
+              {PLANS.map((p) => (
+                <button type="button" key={p.id} role="radio" aria-checked={plan === p.id} className={plan === p.id ? "on" : ""} onClick={() => setPlan(p.id)}>
+                  <strong>{p.name}</strong>
+                  <span>bis {p.maxUsers} Personen</span>
+                  <span className="num">CHF {p.monthly}/Mt.</span>
+                </button>
+              ))}
+            </div>
+          )}
           <label className="field"><span>Firma</span><input id="r-company" className="input" value={company} onChange={(e) => setCompany(e.target.value)} required minLength={2} /></label>
           <label className="field"><span>Dein Name</span><input id="r-name" className="input" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required /></label>
           <label className="field"><span>E-Mail (ist dein Benutzername)</span><input id="r-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
           <label className="field"><span>Passwort (mindestens 10 Zeichen)</span><input id="r-pass" className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} /></label>
           {error && <p className="error" role="alert">{error}</p>}
-          <button id="r-submit" className="btn primary block" disabled={busy}>{busy ? "Richte ein …" : "Firma anlegen"}</button>
+          <button id="r-submit" className="btn primary block" disabled={busy}>{busy ? "Richte ein …" : providers.saas ? "Kostenlos testen" : "Firma anlegen"}</button>
           <button type="button" className="link" onClick={() => { setView("login"); setError(""); }}>Zurück zur Anmeldung</button>
         </form>
       )}

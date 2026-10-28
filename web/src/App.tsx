@@ -9,6 +9,9 @@ import { Projects } from "./pages/Projects";
 import { Reports } from "./pages/Reports";
 import { TimeTracking } from "./pages/TimeTracking";
 import { Settings } from "./pages/Settings";
+import { SetupWizard } from "./pages/Setup";
+import { FeatureGate, SubscriptionBanner, useSubscription } from "./pages/Subscription";
+import { canWrite } from "@taktwerk/domain";
 import { Velocity } from "./pages/Velocity";
 import { WorkTime } from "./pages/WorkTime";
 import { useStore } from "./store";
@@ -150,6 +153,20 @@ export function App() {
   const [theme, setTheme] = useTheme();
   const [palette, setPalette] = useState(false);
   const [more, setMore] = useState(false);
+  const [setup, setSetup] = useState(false);
+  const sub = useSubscription();
+  const locked = !!sub && !canWrite(sub);
+
+  // New companies: the setup wizard opens for admins until it is finished or put off.
+  useEffect(() => {
+    const open = () => setSetup(true);
+    window.addEventListener("ti:setup", open);
+    if (role === "admin") {
+      if (mode === "demo") { if (loadLocal<string>("rt.onboarding", "done") === "open") setSetup(true); }
+      else api<{ onboarding?: string }>("/api/settings").then((s) => s.onboarding === "open" && setSetup(true)).catch(() => {});
+    }
+    return () => window.removeEventListener("ti:setup", open);
+  }, [role, mode]);
 
   useEffect(() => {
     const onHash = () => { setPage(readHash()); setMore(false); };
@@ -183,7 +200,7 @@ export function App() {
   );
 
   return (
-    <div className="shell" data-readonly={scope.readOnly || undefined}>
+    <div className="shell" data-readonly={scope.readOnly || locked || undefined}>
       <aside className="rail">
         <div className="brand"><BrandMark logo={branding.logo} /><span>{branding.appName}</span></div>
         <nav className="nav">
@@ -216,8 +233,8 @@ export function App() {
             <kbd>⌘K</kbd>
           </button>
           {pending > 0 && <button className="btn small offline-chip" title="Buchungen, die auf Netz warten. Klick versucht es erneut." onClick={() => void flushOutbox()}>⇅ {pending} offline</button>}
-          {scope.readOnly ? (
-            <span className="ro-chip" title="Treuhand-Zugang: alles einsehen, nichts ändern">Nur lesen</span>
+          {scope.readOnly || locked ? (
+            <span className="ro-chip" title={locked ? "Ohne aktives Paket sind die Daten nur lesbar" : "Treuhand-Zugang: alles einsehen, nichts ändern"}>Nur lesen</span>
           ) : (
             <>
               <HeaderTimer />
@@ -230,15 +247,16 @@ export function App() {
             <span className="who">{initials}</span>
           </a>
         </header>
+        <SubscriptionBanner />
         <main className="main">
           {current === "dashboard" && <Dashboard key={role === "employee" ? "employee" : "lead"} firstName={name.split(/\s+/)[0]} />}
           {current === "zeit" && <TimeTracking />}
           {current === "arbeitszeit" && <WorkTime />}
           {current === "abschluss" && <Closing />}
           {current === "projekte" && <Projects />}
-          {current === "planung" && <Planning />}
+          {current === "planung" && <FeatureGate feature="planning"><Planning /></FeatureGate>}
           {current === "reports" && <Reports />}
-          {current === "velocity" && <Velocity />}
+          {current === "velocity" && <FeatureGate feature="forecast"><Velocity /></FeatureGate>}
           {current === "einstellungen" && <Settings />}
           {current === "profil" && <Profile />}
         </main>
@@ -261,6 +279,7 @@ export function App() {
       )}
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} pages={visible.map((p) => ({ id: p.id, label: p.label }))} onNewEntry={requestNewEntry} />
+      {setup && <SetupWizard onClose={() => setSetup(false)} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );

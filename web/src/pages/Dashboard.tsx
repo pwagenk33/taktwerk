@@ -81,7 +81,9 @@ export function Dashboard({ firstName }: { firstName: string }) {
   const myQuestions = questions.filter((q) => q.ownerId === currentUserId);
   const teamQuestions = employee ? [] : questions.filter((q) => q.ownerId !== currentUserId);
   const lastMonth = addMonths(monthOf(data.today), -1);
-  const myLastOpen = !closings.some((c) => c.userId === currentUserId && c.month === lastMonth);
+  // People who started recording this month (e.g. a new company) have nothing to submit for last month.
+  const myStart = data.employees.find((e) => e.id === currentUserId)?.trackingStart;
+  const myLastOpen = (!myStart || myStart.slice(0, 7) <= lastMonth) && !closings.some((c) => c.userId === currentUserId && c.month === lastMonth);
   const waiting = employee ? 0 : closings.filter((c) => c.month === lastMonth && c.status === "submitted").length;
   const key = `rt.dashboard.${employee ? "employee" : "lead"}`;
   const [state, setStateRaw] = useState<DashboardState>(() => loadLocal(key, defaults(employee)));
