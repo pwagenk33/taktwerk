@@ -26,8 +26,11 @@ export const slugOf = (name: string) =>
   name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "firma";
 
 /** A slug that is free in the database: the proposal, else proposal-2, -3, … */
+/** Subdomains the installation uses itself (SaaS: <slug>.<base domain>). */
+export const RESERVED_SLUGS = ["www", "app", "api", "status", "admin", "mail", "hilfe", "help", "support", "docs", "blog", "login", "registrieren"];
+
 export async function freeSlug(db: Db, proposal: string) {
-  const taken = new Set((await db.select({ slug: organizations.slug }).from(organizations)).map((o) => o.slug));
+  const taken = new Set([...RESERVED_SLUGS, ...(await db.select({ slug: organizations.slug }).from(organizations)).map((o) => o.slug)]);
   if (!taken.has(proposal)) return proposal;
   for (let i = 2; ; i++) if (!taken.has(`${proposal}-${i}`)) return `${proposal}-${i}`;
 }

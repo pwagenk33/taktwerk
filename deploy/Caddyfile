@@ -1,5 +1,13 @@
 # Caddy: automatisches TLS (Let's Encrypt) und Reverse-Proxy auf die App.
-# APP_DOMAIN kommt aus deploy/.env.prod (z. B. zeit.firma.ch).
+# APP_DOMAIN kommt aus deploy/.env.prod (z. B. zeit.firma.ch oder im SaaS-Betrieb trackinsight.ch).
+
+# Zertifikate für Firmenadressen (<kürzel>.<APP_DOMAIN>, eigene Domains) holt Caddy beim ersten Aufruf,
+# aber nur, wenn die App die Adresse kennt (/api/tls-check). Ohne SaaS bleibt dieser Teil unbenutzt.
+{
+	on_demand_tls {
+		ask http://app:3000/api/tls-check
+	}
+}
 
 (sicherheit) {
 	header {
@@ -25,4 +33,14 @@ status.{$APP_DOMAIN} {
 	@erlaubt path /status /status/* /api/health
 	reverse_proxy @erlaubt app:3000
 	respond 404
+}
+
+# SaaS: alle übrigen Adressen (Firmen-Subdomains und eigene Domains der Firmen).
+# DNS: Wildcard-Eintrag *.<APP_DOMAIN> auf diesen Server; eigene Domains per CNAME auf <kürzel>.<APP_DOMAIN>.
+https:// {
+	import sicherheit
+	tls {
+		on_demand
+	}
+	reverse_proxy app:3000
 }

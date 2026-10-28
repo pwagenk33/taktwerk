@@ -3,13 +3,13 @@
 import { and, count, eq, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { HttpError, appOrigin, requireUser, type AppContext } from "../app";
-import { TRIAL_DAYS, planById } from "@taktwerk/domain";
+import { HttpError, appOrigin, organizationForHost, requireUser, type AppContext } from "../app";
+import { TRIAL_DAYS, mrrOf, planById } from "@taktwerk/domain";
 import { hashPassword, passwordProblem } from "../auth/crypto";
 import { DEFAULT_BRANDING, organizations, sessions, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
-import { createOrganization, slugOf } from "../seed";
-import { saasOn } from "../saas";
+import { RESERVED_SLUGS, createOrganization, slugOf } from "../seed";
+import { requireFeature, saasOn } from "../saas";
 import { createPasswordToken, passwordLink, signIn } from "./auth";
 
 const slug = z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/, "Kürzel: Kleinbuchstaben, Ziffern und Bindestriche, 2–60 Zeichen");
@@ -32,7 +32,15 @@ export async function platformRoutes(app: FastifyInstance) {
   };
   const view = async (o: typeof organizations.$inferSelect) => {
     const [{ n }] = await ctx.db.select({ n: count() }).from(users).where(and(eq(users.organizationId, o.id), eq(users.active, true), ne(users.role, "customer")));
-    return { id: o.id, name: o.name, slug: o.slug, domain: o.domain, active: o.active, appName: o.settings.branding.appName, users: n, createdAt: o.createdAt };
+    const plan = planById(o.plan);
+    const paying = o.subStatus === "active" || o.subStatus === "past_due";
+    return {
+      id: o.id, name: o.name, slug: o.slug, domain: o.domain, active: o.active, appName: o.settings.branding.appName, users: n, createdAt: o.createdAt,
+      origin: appOrigin(ctx.config, o),
+      plan: o.plan, status: o.subStatus, interval: o.billingInterval, billing: o.billingMode, maxUsers: plan.maxUsers,
+      trialEndsAt: o.trialEndsAt, currentPeriodEnd: o.currentPeriodEnd, canceledAt: o.canceledAt,
+      mrr: paying && o.active ? mrrOf(plan, o.billingInterval) : 0,
+    };
   };
   const emailFree = async (email: string, username: string) => {
     const [clash] = await ctx.db.select({ id: users.id }).from(users).where(or(eq(users.username, username), sql`lower(${users.email}) = ${email}`)).limit(1);
@@ -42,7 +50,10 @@ export async function platformRoutes(app: FastifyInstance) {
   app.get("/api/platform/orgs", async (req) => {
     requirePlatformAdmin(req);
     const rows = await ctx.db.select().from(organizations).orderBy(organizations.name);
-    return { registrationOpen: ctx.config.REGISTRATION_OPEN === "true", mainOrigin: appOrigin(ctx.config), orgs: await Promise.all(rows.map(view)) };
+    const orgs = await Promise.all(rows.map(view));
+    const by = (s: string) => orgs.filter((o) => o.active && o.status === s).length;
+    const summary = { mrr: Math.round(orgs.reduce((sum, o) => sum + o.mrr, 0) * 100) / 100, active: by("active"), trialing: by("trialing"), pastDue: by("past_due"), ended: by("canceled") + by("expired") };
+    return { registrationOpen: ctx.config.REGISTRATION_OPEN === "true", saas: saasOn(ctx), mainOrigin: appOrigin(ctx.config), summary, orgs };
   });
 
   /** Creates a company with its first admin and mails the invitation. */
@@ -76,18 +87,35 @@ export async function platformRoutes(app: FastifyInstance) {
   app.patch("/api/platform/orgs/:id", async (req) => {
     requirePlatformAdmin(req);
     const { id } = req.params as { id: string };
-    const body = z.object({ name: z.string().trim().min(1).max(200).optional(), slug: slug.optional(), domain: host.nullable().optional(), active: z.boolean().optional() }).parse(req.body);
+    const body = z
+      .object({
+        name: z.string().trim().min(1).max(200).optional(),
+        slug: slug.optional(),
+        domain: host.nullable().optional(),
+        active: z.boolean().optional(),
+        // Subscription by hand (invoice customers, goodwill): package, status, trial end.
+        plan: z.enum(["start", "team", "business"]).optional(),
+        subStatus: z.enum(["trialing", "active", "past_due", "canceled", "expired"]).optional(),
+        billingInterval: z.enum(["month", "year"]).optional(),
+        trialEndsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      })
+      .parse(req.body);
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, id)).limit(1);
     if (!org) throw new HttpError(404, "Firma nicht gefunden.");
     if (body.domain) {
       const [d] = await ctx.db.select({ id: organizations.id }).from(organizations).where(and(eq(organizations.domain, body.domain), ne(organizations.id, id))).limit(1);
       if (d) throw new HttpError(409, "Diese Domain ist bereits einer Firma zugeordnet.");
     }
+    if (body.slug && RESERVED_SLUGS.includes(body.slug)) throw new HttpError(400, "Dieses Kürzel ist für die Installation reserviert.");
     if (body.slug) {
       const [d] = await ctx.db.select({ id: organizations.id }).from(organizations).where(and(eq(organizations.slug, body.slug), ne(organizations.id, id))).limit(1);
       if (d) throw new HttpError(409, "Dieses Kürzel ist bereits vergeben.");
     }
-    await ctx.db.update(organizations).set(body).where(eq(organizations.id, id));
+    const { trialEndsAt, ...rest } = body;
+    await ctx.db
+      .update(organizations)
+      .set({ ...rest, ...(trialEndsAt !== undefined ? { trialEndsAt: trialEndsAt ? new Date(`${trialEndsAt}T23:59:59Z`) : null } : {}) })
+      .where(eq(organizations.id, id));
     if (body.active === false) {
       // Everyone of a deactivated company is signed out at once.
       const people = await ctx.db.select({ id: users.id }).from(users).where(eq(users.organizationId, id));
@@ -95,6 +123,41 @@ export async function platformRoutes(app: FastifyInstance) {
     }
     const [after] = await ctx.db.select().from(organizations).where(eq(organizations.id, id)).limit(1);
     return view(after!);
+  });
+
+  /**
+   * Caddy's on-demand TLS asks here before it requests a certificate: only addresses that belong to the installation
+   * (main address, status page, <slug>.<base domain> of an active company, a company's own domain) get one.
+   */
+  app.get("/api/tls-check", async (req, reply) => {
+    const domain = String((req.query as { domain?: string }).domain ?? "").toLowerCase();
+    const main = new URL(ctx.config.APP_URL).hostname;
+    const base = ctx.config.SAAS_BASE_DOMAIN?.toLowerCase();
+    let ok = domain === main || domain === `status.${main}` || (!!base && (domain === base || domain === `www.${base}` || domain === `status.${base}`));
+    if (!ok && domain) {
+      const org = await organizationForHost(ctx.db, domain, base);
+      ok = !!org && org.active && (org.domain === domain || (!!base && domain === `${org.slug}.${base}`));
+    }
+    return reply.status(ok ? 200 : 404).send(ok ? "ok" : "unbekannt");
+  });
+
+  /** Business: a company's own domain (e.g. zeit.firma.ch, CNAME to the installation). */
+  app.put("/api/org/domain", async (req) => {
+    const admin = requireUser(req);
+    if (admin.role !== "admin") throw new HttpError(403, "Nur Admins können die Adresse ändern.");
+    requireFeature(admin, "customDomain");
+    const { domain } = z.object({ domain: host.nullable() }).parse(req.body);
+    const base = ctx.config.SAAS_BASE_DOMAIN?.toLowerCase();
+    if (domain && (domain === new URL(ctx.config.APP_URL).hostname || (base && (domain === base || domain.endsWith(`.${base}`)))))
+      throw new HttpError(400, "Bitte eine Domain deiner Firma verwenden, z. B. zeit.firma.ch.");
+    if (domain) {
+      const [d] = await ctx.db.select({ id: organizations.id }).from(organizations).where(and(eq(organizations.domain, domain), ne(organizations.id, admin.organizationId))).limit(1);
+      if (d) throw new HttpError(409, "Diese Domain ist bereits einer Firma zugeordnet.");
+    }
+    await ctx.db.update(organizations).set({ domain }).where(eq(organizations.id, admin.organizationId));
+    const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, admin.organizationId)).limit(1);
+    const target = base && org ? `${org.slug}.${base}` : new URL(ctx.config.APP_URL).hostname;
+    return { domain, origin: appOrigin(ctx.config, org), dns: domain ? { type: "CNAME", name: domain, value: target } : null };
   });
 
   /** Self-service: a company registers and its first admin is signed in right away. */

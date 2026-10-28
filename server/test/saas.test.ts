@@ -136,4 +136,39 @@ describe("SaaS: packages, trial and own address", () => {
     expect(await runSubscriptionJobs(t.app.ctx, new Date("2026-11-28T12:00:00Z"))).toContain("expired:neue-firma-gmbh");
     expect((await t.db.select().from(organizations).where(eq(organizations.slug, "neue-firma-gmbh")))[0]!.subStatus).toBe("expired");
   });
+
+  it("certificates only for known addresses; Business companies bring their own domain", async () => {
+    const check = async (d: string) => (await req("GET", `/api/tls-check?domain=${d}`, BASE)).statusCode;
+    expect(await check(SAMPLE)).toBe(200);
+    expect(await check(BASE)).toBe(200);
+    expect(await check(`unbekannt.${BASE}`)).toBe(404);
+    expect(await check("zeit.fremd.ch")).toBe(404);
+
+    const anna = await login("anna.keller");
+    await t.db.update(organizations).set({ plan: "team" }).where(eq(organizations.slug, "beispiel"));
+    expect((await req("PUT", "/api/org/domain", SAMPLE, anna, { domain: "zeit.beispiel.ch" })).statusCode).toBe(402);
+    await t.db.update(organizations).set({ plan: "business" }).where(eq(organizations.slug, "beispiel"));
+    expect((await req("PUT", "/api/org/domain", SAMPLE, anna, { domain: `x.${BASE}` })).statusCode).toBe(400);
+    const set = await req("PUT", "/api/org/domain", SAMPLE, anna, { domain: "zeit.beispiel.ch" });
+    expect(set.json()).toMatchObject({ origin: "https://zeit.beispiel.ch", dns: { type: "CNAME", name: "zeit.beispiel.ch", value: SAMPLE } });
+    expect(await check("zeit.beispiel.ch")).toBe(200);
+    // Signing in on the subdomain now continues on the own domain.
+    const moved = await req("POST", "/api/auth/login", SAMPLE, "", { username: "anna.keller", password: PASSWORD });
+    expect(moved.json().redirect).toMatch(/^https:\/\/zeit\.beispiel\.ch\/api\/auth\/handoff/);
+    await req("PUT", "/api/org/domain", "zeit.beispiel.ch", cookieOf(await req("GET", new URL(moved.json().redirect).pathname + new URL(moved.json().redirect).search, "zeit.beispiel.ch")), { domain: null });
+    expect((await sampleOrg()).domain).toBeNull();
+  });
+
+  it("the operator sees packages, status and monthly revenue and can adjust them", async () => {
+    const anna = await login("anna.keller");
+    const list = (await req("GET", "/api/platform/orgs", SAMPLE, anna)).json();
+    expect(list.saas).toBe(true);
+    const beispiel = list.orgs.find((o: { slug: string }) => o.slug === "beispiel");
+    expect(beispiel).toMatchObject({ plan: "business", status: "active", interval: "month", mrr: 790, maxUsers: 200, origin: `https://${SAMPLE}` });
+    expect(list.summary).toMatchObject({ mrr: 790, active: 1 });
+    const neu = list.orgs.find((o: { slug: string }) => o.slug === "neue-firma-gmbh");
+    const patched = await req("PATCH", `/api/platform/orgs/${neu.id}`, SAMPLE, anna, { subStatus: "trialing", trialEndsAt: "2099-01-31" });
+    expect(patched.json()).toMatchObject({ status: "trialing", mrr: 0 });
+    expect(new Date(patched.json().trialEndsAt).toISOString()).toBe("2099-01-31T23:59:59.000Z");
+  });
 });

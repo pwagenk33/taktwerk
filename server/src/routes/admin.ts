@@ -76,6 +76,7 @@ export async function adminRoutes(app: FastifyInstance) {
         hoursReminder: z.boolean().optional(),
         closingReminder: z.boolean().optional(),
         timeModel: z.enum(["simplified", "full"]).optional(),
+        onboarding: z.enum(["open", "done"]).optional(),
         costRate: z.number().min(0).max(1000).optional(),
         scheduledReports: z
           .array(
