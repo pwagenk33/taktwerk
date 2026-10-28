@@ -48,7 +48,7 @@ export async function brandingRoutes(app: FastifyInstance) {
 
   app.get("/api/branding/logo", async (req, reply) => {
     // The signed-in user's organization, else the organization of the host (login page).
-    const org = req.user ? await orgOf(req.user.organizationId) : await organizationForHost(ctx.db, req.headers.host);
+    const org = req.user ? await orgOf(req.user.organizationId) : await organizationForHost(ctx.db, req.headers.host, ctx.config.SAAS_BASE_DOMAIN);
     const mime = org?.settings.branding.logoMime;
     if (!mime) throw new HttpError(404, "Kein Logo hinterlegt.");
     const data = await readFile(logoPath(ctx, org!.id)).catch(() => {

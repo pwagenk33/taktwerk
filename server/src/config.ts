@@ -30,6 +30,18 @@ const schema = z.object({
 
   /** "true": companies can register themselves at /registrieren (SaaS mode). Otherwise only platform admins and the CLI create organizations. */
   REGISTRATION_OPEN: z.enum(["true", "false"]).default("false"),
+  /** "true": run as SaaS with packages, trial, limits and subscription billing. Self-hosted installations leave it off. */
+  SAAS: z.enum(["true", "false"]).default("false"),
+  /** SaaS: every company gets <slug>.<SAAS_BASE_DOMAIN>, e.g. trackinsight.ch → beispiel.trackinsight.ch. */
+  SAAS_BASE_DOMAIN: optional,
+  /** Stripe secret key (sk_live_… or sk_test_…) for card payments; without it, companies are billed by invoice. */
+  STRIPE_SECRET_KEY: optional,
+  /** Signing secret of the Stripe webhook endpoint /api/billing/webhook (whsec_…). */
+  STRIPE_WEBHOOK_SECRET: optional,
+  /** Stripe price ids per package and interval: "start_month=price_…,start_year=price_…,team_month=…" (six entries). */
+  STRIPE_PRICES: optional,
+  /** Where the operator receives notices (new registrations, invoice requests, cancellations). */
+  OPERATOR_EMAIL: optional,
   /** Directory with the built web app; served by the API server in production. */
   WEB_DIST: optional,
   /** Where uploaded files (receipts) are stored. */

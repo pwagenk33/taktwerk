@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { HttpError, leadsProject, requireUser } from "../app";
+import { requireFeature } from "../saas";
 import { allocations, projects, users } from "../db/schema";
 
 const weekKey = z.string().regex(/^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$/, "Woche im Format JJJJ-Www");
@@ -18,6 +19,7 @@ export async function planningRoutes(app: FastifyInstance) {
     const body = z
       .object({ employeeId: z.string(), projectId: z.string(), week: weekKey, hours: z.number().min(0).max(100), note: z.string().trim().max(200).optional() })
       .parse(req.body);
+    requireFeature(lead, "planning");
     if (!leadsProject(lead, body.projectId)) throw new HttpError(403, "Planen kann nur die Projektleitung oder ein Lead.");
     const org = lead.organizationId;
     const [person] = await ctx.db.select({ id: users.id, role: users.role }).from(users).where(and(eq(users.id, body.employeeId), eq(users.organizationId, org), eq(users.active, true))).limit(1);

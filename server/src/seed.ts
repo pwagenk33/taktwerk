@@ -32,11 +32,21 @@ export async function freeSlug(db: Db, proposal: string) {
   for (let i = 2; ; i++) if (!taken.has(`${proposal}-${i}`)) return `${proposal}-${i}`;
 }
 
-export async function createOrganization(db: Db, o: { orgName: string; name: string; email: string; username: string; passwordHash?: string; slug?: string; domain?: string; platformAdmin?: boolean }) {
+export async function createOrganization(
+  db: Db,
+  o: { orgName: string; name: string; email: string; username: string; passwordHash?: string; slug?: string; domain?: string; platformAdmin?: boolean; trial?: { plan: "start" | "team" | "business"; days: number; billingMode: "stripe" | "invoice" }; onboarding?: boolean },
+) {
   const orgId = randomUUID();
   const userId = randomUUID();
   const slug = await freeSlug(db, o.slug ?? slugOf(o.orgName));
-  await db.insert(organizations).values({ id: orgId, name: o.orgName, slug, domain: o.domain ?? null, settings: { branding: { ...DEFAULT_BRANDING, appName: DEFAULT_BRANDING.appName }, ssoAutoProvisionDomains: [] } });
+  await db.insert(organizations).values({
+    id: orgId,
+    name: o.orgName,
+    slug,
+    domain: o.domain ?? null,
+    settings: { branding: { ...DEFAULT_BRANDING, appName: DEFAULT_BRANDING.appName }, ssoAutoProvisionDomains: [], ...(o.onboarding ? { onboarding: "open" as const } : {}) },
+    ...(o.trial ? { plan: o.trial.plan, subStatus: "trialing" as const, billingMode: o.trial.billingMode, trialEndsAt: new Date(Date.now() + o.trial.days * 86_400_000) } : {}),
+  });
   await db.insert(users).values({ id: userId, organizationId: orgId, name: o.name, email: o.email, username: o.username, role: "admin", passwordHash: o.passwordHash ?? null, trackingStart: todayZurich(), platformAdmin: o.platformAdmin ?? false });
   return { orgId, userId, slug };
 }

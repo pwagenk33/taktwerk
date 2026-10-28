@@ -90,6 +90,8 @@ export interface OrgSettings {
   fx?: { rates: { EUR?: number; USD?: number }; asOf: string; source?: string; manual?: boolean };
   /** Working-time recording: "simplified" (hours per day, Art. 73b ArGV 1, default) or "full" (come/go with breaks, Art. 73 ArGV 1). */
   timeModel?: "simplified" | "full";
+  /** New SaaS companies see the setup wizard until it is finished or skipped. */
+  onboarding?: "open" | "done";
 }
 
 export const organizations = mysqlTable(
@@ -103,9 +105,20 @@ export const organizations = mysqlTable(
     domain: varchar("domain", { length: 200 }),
     active: boolean("active").notNull().default(true),
     settings: json<OrgSettings>("settings").notNull(),
+    // ---- subscription (SaaS mode only; self-hosted installations ignore these) ----
+    plan: mysqlEnum("plan", ["start", "team", "business"]).notNull().default("business"),
+    subStatus: mysqlEnum("sub_status", ["trialing", "active", "past_due", "canceled", "expired"]).notNull().default("active"),
+    billingInterval: mysqlEnum("billing_interval", ["month", "year"]).notNull().default("month"),
+    /** "stripe": card payment through Stripe; "invoice": the operator bills by invoice and sets the status by hand. */
+    billingMode: mysqlEnum("billing_mode", ["stripe", "invoice"]).notNull().default("invoice"),
+    trialEndsAt: datetime("trial_ends_at", { mode: "date" }),
+    currentPeriodEnd: datetime("current_period_end", { mode: "date" }),
+    stripeCustomerId: varchar("stripe_customer_id", { length: 64 }),
+    stripeSubscriptionId: varchar("stripe_subscription_id", { length: 64 }),
+    canceledAt: datetime("canceled_at", { mode: "date" }),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("org_slug_uq").on(t.slug), uniqueIndex("org_domain_uq").on(t.domain)],
+  (t) => [uniqueIndex("org_slug_uq").on(t.slug), uniqueIndex("org_domain_uq").on(t.domain), index("org_stripe_sub_idx").on(t.stripeSubscriptionId)],
 );
 
 export const teams = mysqlTable("teams", {
@@ -191,7 +204,7 @@ export const sessions = mysqlTable(
 export const passwordTokens = mysqlTable("password_tokens", {
   id: char("id", { length: 64 }).primaryKey(), // SHA-256 of the token in the e-mail link
   userId: id("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  purpose: mysqlEnum("purpose", ["invite", "reset", "2fa"]).notNull(),
+  purpose: mysqlEnum("purpose", ["invite", "reset", "2fa", "handoff"]).notNull(),
   expiresAt: datetime("expires_at", { mode: "date" }).notNull(),
   usedAt: datetime("used_at", { mode: "date" }),
   createdAt: createdAt(),

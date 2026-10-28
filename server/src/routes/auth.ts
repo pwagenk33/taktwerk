@@ -1,13 +1,14 @@
 import { todayZurich } from "./data";
 import { Google, MicrosoftEntraId, decodeIdToken, generateCodeVerifier, generateState } from "arctic";
-import { and, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import { and, eq, gt, isNull, notInArray, or, sql } from "drizzle-orm";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { HttpError, SESSION_COOKIE, appOrigin, organizationForHost, requireUser, type AppContext } from "../app";
 import { hashPassword, newToken, passwordProblem, sha256, verifyPassword } from "../auth/crypto";
 import { DEFAULT_BRANDING, oauthAccounts, organizations, passkeys, passwordTokens, sessions, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
+import { assertSeats } from "../saas";
 
 type Provider = "microsoft" | "google";
 
@@ -39,15 +40,33 @@ export async function startSession(ctx: AppContext, reply: FastifyReply, userId:
   });
 }
 
+/**
+ * Opens the session. In SaaS mode a company works on its own address (<slug>.<base> or its domain); a sign-in on the
+ * shared address gets a two-minute one-time link instead, which opens the session there (cookies are per host).
+ */
+export async function signIn(ctx: AppContext, req: FastifyRequest, reply: FastifyReply, userId: string): Promise<{ ok: true; redirect?: string }> {
+  if (ctx.config.SAAS_BASE_DOMAIN) {
+    const [row] = await ctx.db.select({ org: organizations }).from(users).innerJoin(organizations, eq(organizations.id, users.organizationId)).where(eq(users.id, userId)).limit(1);
+    const target = row ? appOrigin(ctx.config, row.org) : null;
+    const host = (req.headers.host ?? "").toLowerCase();
+    if (target && new URL(target).host !== host) {
+      const token = await createPasswordToken(ctx, userId, "handoff");
+      return { ok: true, redirect: `${target}/api/auth/handoff?token=${token}` };
+    }
+  }
+  await startSession(ctx, reply, userId, req);
+  return { ok: true };
+}
+
 /** Creates a one-time link token (invite: 7 days, reset: 1 hour) and returns the plain token. */
-export async function createPasswordToken(ctx: AppContext, userId: string, purpose: "invite" | "reset" | "2fa") {
+export async function createPasswordToken(ctx: AppContext, userId: string, purpose: "invite" | "reset" | "2fa" | "handoff") {
   const token = newToken();
-  const hours = purpose === "invite" ? 24 * 7 : purpose === "2fa" ? 5 / 60 : 1;
+  const hours = purpose === "invite" ? 24 * 7 : purpose === "2fa" ? 5 / 60 : purpose === "handoff" ? 2 / 60 : 1;
   await ctx.db.insert(passwordTokens).values({ id: sha256(token), userId, purpose, expiresAt: new Date(Date.now() + hours * 3600_000) });
   return token;
 }
 
-export function passwordLink(ctx: AppContext, token: string, org?: { domain?: string | null } | null) {
+export function passwordLink(ctx: AppContext, token: string, org?: { domain?: string | null; slug?: string | null } | null) {
   return `${appOrigin(ctx.config, org)}/passwort?token=${encodeURIComponent(token)}`;
 }
 
@@ -62,7 +81,7 @@ export async function authRoutes(app: FastifyInstance) {
   }));
 
   /** Public branding so the login page can render in the corporate design (per host, see organizationForHost). */
-  app.get("/api/branding", async (req) => (await organizationForHost(ctx.db, req.headers.host))?.settings.branding ?? DEFAULT_BRANDING);
+  app.get("/api/branding", async (req) => (await organizationForHost(ctx.db, req.headers.host, ctx.config.SAAS_BASE_DOMAIN))?.settings.branding ?? DEFAULT_BRANDING);
 
   app.post("/api/auth/login", async (req, reply) => {
     const body = z.object({ username: z.string().trim().min(1).max(254), password: z.string().min(1).max(500) }).parse(req.body);
@@ -83,8 +102,8 @@ export async function authRoutes(app: FastifyInstance) {
     }
     failures.delete(key);
     // Strict tenant separation: on an organization's own domain only its users may sign in; inactive organizations are closed.
-    const hostOrg = await organizationForHost(ctx.db, req.headers.host);
-    if (hostOrg?.domain && hostOrg.id !== user.organizationId) throw new HttpError(403, "Dieses Konto gehört zu einer anderen Firma. Bitte die Adresse deiner Firma verwenden.");
+    const hostOrg = await organizationForHost(ctx.db, req.headers.host, ctx.config.SAAS_BASE_DOMAIN);
+    if (hostOrg && (hostOrg.domain || ctx.config.SAAS_BASE_DOMAIN) && hostOrg.id !== user.organizationId) throw new HttpError(403, "Dieses Konto gehört zu einer anderen Firma. Bitte die Adresse deiner Firma verwenden.");
     const [own] = await ctx.db.select({ active: organizations.active }).from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
     if (own && !own.active) throw new HttpError(403, "Diese Firma ist deaktiviert. Bitte den Betreiber kontaktieren.");
     // Second factor: the password alone opens no session; the client completes with a code or a passkey.
@@ -93,8 +112,24 @@ export async function authRoutes(app: FastifyInstance) {
       const token = await createPasswordToken(ctx, user.id, "2fa");
       return { ok: false, second: { token, totp: !!user.totpEnabledAt, passkey: keys.length > 0 } };
     }
+    return signIn(ctx, req, reply, user.id);
+  });
+
+  /** Second half of a SaaS sign-in on the shared address: the one-time link opens the session on the company's address. */
+  app.get("/api/auth/handoff", async (req, reply) => {
+    const { token } = z.object({ token: z.string().min(10).max(200) }).parse(req.query);
+    const [row] = await ctx.db
+      .select()
+      .from(passwordTokens)
+      .where(and(eq(passwordTokens.id, sha256(token)), eq(passwordTokens.purpose, "handoff"), isNull(passwordTokens.usedAt), gt(passwordTokens.expiresAt, new Date())))
+      .limit(1);
+    if (!row) return reply.redirect("/?anmeldung=abgelaufen");
+    await ctx.db.update(passwordTokens).set({ usedAt: new Date() }).where(eq(passwordTokens.id, row.id));
+    const [user] = await ctx.db.select().from(users).where(eq(users.id, row.userId)).limit(1);
+    const hostOrg = await organizationForHost(ctx.db, req.headers.host, ctx.config.SAAS_BASE_DOMAIN);
+    if (!user?.active || !hostOrg || hostOrg.id !== user.organizationId) return reply.redirect("/?anmeldung=fehlgeschlagen");
     await startSession(ctx, reply, user.id, req);
-    return { ok: true };
+    return reply.redirect("/");
   });
 
   app.post("/api/auth/logout", async (req, reply) => {
@@ -153,7 +188,7 @@ export async function authRoutes(app: FastifyInstance) {
     const [row] = await ctx.db
       .select()
       .from(passwordTokens)
-      .where(and(eq(passwordTokens.id, sha256(body.token)), isNull(passwordTokens.usedAt), gt(passwordTokens.expiresAt, new Date()), ne(passwordTokens.purpose, "2fa")))
+      .where(and(eq(passwordTokens.id, sha256(body.token)), isNull(passwordTokens.usedAt), gt(passwordTokens.expiresAt, new Date()), notInArray(passwordTokens.purpose, ["2fa", "handoff"])))
       .limit(1);
     if (!row) throw new HttpError(400, "Der Link ist abgelaufen oder wurde schon verwendet. Bitte fordere einen neuen an.");
     await ctx.db.update(passwordTokens).set({ usedAt: new Date() }).where(eq(passwordTokens.id, row.id));
@@ -202,8 +237,8 @@ export async function authRoutes(app: FastifyInstance) {
 
       const userId = await resolveOAuthUser(ctx, provider, subject, email, name);
       if (!userId) return fail("unbekannt");
-      await startSession(ctx, reply, userId, req);
-      return reply.redirect(`${new URL(ctx.config.APP_URL).origin}/`);
+      const done = await signIn(ctx, req, reply, userId);
+      return reply.redirect(done.redirect ?? `${new URL(ctx.config.APP_URL).origin}/`);
     });
   }
 }
@@ -228,6 +263,11 @@ export async function resolveOAuthUser(ctx: AppContext, provider: Provider, subj
     const claiming = all.filter((o) => o.settings.ssoAutoProvisionDomains.map((d) => d.toLowerCase()).includes(domain));
     const org = claiming.length === 1 ? claiming[0]! : null;
     if (!org) return null;
+    try {
+      await assertSeats(ctx, org.id);
+    } catch {
+      return null; // package full: the admin has to make room or upgrade first
+    }
     userId = randomUUID();
     await ctx.db.insert(users).values({ id: userId, organizationId: org.id, username: email, email, name, role: "employee", trackingStart: todayZurich() });
   }

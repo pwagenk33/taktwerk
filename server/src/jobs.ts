@@ -1,4 +1,4 @@
-import { WorkCalendar, addMonths, fmtCHF, fmtDate, fmtMonthLong, projectReports } from "@taktwerk/domain";
+import { WorkCalendar, addMonths, canWrite, fmtCHF, fmtDate, fmtMonthLong, planById, priceOf, projectReports, trialDaysLeft } from "@taktwerk/domain";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import type { AppContext } from "./app";
 import { purgeExpired } from "./routes/privacy";
@@ -9,6 +9,8 @@ import { sendCustomerReport } from "./reports/export";
 import { refreshFxRates } from "./fx";
 import { digestMail } from "./reports/digest";
 import { loadDataset } from "./routes/data";
+import { intervalLabel, mailAdmins, notifyOperator, periodEnd } from "./routes/subscription";
+import { saasOn, subscriptionOf } from "./saas";
 
 const THRESHOLDS = ["80", "95", "100"] as const;
 type Threshold = (typeof THRESHOLDS)[number];
@@ -344,6 +346,58 @@ export async function sendScheduledReports(ctx: AppContext, now = new Date()) {
   return sent;
 }
 
+/**
+ * SaaS: trial reminders (7 days and 1 day before the end), read-only notice after the grace week, and for companies
+ * paying by invoice the renewal (operator gets an «invoice due» notice) or the end of a cancelled subscription.
+ * Card subscriptions are driven by Stripe's webhook.
+ */
+export async function runSubscriptionJobs(ctx: AppContext, now = new Date()) {
+  if (!saasOn(ctx)) return [];
+  const done: string[] = [];
+  for (const org of await ctx.db.select().from(organizations).where(eq(organizations.active, true))) {
+    const sub = subscriptionOf(org);
+    if (sub.status === "trialing" && org.trialEndsAt) {
+      const left = trialDaysLeft(sub, now)!;
+      const end = fmtDate(org.trialEndsAt.toISOString().slice(0, 10));
+      if ((left === 7 || left === 1) && (await claim(ctx, `trial-reminder:${org.id}`, String(left)))) {
+        await mailAdmins(ctx, org, left === 1 ? "Die Testphase endet morgen" : "Noch eine Woche Testphase", [
+          `Die kostenlose Testphase von ${org.name} endet am ${end}.`,
+          "Wähle unter Einstellungen → Abo ein Paket, dann geht es ohne Unterbruch weiter. Alle erfassten Daten bleiben erhalten.",
+        ], { label: "Paket wählen", path: "/einstellungen" });
+        done.push(`reminder:${org.slug}:${left}`);
+      }
+      if (!canWrite(sub, now) && (await claim(ctx, `trial-expired:${org.id}`, org.trialEndsAt.toISOString().slice(0, 10)))) {
+        await ctx.db.update(organizations).set({ subStatus: "expired" }).where(eq(organizations.id, org.id));
+        await mailAdmins(ctx, org, "Testphase abgelaufen", [
+          `Die Testphase von ${org.name} ist vorbei, die Daten sind jetzt nur noch lesbar.`,
+          "Sobald du unter Einstellungen → Abo ein Paket wählst, kannst du sofort weiterarbeiten.",
+        ], { label: "Paket wählen", path: "/einstellungen" });
+        await notifyOperator(ctx, `Testphase abgelaufen: ${org.name}`, [`${org.name} (${org.slug}) hat nach der Testphase kein Paket gewählt.`]);
+        done.push(`expired:${org.slug}`);
+      }
+    }
+    if (org.billingMode === "invoice" && org.subStatus === "active" && org.currentPeriodEnd && org.currentPeriodEnd <= now) {
+      const period = org.currentPeriodEnd.toISOString().slice(0, 10);
+      if (!(await claim(ctx, `invoice-period:${org.id}`, period))) continue;
+      if (org.canceledAt) {
+        await ctx.db.update(organizations).set({ subStatus: "canceled" }).where(eq(organizations.id, org.id));
+        await mailAdmins(ctx, org, "Abo beendet", [`Das Abo von ${org.name} ist wie gekündigt beendet. Die Daten bleiben lesbar und exportierbar.`]);
+        done.push(`canceled:${org.slug}`);
+      } else {
+        const next = periodEnd(org.currentPeriodEnd, org.billingInterval);
+        await ctx.db.update(organizations).set({ currentPeriodEnd: next }).where(eq(organizations.id, org.id));
+        const plan = planById(org.plan);
+        await notifyOperator(ctx, `Rechnung stellen: ${org.name}, ${plan.name}`, [
+          `Neue Periode für ${org.name}: ${plan.name}, ${intervalLabel(org.billingInterval)}, CHF ${priceOf(plan, org.billingInterval)} zzgl. MWST.`,
+          `Periode ${fmtDate(period)} bis ${fmtDate(next.toISOString().slice(0, 10))}.`,
+        ]);
+        done.push(`renewed:${org.slug}`);
+      }
+    }
+  }
+  return done;
+}
+
 export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: string, err?: unknown) => void = console.error) {
   for (const [name, job] of [
     ["Monatsreport", () => sendMonthlyReports(ctx, now)],
@@ -354,6 +408,7 @@ export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: stri
     ["Wechselkurse", () => refreshFxRates(ctx)],
     ["Geplante Berichte", () => sendScheduledReports(ctx, now)],
     ["Aufräumen", () => purgeExpired(ctx, now)],
+    ["Abo", () => runSubscriptionJobs(ctx, now)],
   ] as const) {
     try {
       await job();

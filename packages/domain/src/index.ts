@@ -9,3 +9,4 @@ export * from "./utilization";
 export * from "./export";
 export * from "./planning";
 export * from "./presence";
+export * from "./plans";

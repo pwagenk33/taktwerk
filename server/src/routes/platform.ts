@@ -3,15 +3,21 @@
 import { and, count, eq, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { HttpError, appOrigin, requireUser } from "../app";
+import { HttpError, appOrigin, requireUser, type AppContext } from "../app";
+import { TRIAL_DAYS, planById } from "@taktwerk/domain";
 import { hashPassword, passwordProblem } from "../auth/crypto";
 import { DEFAULT_BRANDING, organizations, sessions, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { createOrganization, slugOf } from "../seed";
-import { createPasswordToken, passwordLink, startSession } from "./auth";
+import { saasOn } from "../saas";
+import { createPasswordToken, passwordLink, signIn } from "./auth";
 
 const slug = z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/, "Kürzel: Kleinbuchstaben, Ziffern und Bindestriche, 2–60 Zeichen");
 const host = z.string().trim().toLowerCase().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/, "Domain wie zeit.firma.ch, ohne https://");
+
+/** New companies in SaaS mode start with a trial of the chosen package; without Stripe the operator bills by invoice. */
+const trialFor = (ctx: AppContext, plan: "start" | "team" | "business" = "team") =>
+  saasOn(ctx) ? { plan, days: TRIAL_DAYS, billingMode: ctx.config.STRIPE_SECRET_KEY ? ("stripe" as const) : ("invoice" as const) } : undefined;
 
 // Registration abuse protection: 5 registrations per IP and hour.
 const regs = new Map<string, { count: number; until: number }>();
@@ -50,7 +56,7 @@ export async function platformRoutes(app: FastifyInstance) {
       const [d] = await ctx.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.domain, body.domain)).limit(1);
       if (d) throw new HttpError(409, "Diese Domain ist bereits einer Firma zugeordnet.");
     }
-    const { orgId, userId } = await createOrganization(ctx.db, { orgName: body.name, name: body.adminName, email: body.adminEmail, username: body.adminEmail, slug: body.slug, domain: body.domain });
+    const { orgId, userId } = await createOrganization(ctx.db, { orgName: body.name, name: body.adminName, email: body.adminEmail, username: body.adminEmail, slug: body.slug, domain: body.domain, trial: trialFor(ctx), onboarding: true });
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
     const token = await createPasswordToken(ctx, userId, "invite");
     await ctx.mailer.send(
@@ -97,23 +103,41 @@ export async function platformRoutes(app: FastifyInstance) {
     const r = regs.get(req.ip);
     if (r && r.count >= 5 && r.until > Date.now()) throw new HttpError(429, "Zu viele Registrierungen. Bitte später erneut versuchen.");
     const body = z
-      .object({ company: z.string().trim().min(2).max(200), name: z.string().trim().min(1).max(160), email: z.string().trim().toLowerCase().email(), password: z.string().max(500) })
+      .object({ company: z.string().trim().min(2).max(200), name: z.string().trim().min(1).max(160), email: z.string().trim().toLowerCase().email(), password: z.string().max(500), plan: z.enum(["start", "team", "business"]).optional() })
       .parse(req.body);
     const problem = passwordProblem(body.password);
     if (problem) throw new HttpError(400, problem);
     await emailFree(body.email, body.email);
     regs.set(req.ip, { count: (r && r.until > Date.now() ? r.count : 0) + 1, until: Date.now() + 3600_000 });
-    const { orgId, userId, slug: s } = await createOrganization(ctx.db, { orgName: body.company, name: body.name, email: body.email, username: body.email, passwordHash: await hashPassword(body.password), slug: slugOf(body.company) });
-    await startSession(ctx, reply, userId);
+    const { orgId, userId, slug: s } = await createOrganization(ctx.db, { orgName: body.company, name: body.name, email: body.email, username: body.email, passwordHash: await hashPassword(body.password), slug: slugOf(body.company), trial: trialFor(ctx, body.plan), onboarding: true });
+    const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    const done = await signIn(ctx, req, reply, userId);
+    const origin = appOrigin(ctx.config, org);
     await ctx.mailer.send(
       actionMail(DEFAULT_BRANDING, {
         to: body.email,
         subject: `Willkommen bei ${DEFAULT_BRANDING.appName}`,
         greeting: `Hallo ${body.name}`,
-        lines: [`${body.company} ist eingerichtet. Du bist Admin: Lade dein Team unter Einstellungen → Benutzer ein und lege Kunden und Projekte an.`, `Anmeldung: ${appOrigin(ctx.config)} mit «${body.email}».`],
+        lines: [
+          `${body.company} ist eingerichtet. Du bist Admin: Lade dein Team unter Einstellungen → Benutzer ein und lege Kunden und Projekte an.`,
+          `Anmeldung: ${origin} mit «${body.email}».`,
+          ...(saasOn(ctx) ? [`Du testest das Paket ${planById(body.plan ?? "team").name} ${TRIAL_DAYS} Tage lang kostenlos und unverbindlich. Ein Paket wählst du jederzeit unter Einstellungen → Abo.`] : []),
+        ],
         footer: "Fragen? Antworte einfach auf diese E-Mail.",
       }),
     );
-    return reply.status(201).send({ organizationId: orgId, slug: s });
+    if (ctx.config.OPERATOR_EMAIL)
+      await ctx.mailer
+        .send(
+          actionMail(DEFAULT_BRANDING, {
+            to: ctx.config.OPERATOR_EMAIL,
+            subject: `Neue Firma: ${body.company}`,
+            greeting: "Hallo",
+            lines: [`${body.company} (${s}) hat sich registriert.`, `Admin: ${body.name}, ${body.email}`, `Paket: ${saasOn(ctx) ? `${planById(body.plan ?? "team").name}, Testphase` : "ohne Abo"}`, `Adresse: ${origin}`],
+            footer: "Diese Meldung geht an OPERATOR_EMAIL.",
+          }),
+        )
+        .catch((e) => req.log.warn({ err: e }, "operator mail failed"));
+    return reply.status(201).send({ organizationId: orgId, slug: s, redirect: done.redirect });
   });
 }

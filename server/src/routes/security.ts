@@ -9,7 +9,7 @@ import { HttpError, requireRole, requireUser, type AppContext } from "../app";
 import { sha256, verifyPassword } from "../auth/crypto";
 import { newRecoveryCodes, newTotpSecret, otpauthUrl, verifyTotp } from "../auth/totp";
 import { organizations, passkeys, passwordTokens, sessions, users } from "../db/schema";
-import { startSession } from "./auth";
+import { signIn } from "./auth";
 
 const code = z.string().trim().min(6).max(20);
 
@@ -132,8 +132,7 @@ export async function securityRoutes(app: FastifyInstance) {
     }
     if (!ok) throw new HttpError(401, "Der Code stimmt nicht.");
     await consume(row.id);
-    await startSession(ctx, reply, u.id, req);
-    return { ok: true };
+    return signIn(ctx, req, reply, u.id);
   });
 
   // ---------- passkeys ----------
@@ -216,8 +215,7 @@ export async function securityRoutes(app: FastifyInstance) {
     await ctx.db.update(passkeys).set({ counter: v.authenticationInfo.newCounter, lastUsedAt: new Date() }).where(eq(passkeys.id, k.id));
     const u = await loadUser(k.userId);
     if (!u.active) throw new HttpError(403, "Dieses Konto ist deaktiviert.");
-    await startSession(ctx, reply, u.id, req);
-    return { ok: true };
+    return signIn(ctx, req, reply, u.id);
   };
 
   /** Passwordless sign-in with a passkey (no pending token). */

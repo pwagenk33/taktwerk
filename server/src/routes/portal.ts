@@ -6,6 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { HttpError, requireRole, requireUser, type AppContext } from "../app";
+import { requireFeature } from "../saas";
 import { customers, invoices, organizations, sessions, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { renderInvoicePdf } from "../reports/invoice";
@@ -107,6 +108,7 @@ export async function portalRoutes(app: FastifyInstance) {
   /** Creates a portal account and mails the invitation with a link to set a password. */
   app.post("/api/customers/:id/portal", async (req, reply) => {
     const lead = requireRole(req, "admin", "consultant");
+    requireFeature(lead, "portal");
     const { id } = req.params as { id: string };
     const customer = await customerInOrg(lead.organizationId, id);
     const body = z.object({ name: z.string().trim().min(1).max(160), email: z.string().trim().toLowerCase().email() }).parse(req.body);
