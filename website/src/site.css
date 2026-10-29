@@ -2,16 +2,18 @@
 @font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 400 700; font-display: swap; src: url(fonts/instrument-sans-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 @font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 400 700; font-display: swap; src: url(fonts/instrument-sans-latin-ext.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 
-/* TrackInsight website. Same tokens as the app (web/src/styles.css): warm stone greys, Instrument Sans,
-   square «Schweizer Raster» buttons, brand red only as a small marker. */
+/* TrackInsight website. Same tokens as the app (web/src/styles.css), colours «Bunt mit System»: cool light greys,
+   violet for actions, a fixed hue per topic, Instrument Sans and square «Schweizer Raster» buttons. */
 :root {
-  --bg: #f7f7f5; --surface: #fff; --surface-2: #f3f2ef;
-  --ink: #1c1b19; --ink-2: #57534e; --muted: #8a857e;
-  --line: #e8e6e1; --line-strong: #dad7d0;
-  --brand: #d52b1e; --brand-ink: #b8231a;
+  --bg: #f6f6f9; --surface: #fff; --surface-2: #f3f3f7;
+  --ink: #18181f; --ink-2: #4a4a57; --muted: #6e6e7c;
+  --line: #e7e7ee; --line-strong: #d9d9e3;
+  --brand: #6d4cf0; --brand-ink: #5b3fd6;
+  --action: #6d4cf0; --action-hover: #5b3fd6;
+  --hue-1: #6d4cf0; --hue-2: #12b76a; --hue-3: #2e90fa; --hue-4: #f79009; --hue-5: #ee46bc;
   --on-ink: #fff;
   --ph: #fff4c2; --ph-ink: #6b5200;
-  --radius: 4px; --radius-s: 2px;
+  --radius: 10px; --radius-s: 2px;
   --font: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --max: 1160px;
@@ -20,19 +22,21 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #121110; --surface: #1a1918; --surface-2: #211f1d;
-    --ink: #edebe7; --ink-2: #b8b2a9; --muted: #8f897f;
-    --line: #2b2926; --line-strong: #3a3733;
-    --brand: #e5483a; --brand-ink: #f07a6f; --on-ink: #121110;
+    --bg: #0f0f14; --surface: #17171e; --surface-2: #1f1f28;
+    --ink: #ededf3; --ink-2: #b0b0bf; --muted: #80808f;
+    --line: #2a2a35; --line-strong: #383845;
+    --brand: #9b85ff; --brand-ink: #b9a9ff; --on-ink: #0f0f14;
+    --hue-1: #9b85ff; --hue-2: #3ccf8e; --hue-3: #5aa9ff; --hue-4: #ffad3d; --hue-5: #f472d0;
     --ph: #3d3311; --ph-ink: #f3d77a;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #121110; --surface: #1a1918; --surface-2: #211f1d;
-  --ink: #edebe7; --ink-2: #b8b2a9; --muted: #8f897f;
-  --line: #2b2926; --line-strong: #3a3733;
-  --brand: #e5483a; --brand-ink: #f07a6f; --on-ink: #121110;
+  --bg: #0f0f14; --surface: #17171e; --surface-2: #1f1f28;
+  --ink: #ededf3; --ink-2: #b0b0bf; --muted: #80808f;
+  --line: #2a2a35; --line-strong: #383845;
+  --brand: #9b85ff; --brand-ink: #b9a9ff; --on-ink: #0f0f14;
+  --hue-1: #9b85ff; --hue-2: #3ccf8e; --hue-3: #5aa9ff; --hue-4: #ffad3d; --hue-5: #f472d0;
   --ph: #3d3311; --ph-ink: #f3d77a;
   color-scheme: dark;
 }
@@ -338,3 +342,66 @@ td.c, th.c { text-align: center; padding-right: 0; width: 110px; }
 .roadmap article h3 { font-size: 1.08rem; letter-spacing: -0.012em; }
 .roadmap article p { margin-top: 6px; color: var(--ink-2); font-size: 0.97rem; }
 @media (max-width: 860px) { .roadmap { grid-template-columns: 1fr; } .roadmap > section + section { padding-left: 0; border-left: 0; margin-top: 24px; border-top: 1px solid var(--line); } }
+
+/* ---------- «Bunt mit System»: violet for actions, one hue per topic ---------- */
+.btn.primary { background: var(--action); border-color: var(--action); color: #fff; }
+@media (hover: hover) { .btn.primary:hover { background: var(--action-hover); border-color: var(--action-hover); color: #fff; } .btn.ghost:hover { color: var(--brand-ink); } }
+:focus-visible { outline-color: var(--brand); }
+.hero::after { content: ""; position: absolute; inset: -20% -10% auto; height: 640px; pointer-events: none;
+  background: radial-gradient(40% 50% at 18% 30%, color-mix(in srgb, var(--hue-1) 16%, transparent), transparent 70%),
+              radial-gradient(30% 40% at 78% 18%, color-mix(in srgb, var(--hue-5) 11%, transparent), transparent 70%),
+              radial-gradient(30% 40% at 60% 60%, color-mix(in srgb, var(--hue-3) 10%, transparent), transparent 70%); }
+.hero .wrap { z-index: 1; }
+.hero h1 em { color: var(--brand); }
+.shot, .frame { box-shadow: 0 30px 80px -40px color-mix(in srgb, var(--brand) 55%, transparent); }
+.phones .frame { border-color: var(--ink); }
+.facts { gap: 12px; background: none; border: 0; }
+.facts > div { --hue: var(--hue-1); border: 1px solid color-mix(in srgb, var(--hue) 22%, var(--surface)); border-radius: var(--radius); background: color-mix(in srgb, var(--hue) 9%, var(--surface)); }
+.facts > div:nth-child(2) { --hue: var(--hue-2); }
+.facts > div:nth-child(3) { --hue: var(--hue-3); }
+.facts > div:nth-child(4) { --hue: var(--hue-4); }
+.facts > div, .facts > div:first-child, .facts > div:nth-child(n+3) { border-left: 1px solid color-mix(in srgb, var(--hue) 22%, var(--surface)); border-top: 1px solid color-mix(in srgb, var(--hue) 22%, var(--surface)); }
+.facts b { color: color-mix(in srgb, var(--hue) 65%, var(--ink)); }
+.story:nth-of-type(4n + 1) { --hue: var(--hue-1); }
+.story:nth-of-type(4n + 2) { --hue: var(--hue-2); }
+.story:nth-of-type(4n + 3) { --hue: var(--hue-3); }
+.story:nth-of-type(4n + 4) { --hue: var(--hue-4); }
+.story .eyebrow { color: color-mix(in srgb, var(--hue, var(--brand)) 70%, var(--ink)); }
+.story .eyebrow::before, .story-text li::before { background: var(--hue, var(--brand)); border-radius: 2px; }
+.story .figure-num b { color: color-mix(in srgb, var(--hue, var(--brand)) 70%, var(--ink)); }
+.index { border-top: 0; gap: 12px; }
+.index > section { --hue: var(--hue-1); padding: 22px 22px 10px; border: 1px solid color-mix(in srgb, var(--hue) 20%, var(--surface)); border-top: 4px solid var(--hue); border-radius: var(--radius); background: color-mix(in srgb, var(--hue) 6%, var(--surface)); }
+.index > section + section, .index > section:nth-child(n+3) { padding-left: 22px; margin-top: 0; border-left: 1px solid color-mix(in srgb, var(--hue) 20%, var(--surface)); border-top: 4px solid var(--hue); }
+.index > section:nth-child(2) { --hue: var(--hue-2); }
+.index > section:nth-child(3) { --hue: var(--hue-3); }
+.index > section:nth-child(4) { --hue: var(--hue-4); }
+.index h3 span { color: var(--hue); }
+.index li { border-top-color: color-mix(in srgb, var(--hue) 16%, var(--surface)); }
+.band { background: #1b1440; color: #f1eeff; }
+.band::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(50% 60% at 85% 10%, rgba(238, 70, 188, .22), transparent 70%), radial-gradient(45% 55% at 10% 90%, rgba(46, 144, 250, .18), transparent 70%); }
+.band .eyebrow { color: #b9a9ff; }
+.band .eyebrow::before { background: #b9a9ff; }
+.band .lead { color: #cfc7f5; }
+.band .ridge path { fill: #241b55; }
+.band .ridge path + path { fill: #2e2368; }
+.swiss { border-top-color: #3b3175; }
+.swiss > div + div { border-left-color: #3b3175; }
+.swiss p { color: #c3bbe8; }
+.band .btn { border-color: #f1eeff; color: #f1eeff; }
+.band .btn.primary { background: #fff; border-color: #fff; color: #1b1440; }
+@media (hover: hover) { .band .btn:hover { background: #f1eeff; color: #1b1440; } .band .btn.primary:hover { background: var(--hue-1); border-color: var(--hue-1); color: #fff; } }
+@media (max-width: 860px) { .swiss > div + div { border-top-color: #3b3175; } }
+.billing-toggle { border-color: var(--brand); }
+.billing-toggle button { color: var(--brand-ink); }
+.billing-toggle button[aria-pressed="true"] { background: var(--action); color: #fff; }
+.plans { border-top-color: var(--ink); }
+.plan.featured { background: color-mix(in srgb, var(--brand) 6%, var(--surface)); }
+.plan.featured::before { background: linear-gradient(90deg, var(--hue-1), var(--hue-5)); }
+.roadmap .dot.now { background: var(--brand); }
+.plan.featured, .plan.featured + .plan { padding-right: 28px; }
+.plan.featured { padding-left: 28px; }
+@media (max-width: 860px) { .plan.featured { padding: 32px 20px; } .plan.featured + .plan { padding-right: 0; } }
+.logo-sq { fill: var(--brand); }
+.logo-f1, .logo-f2 { fill: #fff; }
+.facts { width: 100%; max-width: calc(var(--max) + 2 * var(--gutter)); margin: 24px auto 0; padding: 0 var(--gutter); }
+@media (max-width: 860px) { .facts { gap: 10px; } }

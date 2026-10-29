@@ -4,6 +4,8 @@
 // and <!--@markdown ../docs/AVV-Vorlage.md--> (legal templates kept in docs/).
 // %APP_URL% stays in the output; the server replaces it with APP_URL when it serves a page.
 // `node build.mjs --app=https://…` replaces it at build time instead (static preview without the server).
+// %SITE_URL% (canonical links, sitemap, preview images) works the same way; `--site=https://…` fills it at build time.
+// Search engines get a sitemap, canonical links, Open Graph tags and structured data (product with prices, FAQ).
 import { build } from "esbuild";
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -13,6 +15,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const src = join(here, "src");
 const out = resolve(here, process.argv.find((a) => a.startsWith("--out="))?.slice(6) ?? "dist");
 const appUrl = process.argv.find((a) => a.startsWith("--app="))?.slice(6);
+const siteUrl = process.argv.find((a) => a.startsWith("--site="))?.slice(7);
 /** Static preview: links to other pages end in .html instead of clean URLs. */
 const preview = process.argv.includes("--preview");
 
@@ -86,18 +89,53 @@ function markdown(md) {
   return html.join("\n");
 }
 
+/** Pages search engines should not list: the 404 page and the legal templates still full of placeholders. */
+const NOINDEX = ["404", "avv"];
+
+/** Structured data for the home page: the product with its prices, the provider and the questions from the FAQ. */
+function jsonLd(html) {
+  const text = (s) => s.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  const faq = [...html.matchAll(/<details>\s*<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/g)].map((m) => ({
+    "@type": "Question",
+    name: text(m[1]),
+    acceptedAnswer: { "@type": "Answer", text: text(m[2]).replaceAll("{{trialDays}}", String(TRIAL_DAYS)).replaceAll("{{minSeats}}", String(MIN_SEATS)) },
+  }));
+  const data = [
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "TrackInsight",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web, iOS, Android",
+      url: "%SITE_URL%/",
+      image: "%SITE_URL%/img/app-eingang.jpg",
+      description: "Zeiterfassung, Spesen und Absenzen mit Budget-Forecast aus JIRA, QR-Rechnung und Daten in der Schweiz.",
+      offers: PLANS.map((p) => ({ "@type": "Offer", name: p.name, price: p.perUser.toFixed(2), priceCurrency: "CHF", description: `${p.name}: pro Person und Monat` })),
+      provider: { "@type": "Organization", name: "TrackInsight", url: "%SITE_URL%/" },
+    },
+    ...(faq.length ? [{ "@context": "https://schema.org", "@type": "FAQPage", mainEntity: faq }] : []),
+  ];
+  return data.map((d) => `<script type="application/ld+json">${JSON.stringify(d).replaceAll("<", "\\u003c")}</script>`).join("\n") + "\n";
+}
+
 const partial = (name) => readFileSync(join(src, "partials", `${name}.html`), "utf8");
 const NAV = [["funktionen", "Funktionen"], ["preise", "Preise"], ["sicherheit", "Sicherheit"], ["kontakt", "Kontakt"]];
 const link = (page) => (page === "index" ? (preview ? "index.html" : "/") : preview ? `${page}.html` : `/${page}`);
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
+const pages = [];
 for (const file of readdirSync(join(src, "pages")).filter((f) => f.endsWith(".html"))) {
   const page = file.replace(/\.html$/, "");
   let html = readFileSync(join(src, "pages", file), "utf8");
   html = html.replace(/<!--@head([^>]*)-->/, (_, a) => {
     const { title, description } = attrs(a);
-    return partial("head").replaceAll("{{title}}", esc(title)).replaceAll("{{description}}", esc(description)).replaceAll("{{page}}", page === "index" ? "" : page);
+    return partial("head")
+      .replaceAll("{{title}}", esc(title))
+      .replaceAll("{{description}}", esc(description))
+      .replaceAll("{{page}}", page === "index" ? "" : page)
+      .replace("{{robots}}", NOINDEX.includes(page) ? '<meta name="robots" content="noindex">\n' : "")
+      .replace("{{jsonld}}", page === "index" ? jsonLd(html) : "");
   });
   html = html.replace("<!--@header-->", () =>
     partial("header").replace("{{nav}}", NAV.map(([id, label]) => `<a href="${link(id)}"${id === page ? ' aria-current="page"' : ""}>${label}</a>`).join("")));
@@ -108,8 +146,20 @@ for (const file of readdirSync(join(src, "pages")).filter((f) => f.endsWith(".ht
   html = html.replace(/href="\/(\w[\w-]*)?"/g, (m, p) => (p && NAV.concat([["roadmap"], ["impressum"], ["datenschutz"], ["agb"], ["avv"]]).some(([id]) => id === p) ? `href="${link(p)}"` : !p ? `href="${link("index")}"` : m));
   if (preview) html = html.replace('<html lang="de-CH">', '<html lang="de-CH" data-preview="1">').replace(/(href|src)="\/(site\.css|site\.js|favicon\.svg|img\/|fonts\/)/g, '$1="$2');
   if (appUrl) html = html.replaceAll("%APP_URL%", appUrl);
+  if (siteUrl) html = html.replaceAll("%SITE_URL%", siteUrl);
   writeFileSync(join(out, file), html);
+  if (!NOINDEX.includes(page)) pages.push(page);
 }
-for (const f of ["site.css", "site.js", "favicon.svg", "robots.txt"]) cpSync(join(src, f), join(out, f));
+// Sitemap with every listed page; the server fills in %SITE_URL% like in the pages.
+const today = new Date().toISOString().slice(0, 10);
+const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${pages.sort().map((p) => `  <url><loc>%SITE_URL%/${p === "index" ? "" : p}</loc><lastmod>${today}</lastmod></url>`).join("\n")}
+</urlset>
+`;
+writeFileSync(join(out, "sitemap.xml"), siteUrl ? sitemap.replaceAll("%SITE_URL%", siteUrl) : sitemap);
+const robots = readFileSync(join(src, "robots.txt"), "utf8");
+writeFileSync(join(out, "robots.txt"), siteUrl ? robots.replaceAll("%SITE_URL%", siteUrl) : robots);
+for (const f of ["site.css", "site.js", "favicon.svg"]) cpSync(join(src, f), join(out, f));
 for (const d of ["img", "fonts"]) cpSync(join(src, d), join(out, d), { recursive: true });
 console.log(`Website: ${readdirSync(out).length} Dateien in ${out}`);

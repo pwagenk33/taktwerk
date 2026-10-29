@@ -398,6 +398,8 @@ Für den Verkauf als Abo an viele Firmen. Selbst gehostete Installationen übers
 
 **Website:** Die öffentliche Website (Ordner `website/`, gebaut nach `website/dist`) liefert derselbe Container aus, sobald `SAAS_BASE_DOMAIN` gesetzt ist und `APP_URL` auf einer anderen Adresse läuft. `trackinsight.ch` zeigt dann Startseite, Funktionen, Preise, Sicherheit, Kontakt, Impressum, Datenschutz, AGB und AVV; `www.trackinsight.ch` leitet dorthin um. Die Preise kommen aus `packages/domain/src/plans.ts`, App und Website zeigen also immer dieselben Pakete. Das Kontaktformular schickt an `OPERATOR_EMAIL` (höchstens 5 Anfragen pro Stunde und Adresse). Texte ändern: Dateien in `website/src/pages` bearbeiten, dann wie gewohnt neu bauen. Vorschau ohne Server: `npm run build -w website -- --preview --out=/tmp/site` und `index.html` öffnen. Platzhalter in eckigen Klammern (Firma, Adresse, UID) sind gelb markiert und müssen vor dem Start ersetzt werden; AGB und Datenschutzerklärung vorher rechtlich prüfen lassen.
 
+**Suchmaschinen:** Jede Seite hat Titel, Beschreibung, eine kanonische Adresse und Vorschaubild für LinkedIn und Co. Die Startseite beschreibt das Produkt mit Preisen und die FAQ zusätzlich als strukturierte Daten. `trackinsight.ch/sitemap.xml` listet alle Seiten (ohne 404 und AVV-Vorlage), `robots.txt` verweist darauf. Nach dem Start die Domain in der Google Search Console und in Bing Webmaster Tools bestätigen und dort die Sitemap einreichen. Lokal zeigt `http://website.localhost:3000/sitemap.xml` dieselbe Liste.
+
 ## 16. Jira Cloud verbinden
 
 Firmen verbinden ihre Jira-Cloud-Site unter **Einstellungen → Jira** mit einem Klick. Dafür braucht die Installation einmalig eine App bei Atlassian (kostenlos):

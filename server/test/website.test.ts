@@ -50,6 +50,15 @@ describe("Website", () => {
     expect(res.headers.location).toBe(`https://${BASE}/preise`);
   });
 
+  it("fills in the site address in sitemap and robots.txt", async () => {
+    writeFileSync(join(dir, "sitemap.xml"), "<loc>%SITE_URL%/preise</loc>");
+    writeFileSync(join(dir, "robots.txt"), "Sitemap: %SITE_URL%/sitemap.xml");
+    const map = await get("/sitemap.xml", BASE);
+    expect(map.headers["content-type"]).toContain("application/xml");
+    expect(map.body).toBe(`<loc>https://${BASE}/preise</loc>`);
+    expect((await get("/robots.txt", BASE)).body).toBe(`Sitemap: https://${BASE}/sitemap.xml`);
+  });
+
   it("shows the website locally on website.localhost", async () => {
     const res = await get("/preise", "website.localhost:3000");
     expect(res.body).toBe("<h1>Preise</h1>");

@@ -14,6 +14,7 @@ const TYPES: Record<string, string> = {
   ".png": "image/png",
   ".woff2": "font/woff2",
   ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
 };
 
 /** True when the request is for the public website: the SaaS base domain or www.<base>, unless the app itself runs there. */
@@ -31,7 +32,8 @@ export function isWebsiteHost(ctx: AppContext, host: string | undefined) {
 /**
  * The public website (website/ in the repository, built to WEBSITE_DIR) on trackinsight.ch, next to the app on
  * app.trackinsight.ch and the companies on <slug>.trackinsight.ch. Clean URLs: /preise serves preise.html.
- * %APP_URL% in the pages becomes APP_URL, so the sign-up buttons lead to the app.
+ * %APP_URL% in the pages becomes APP_URL, so the sign-up buttons lead to the app; %SITE_URL% (canonical links,
+ * sitemap, robots.txt) becomes the website's own address.
  */
 export function serveWebsite(app: FastifyInstance, ctx: AppContext) {
   const dir = ctx.config.WEBSITE_DIR ? resolve(ctx.config.WEBSITE_DIR) : null;
@@ -62,7 +64,10 @@ export function serveWebsite(app: FastifyInstance, ctx: AppContext) {
       }
       const ext = extname(file);
       let body: Buffer | string = read(file);
-      if (ext === ".html") body = body.toString("utf8").replaceAll("%APP_URL%", appUrl);
+      if (ext === ".html" || ext === ".xml" || ext === ".txt") {
+        const siteUrl = base ? `https://${base}` : `http://${req.headers.host ?? "website.localhost"}`;
+        body = body.toString("utf8").replaceAll("%APP_URL%", appUrl).replaceAll("%SITE_URL%", siteUrl);
+      }
       const longCache = rel.startsWith("img/") || rel.startsWith("fonts/");
       return reply
         .status(status)

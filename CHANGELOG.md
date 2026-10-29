@@ -5,6 +5,7 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 ## Unveröffentlicht
 
 ### Neu
+- Website in den neuen Farben, mit aktuellen Bildern der App und Grundlagen für Suchmaschinen: Sitemap, kanonische Adressen, Vorschaubilder und strukturierte Daten zu Produkt, Preisen und FAQ.
 - Neue Farben «Bunt mit System»: Violett als Hauptfarbe, jede Kennzahl mit eigener Farbe, Ampeln unabhängig von der Hauptfarbe. Firmen mit der bisherigen Standardfarbe Rot erhalten Violett; eine eigene Farbe bleibt.
 - Alles, was man anlegt oder bearbeitet, öffnet sich jetzt in einem einheitlichen Fenster mit Pflichtfeldern, Hinweisen und Fehlern direkt am Feld.
 - Die Website läuft lokal unter http://website.localhost:3000.
