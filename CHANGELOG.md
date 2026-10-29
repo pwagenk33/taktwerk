@@ -14,7 +14,7 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 - Neue Startseite «Eingang»: knappe Budgets, offene Freigaben (Absenzen, Spesen, Monatsabschlüsse) und eigene Pendenzen in einer Liste, direkt bewilligen oder ablehnen, Details zum Budget in der rechten Spalte.
 
 ### Neu gestaltet
-- Ruhiges Erscheinungsbild in warmen Grautönen mit der Schrift Instrument Sans; Schwarz für Aktionen, die Firmenfarbe nur noch für das, was Aufmerksamkeit braucht. Neue Knöpfe, Eingabefelder und Kennzahlen-Leisten, Budget-Ringe statt Punkte, Personen mit Initialen.
+- Ruhiges Erscheinungsbild in warmen Grautönen mit der Schrift Instrument Sans; Schwarz für Aktionen, die Firmenfarbe nur noch für das, was Aufmerksamkeit braucht. Knöpfe im Stil «Schweizer Raster» (kantig, kräftiger Rand, Nebenaktionen als unterstrichener Text), eckige Felder und Kennzahlen-Leisten, Budget-Ringe statt Punkte, Personen mit Initialen.
 - Menü ohne Symbole mit Zähler beim Eingang, den Projekten mit Budgetstatus und dem Bereich «Auswerten». Das anpassbare Widget-Dashboard ist dort unter «Dashboard» zu finden.
 
 ### Verbessert

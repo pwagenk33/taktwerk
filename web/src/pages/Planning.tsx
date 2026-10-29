@@ -110,9 +110,9 @@ export function Planning() {
             <button id="plan-people" role="radio" aria-checked={view === "people"} className={view === "people" ? "on" : ""} onClick={() => setView("people")}>Personen</button>
             <button id="plan-projects" role="radio" aria-checked={view === "projects"} className={view === "projects" ? "on" : ""} onClick={() => setView("projects")}>Projekte</button>
           </div>
-          <button className="btn small" onClick={() => setOffset((o) => o - 4)} aria-label="4 Wochen zurück">‹</button>
+          <button className="btn small ghost step" onClick={() => setOffset((o) => o - 4)} aria-label="4 Wochen zurück">‹</button>
           <button className="btn small" onClick={() => setOffset(0)} disabled={offset === 0}>Heute</button>
-          <button className="btn small" onClick={() => setOffset((o) => o + 4)} aria-label="4 Wochen vor">›</button>
+          <button className="btn small ghost step" onClick={() => setOffset((o) => o + 4)} aria-label="4 Wochen vor">›</button>
         </div>
       </div>
 

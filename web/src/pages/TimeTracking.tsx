@@ -1227,16 +1227,16 @@ function WeekCalendar() {
       <div className="card-head cal-toolbar">
         {phone ? (
           <div className="tree-row" style={{ gap: 6 }}>
-            <button className="btn small ghost" aria-label="Vorheriger Tag" onClick={() => stepDay(-1)}>‹</button>
+            <button className="btn small ghost step" aria-label="Vorheriger Tag" onClick={() => stepDay(-1)}>‹</button>
             <h2 style={{ margin: 0 }}>{fmtDay(days[0])}</h2>
-            <button className="btn small ghost" aria-label="Nächster Tag" onClick={() => stepDay(1)}>›</button>
+            <button className="btn small ghost step" aria-label="Nächster Tag" onClick={() => stepDay(1)}>›</button>
             {days[0] !== data.today && <button className="btn small ghost" onClick={goToday}>Heute</button>}
           </div>
         ) : (
           <div className="tree-row" style={{ gap: 8 }}>
-            <button className="btn small ghost" aria-label="Vorherige Woche" onClick={() => setMonday(addDays(monday, -7))}>‹</button>
+            <button className="btn small ghost step" aria-label="Vorherige Woche" onClick={() => setMonday(addDays(monday, -7))}>‹</button>
             <h2 style={{ margin: 0 }}>KW {isoWeek(monday)} · {fmtDay(week[0]).split(",")[1]?.trim()} – {fmtDay(week[6]).split(",")[1]?.trim()}</h2>
-            <button className="btn small ghost" aria-label="Nächste Woche" onClick={() => setMonday(addDays(monday, 7))}>›</button>
+            <button className="btn small ghost step" aria-label="Nächste Woche" onClick={() => setMonday(addDays(monday, 7))}>›</button>
             {monday !== mondayOf(data.today) && <button className="btn small ghost" onClick={() => setMonday(mondayOf(data.today))}>Heute</button>}
           </div>
         )}
