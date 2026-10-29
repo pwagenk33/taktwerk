@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { absenceDays, addMonths, fmt1, fmtCHF, fmtCHF2, fmtDate, fmtH, fmtMoney, fmtMonthLong, monthOf, vacationSummary, workBalance, type ProjectReport } from "@taktwerk/domain";
 import { useStore } from "../store";
+import { Icon } from "../ui/components";
 
 /* Start page «Eingang» (design A2, Tony 2026-10-29): everything that needs someone's attention as one grouped list,
    four figures on top, and the selected item explained on the right. */
@@ -14,6 +15,10 @@ interface Item {
   meta: string;
   when?: string;
   href?: string;
+  /** Person the item is about: shown as initials. */
+  person?: string;
+  /** Share of budget or contingent the forecast reaches, drawn as a ring. */
+  ratio?: number;
   actions?: Action[];
   report?: ProjectReport;
 }
@@ -51,11 +56,11 @@ export function useInbox(): Group[] {
       const dot = r.status === "over" ? "over" : "risk";
       if (r.retainer) {
         const peak = Math.max(r.retainer.used, r.retainer.avg3);
-        return { id: `b-${r.project.id}`, dot, report: r, title: r.status === "over" ? `${r.project.name} überzieht das Monatskontingent` : `${r.project.name}: Kontingent fast aufgebraucht`, meta: `${r.customer.name} · ${fmt1(peak)} von ${fmt1(r.retainer.hoursPerMonth)} h pro Monat` };
+        return { id: `b-${r.project.id}`, dot, report: r, ratio: peak / r.retainer.hoursPerMonth, title: r.status === "over" ? `${r.project.name} überzieht das Monatskontingent` : `${r.project.name}: Kontingent fast aufgebraucht`, meta: `${r.customer.name} · ${fmt1(peak)} von ${fmt1(r.retainer.hoursPerMonth)} h pro Monat` };
       }
       return r.status === "over"
-        ? { id: `b-${r.project.id}`, dot: "over", report: r, title: `${r.project.name} läuft auf ${pct(r.forecastCost, r.budget)} % des Budgets`, meta: `${r.customer.name} · Prognose ${money(r.forecastCost)}` }
-        : { id: `b-${r.project.id}`, dot: "risk", report: r, title: `${r.project.name} wird knapp`, meta: `${r.customer.name} · Reserve ${money(r.variance)}` };
+        ? { id: `b-${r.project.id}`, dot: "over", report: r, ratio: r.forecastCost / r.budget, title: `${r.project.name} läuft auf ${pct(r.forecastCost, r.budget)} % des Budgets`, meta: `${r.customer.name} · Prognose ${money(r.forecastCost)}` }
+        : { id: `b-${r.project.id}`, dot: "risk", report: r, ratio: r.forecastCost / r.budget, title: `${r.project.name} wird knapp`, meta: `${r.customer.name} · Reserve ${money(r.variance)}` };
     });
   if (budget.length) groups.push({ label: "Budget", items: budget });
 
@@ -66,7 +71,7 @@ export function useInbox(): Group[] {
       const vac = a.type === "Ferien" ? vacationSummary(data, a.employeeId, Number(a.startDate.slice(0, 4))) : null;
       const n = absenceDays(data, a);
       approvals.push({
-        id: `a-${a.id}`, dot: "ring",
+        id: `a-${a.id}`, dot: "ring", person: a.employeeId,
         title: `${name(a.employeeId)}: ${a.type} ${range(a.startDate, a.endDate)}`,
         meta: [days(n), vac ? `danach ${days(vac.remaining - n)} Ferien übrig` : "", a.note ?? ""].filter(Boolean).join(" · "),
         actions: [
@@ -78,7 +83,7 @@ export function useInbox(): Group[] {
     const expenses = data.expenses.filter((x) => x.status === "requested" && others(x.employeeId)).sort((x, y) => x.date.localeCompare(y.date));
     for (const x of expenses.slice(0, MAX_EXPENSES)) {
       approvals.push({
-        id: `x-${x.id}`, dot: "ring", when: ago(x.date, data.today),
+        id: `x-${x.id}`, dot: "ring", person: x.employeeId, when: ago(x.date, data.today),
         title: `${name(x.employeeId)}: ${x.category}, ${x.reason}`,
         meta: `${fmtCHF2(x.amount)} · ${x.receipt ? "Beleg vorhanden" : "ohne Beleg"}`,
         actions: [
@@ -93,7 +98,7 @@ export function useInbox(): Group[] {
     }
     for (const c of closings.filter((c) => c.month === lastMonth && c.status === "submitted" && others(c.userId))) {
       approvals.push({
-        id: `c-${c.userId}`, dot: "ring",
+        id: `c-${c.userId}`, dot: "ring", person: c.userId,
         title: `${name(c.userId)}: ${fmtMonthLong(lastMonth)} eingereicht`,
         meta: "Monatsabschluss wartet auf deine Freigabe",
         actions: [
@@ -124,18 +129,47 @@ export function useInbox(): Group[] {
   return groups;
 }
 
+/** Hours per calendar week, oldest first, for the last `n` weeks up to today. */
+function weeklyHours(entries: { date: string; hours: number }[], today: string, n = 10): number[] {
+  const end = new Date(`${today}T12:00:00`);
+  const monday = new Date(end);
+  monday.setDate(end.getDate() - ((end.getDay() + 6) % 7));
+  const starts = Array.from({ length: n }, (_, i) => { const d = new Date(monday); d.setDate(monday.getDate() - 7 * (n - 1 - i)); return d.toISOString().slice(0, 10); });
+  const out = starts.map(() => 0);
+  for (const e of entries) {
+    for (let i = n - 1; i >= 0; i--) if (e.date >= starts[i]) { if (e.date <= today) out[i] += e.hours; break; }
+  }
+  return out;
+}
+
+function Spark({ values }: { values: number[] }) {
+  const w = 120, h = 34, max = Math.max(...values, 1), min = Math.min(...values);
+  const span = Math.max(max - min, max * 0.15);
+  const pts = values.map((v, i) => [(i / (values.length - 1)) * (w - 4) + 2, h - 4 - ((v - min) / span) * (h - 10)]);
+  const line = pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const [lx, ly] = pts[pts.length - 1];
+  return (
+    <svg className="ib-spark" viewBox={`0 0 ${w} ${h}`} width={w} height={h} aria-hidden="true">
+      <path d={`${line} L${lx} ${h} L2 ${h} Z`} className="area" />
+      <path d={line} className="line" />
+      <circle cx={lx} cy={ly} r="2.5" className="dot" />
+    </svg>
+  );
+}
+
 function Stats() {
   const { data, role, currentUserId, factor } = useStore();
   const reports = useVisibleReports();
   const month = monthOf(data.today);
-  const entries = data.timeEntries.filter((e) => monthOf(e.date) === month && (role !== "employee" || e.employeeId === currentUserId));
+  const mine = role === "employee" ? data.timeEntries.filter((e) => e.employeeId === currentUserId) : data.timeEntries;
+  const entries = mine.filter((e) => monthOf(e.date) === month);
+  const prev = mine.filter((e) => monthOf(e.date) === addMonths(month, -1) && e.date.slice(8) <= data.today.slice(8));
   const hours = entries.reduce((s, e) => s + e.hours, 0);
+  const before = prev.reduce((s, e) => s + e.hours, 0);
   const billable = entries.filter((e) => e.billable).reduce((s, e) => s + e.hours * e.hourlyRate, 0);
   const monthName = fmtMonthLong(month).split(" ")[0];
-  const stats: { label: string; value: string; tone?: string }[] = [
-    { label: `Stunden ${monthName}`, value: fmt1(hours) },
-    { label: "Verrechenbar CHF", value: fmtCHF(billable).replace(/^CHF\s*/, "") },
-  ];
+  const delta = before ? Math.round(((hours - before) / before) * 100) : 0;
+  const stats: { label: string; value: string; tone?: string }[] = [{ label: "Verrechenbar", value: fmtCHF(billable) }];
   if (role === "employee") {
     if (data.employees.some((e) => e.id === currentUserId)) {
       const b = workBalance(data, currentUserId).balance;
@@ -144,16 +178,47 @@ function Stats() {
     }
   } else {
     const atRisk = reports.filter((r) => r.status !== "ok").length;
-    stats.push({ label: "Velocity h/SP", value: factor ? fmt1(factor.current) : "–" });
-    stats.push({ label: "Budgets in Gefahr", value: String(atRisk), tone: atRisk > 0 ? "alert" : undefined });
+    stats.push({ label: "Velocity", value: factor ? `${fmt1(factor.current)} h/SP` : "–" });
+    stats.push({ label: "Budgets in Gefahr", value: `${atRisk} von ${reports.length}`, tone: atRisk > 0 ? "alert" : undefined });
   }
   return (
     <div className="ib-stats">
-      {stats.map((s) => (
-        <div key={s.label}><span>{s.label}</span><strong className={`num ${s.tone ?? ""}`}>{s.value}</strong></div>
-      ))}
+      <div className="ib-hero">
+        <div>
+          <span>Stunden im {monthName}</span>
+          <strong className="num">{fmt1(hours)}<small> h</small></strong>
+          {before > 0 && <em className={delta < 0 ? "down" : "up"}>{delta >= 0 ? "+" : "−"}{Math.abs(delta)} % zum Vormonat</em>}
+        </div>
+        <Spark values={weeklyHours(mine, data.today)} />
+      </div>
+      <div className="ib-minor">
+        {stats.map((s) => (
+          <div key={s.label}><span>{s.label}</span><strong className={`num ${s.tone ?? ""}`}>{s.value}</strong></div>
+        ))}
+      </div>
     </div>
   );
+}
+
+/** Share of budget as a small ring; full and red when the forecast is over. */
+export function BudgetRing({ ratio, status, size = 18 }: { ratio: number; status: "ok" | "risk" | "over"; size?: number }) {
+  const r = 7, c = 2 * Math.PI * r, f = Math.min(1, Math.max(0, ratio));
+  return (
+    <svg className={`ib-ring ${status}`} viewBox="0 0 18 18" width={size} height={size} aria-hidden="true">
+      <circle cx="9" cy="9" r={r} className="track" />
+      {f > 0 && <circle cx="9" cy="9" r={r} className="arc" strokeDasharray={`${f * c} ${c}`} transform="rotate(-90 9 9)" />}
+    </svg>
+  );
+}
+
+function Marker({ item }: { item: Item }) {
+  const { data } = useStore();
+  if (item.person) {
+    const e = data.employees.find((x) => x.id === item.person);
+    return <span className="ib-av" aria-hidden="true">{e?.initials ?? "?"}</span>;
+  }
+  if (item.ratio !== undefined) return <BudgetRing ratio={item.ratio} status={item.dot === "over" ? "over" : "risk"} />;
+  return <span className={`ib-dot ${item.dot}`} aria-hidden="true" />;
 }
 
 function RetainerDetail({ r }: { r: ProjectReport }) {
@@ -231,12 +296,19 @@ function BudgetDetail({ r }: { r: ProjectReport }) {
   );
 }
 
-function greeting(): string {
-  const h = new Date().getHours();
-  return h < 11 ? "Guten Morgen" : h < 17 ? "Guten Tag" : "Guten Abend";
+/** One sentence on what is waiting, instead of a generic greeting. */
+function summary(groups: Group[]): string {
+  const n = (label: string) => groups.find((g) => g.label === label)?.items.length ?? 0;
+  const parts = [
+    n("Budget") && `${n("Budget")} ${n("Budget") === 1 ? "Budget" : "Budgets"} knapp`,
+    n("Freigaben") && `${n("Freigaben")} ${n("Freigaben") === 1 ? "Freigabe" : "Freigaben"} offen`,
+    n("Du") && `${n("Du")} ${n("Du") === 1 ? "eigene Pendenz" : "eigene Pendenzen"}`,
+  ].filter(Boolean) as string[];
+  if (!parts.length) return "Nichts offen";
+  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} und ${parts[parts.length - 1]}`;
 }
 
-export function Inbox({ firstName }: { firstName: string }) {
+export function Inbox() {
   const { data, notify } = useStore();
   const groups = useInbox();
   const all = groups.flatMap((g) => g.items);
@@ -256,7 +328,7 @@ export function Inbox({ firstName }: { firstName: string }) {
         <div className="ib-head">
           <div>
             <h1>Eingang</h1>
-            <p className="sub">{greeting()}, {firstName} · {today}</p>
+            <p className="sub"><span className="ib-date">{today}</span>{summary(groups)}.</p>
           </div>
           <a className="btn" href="#dashboard">Dashboard</a>
         </div>
@@ -269,16 +341,16 @@ export function Inbox({ firstName }: { firstName: string }) {
         )}
         {groups.map((g) => (
           <div key={g.label} className="ib-group" role="list" aria-label={g.label}>
-            <div className="ib-group-label">{g.label} · {g.items.length}</div>
+            <div className="ib-group-label">{g.label}<span>{g.items.length}</span></div>
             {g.items.map((it) => {
               const body = (
                 <>
-                  <span className={`ib-dot ${it.dot}`} aria-hidden />
+                  <Marker item={it} />
                   <span className="ib-text"><span className="t">{it.title}</span> <span className="m">{it.meta}</span></span>
                   {it.actions ? (
                     <span className="ib-actions">
                       {it.actions.map((a) => (
-                        <button key={a.label} className={`btn small ${a.primary ? "primary" : ""}`} disabled={busy === it.id} onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); void act(it, a); }}>{a.label}</button>
+                        <button key={a.label} className={`btn small ${a.primary ? "ib-go" : "ghost"}`} disabled={busy === it.id} onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); void act(it, a); }}>{a.primary && <Icon.approve />}{a.label}</button>
                       ))}
                     </span>
                   ) : <span className="ib-when">{it.when ?? (it.href ? "→" : "")}</span>}

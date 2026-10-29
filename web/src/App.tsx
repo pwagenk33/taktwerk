@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Role } from "@taktwerk/domain";
 import { Closing } from "./pages/Closing";
 import { Dashboard } from "./pages/Dashboard";
-import { Inbox, useInbox, useVisibleReports } from "./pages/Inbox";
+import { BudgetRing, Inbox, useInbox, useVisibleReports } from "./pages/Inbox";
 import { Planning } from "./pages/Planning";
 import { Portal } from "./pages/Portal";
 import { Profile } from "./pages/Profile";
@@ -132,7 +132,7 @@ function HeaderTimer() {
     const id = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [t?.runningSince]);
-  if (!t) return <button id="timer-start" className="btn timer-btn" title="Stoppuhr starten" onClick={() => timer.start()}><Icon.clock /><span>Timer</span></button>;
+  if (!t) return <button id="timer-start" className="btn timer-btn" title="Stoppuhr starten" onClick={() => timer.start()}><Icon.play /><span>Stoppuhr</span></button>;
   const sec = elapsedOf(t);
   const stop = () => {
     const r = timer.stop();
@@ -225,8 +225,8 @@ export function App() {
           <nav className="nav" aria-label="Projekte">
             <span className="nav-sec">Projekte</span>
             {railProjects.map((r) => (
-              <a key={r.project.id} href={`#projekte/p/${r.project.id}`} className={openProject === r.project.id ? "active" : ""} title={`${r.customer.name} · ${r.project.name}`}>
-                <span className={`sq ${r.status}`} aria-label={r.status === "over" ? "über Budget" : r.status === "risk" ? "knapp" : "im Budget"} />
+              <a key={r.project.id} href={`#projekte/p/${r.project.id}`} className={openProject === r.project.id ? "active" : ""} title={`${r.customer.name} · ${r.project.name} · ${r.status === "over" ? "über Budget" : r.status === "risk" ? "knapp" : "im Budget"}`}>
+                <BudgetRing ratio={r.retainer ? Math.max(r.retainer.used, r.retainer.avg3) / r.retainer.hoursPerMonth : r.budget > 0 ? r.forecastCost / r.budget : 0} status={r.status} size={14} />
                 <span className="nm">{r.project.name}</span>
               </a>
             ))}
@@ -280,7 +280,7 @@ export function App() {
         </header>
         <SubscriptionBanner />
         <main className={`main ${current === "eingang" ? "flush" : ""}`}>
-          {current === "eingang" && <Inbox firstName={name.split(/\s+/)[0]} />}
+          {current === "eingang" && <Inbox />}
           {current === "dashboard" && <Dashboard key={role === "employee" ? "employee" : "lead"} />}
           {current === "zeit" && <TimeTracking />}
           {current === "arbeitszeit" && <WorkTime />}

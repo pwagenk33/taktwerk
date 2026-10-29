@@ -62,7 +62,7 @@ export function parseReceipt(text: string, today: string): ReceiptGuess {
 
   // Category from keywords; merchant is the first line that is mostly letters and no label.
   for (const [re, cat] of CATEGORY_HINTS) if (re.test(raw)) { guess.category = cat; break; }
-  const merchant = lines.find((l) => /[A-Za-zÀ-ž]{3,}/.test(l) && !/\d{2}[.:]\d{2}/.test(l) && !/\b(quittung|kassenbon|beleg|rechnung|receipt|facture|ricevuta|tel|uid|mwst|tva|total|datum|date)\b/i.test(l) && l.replace(/[^A-Za-zÀ-ž ]/g, "").length >= l.length * 0.6);
+  const merchant = lines.find((l) => /[A-Za-z\u00C0-\u017E]{3,}/.test(l) && !/\d{2}[.:]\d{2}/.test(l) && !/\b(quittung|kassenbon|beleg|rechnung|receipt|facture|ricevuta|tel|uid|mwst|tva|total|datum|date)\b/i.test(l) && l.replace(/[^A-Za-z\u00C0-\u017E ]/g, "").length >= l.length * 0.6);
   if (merchant) guess.merchant = merchant.replace(/\s{2,}/g, " ").slice(0, 60);
   void EXPENSE_CATEGORIES;
   return guess;
