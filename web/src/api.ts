@@ -56,7 +56,8 @@ export interface PlatformOrg {
   status?: SubscriptionStatus;
   interval?: BillingInterval;
   billing?: "stripe" | "invoice";
-  maxUsers?: number;
+  /** Active people that are billed. */
+  seats?: number;
   trialEndsAt?: string | null;
   currentPeriodEnd?: string | null;
   canceledAt?: string | null;

@@ -1,6 +1,6 @@
 // SaaS subscription: choose and change a package, pay by card (Stripe Checkout and Billing Portal) or by invoice,
 // cancel at the end of the period. Stripe reports payments and changes through the webhook /api/billing/webhook.
-import { PLANS, fmtDate, planById, priceOf, type BillingInterval, type PlanId } from "@taktwerk/domain";
+import { PLANS, billableSeats, fmtDate, planById, priceOf, type BillingInterval, type PlanId } from "@taktwerk/domain";
 import { and, eq, or } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -68,11 +68,6 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     plans: PLANS,
   });
   const choice = z.object({ plan: z.enum(["start", "team", "business"]), interval: z.enum(["month", "year"]) });
-  const assertFits = async (org: OrgRow, plan: PlanId) => {
-    const used = await seatsUsed(ctx, org.id);
-    const p = planById(plan);
-    if (used > p.maxUsers) throw new HttpError(400, `Aktiv sind ${used} Personen, das Paket ${p.name} umfasst ${p.maxUsers}. Bitte zuerst Personen deaktivieren oder ein grösseres Paket wählen.`);
-  };
 
   app.get("/api/subscription", async (req) => view((await adminOrg(req)).org));
 
@@ -80,9 +75,9 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   app.post("/api/subscription/checkout", async (req) => {
     const { admin, org } = await adminOrg(req);
     const body = choice.parse(req.body);
-    await assertFits(org, body.plan);
     const plan = planById(body.plan);
-    const price = `${chf(priceOf(plan, body.interval))} ${intervalLabel(body.interval)}`;
+    const seats = billableSeats(await seatsUsed(ctx, org.id));
+    const price = `${chf(priceOf(plan, body.interval, seats))} ${intervalLabel(body.interval)} für ${seats} Personen`;
 
     if (!stripeOn(ctx)) {
       const now = new Date();
@@ -109,7 +104,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       const sub = await stripe(ctx, "GET", `/subscriptions/${org.stripeSubscriptionId}`);
       const item = sub.items?.data?.[0]?.id;
       if (!item) throw new HttpError(502, "Das Abo beim Zahlungsanbieter konnte nicht gelesen werden.");
-      await stripe(ctx, "POST", `/subscriptions/${org.stripeSubscriptionId}`, { items: [{ id: item, price: priceId }], proration_behavior: "create_prorations", cancel_at_period_end: false });
+      await stripe(ctx, "POST", `/subscriptions/${org.stripeSubscriptionId}`, { items: [{ id: item, price: priceId, quantity: seats }], proration_behavior: "create_prorations", cancel_at_period_end: false });
       await ctx.db.update(organizations).set({ plan: body.plan, billingInterval: body.interval, canceledAt: null }).where(eq(organizations.id, org.id));
       const [after] = await ctx.db.select().from(organizations).where(eq(organizations.id, org.id)).limit(1);
       return { ...(await view(after!)), done: true };
@@ -118,7 +113,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     const origin = appOrigin(ctx.config, org);
     const session = await stripe(ctx, "POST", "/checkout/sessions", {
       mode: "subscription",
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: seats }],
       client_reference_id: org.id,
       ...(org.stripeCustomerId ? { customer: org.stripeCustomerId } : { customer_email: admin.email }),
       subscription_data: { metadata: { organizationId: org.id } },

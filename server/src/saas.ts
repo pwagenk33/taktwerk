@@ -1,9 +1,10 @@
 // SaaS mode: packages, trial, limits and the subscription state of a company. Self-hosted installations
 // (SAAS unset) run without any of this: every check here passes.
-import { GRACE_DAYS, canWrite, hasFeature, planById, FEATURE_LABEL, PLANS, type Feature, type Subscription } from "@taktwerk/domain";
+import { GRACE_DAYS, billableSeats, canWrite, hasFeature, planById, FEATURE_LABEL, PLANS, type Feature, type Subscription } from "@taktwerk/domain";
 import { and, count, eq, notInArray } from "drizzle-orm";
 import { HttpError, type AppContext, type SessionUser } from "./app";
 import { organizations, users } from "./db/schema";
+import { stripe } from "./stripe";
 
 type OrgRow = typeof organizations.$inferSelect;
 
@@ -57,15 +58,22 @@ export async function seatsUsed(ctx: AppContext, orgId: string) {
   return n;
 }
 
-/** Throws 402 when `adding` more people would exceed the package. */
-export async function assertSeats(ctx: AppContext, orgId: string, adding = 1) {
-  const sub = await subscriptionFor(ctx, orgId);
-  if (!sub) return;
-  const plan = planById(sub.plan);
-  const used = await seatsUsed(ctx, orgId);
-  if (used + adding > plan.maxUsers) {
-    const next = PLANS.find((p) => p.maxUsers >= used + adding);
-    throw new HttpError(402, `Das Paket ${plan.name} umfasst ${plan.maxUsers} Personen, aktiv sind ${used}.${next ? ` Mit ${next.name} sind bis ${next.maxUsers} möglich.` : ""} Wechseln unter Einstellungen → Abo.`);
+/**
+ * Packages are priced per active person, so adding people never fails. A running card subscription gets the new
+ * number of people as its quantity (Stripe prorates); invoice customers are billed with the count at renewal.
+ */
+export async function syncSeats(ctx: AppContext, orgId: string) {
+  if (!saasOn(ctx) || !ctx.config.STRIPE_SECRET_KEY) return;
+  const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+  if (!org?.stripeSubscriptionId || (org.subStatus !== "active" && org.subStatus !== "past_due")) return;
+  try {
+    const sub = await stripe(ctx, "GET", `/subscriptions/${org.stripeSubscriptionId}`);
+    const item = sub.items?.data?.[0];
+    const quantity = billableSeats(await seatsUsed(ctx, orgId));
+    if (item?.id && item.quantity !== quantity) await stripe(ctx, "POST", `/subscriptions/${org.stripeSubscriptionId}`, { items: [{ id: item.id, quantity }], proration_behavior: "create_prorations" });
+  } catch (err) {
+    // The user change stays; the next change or the renewal brings the count up to date.
+    console.error("[saas] Personenzahl an Stripe nicht übermittelt", err);
   }
 }
 

@@ -9,7 +9,7 @@ import { hashPassword, passwordProblem } from "../auth/crypto";
 import { DEFAULT_BRANDING, organizations, sessions, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { RESERVED_SLUGS, createOrganization, slugOf } from "../seed";
-import { requireFeature, saasOn } from "../saas";
+import { requireFeature, saasOn, seatsUsed } from "../saas";
 import { createPasswordToken, passwordLink, signIn } from "./auth";
 import { periodEnd } from "./subscription";
 
@@ -34,13 +34,14 @@ export async function platformRoutes(app: FastifyInstance) {
   const view = async (o: typeof organizations.$inferSelect) => {
     const [{ n }] = await ctx.db.select({ n: count() }).from(users).where(and(eq(users.organizationId, o.id), eq(users.active, true), ne(users.role, "customer")));
     const plan = planById(o.plan);
+    const seats = await seatsUsed(ctx, o.id);
     const paying = o.subStatus === "active" || o.subStatus === "past_due";
     return {
       id: o.id, name: o.name, slug: o.slug, domain: o.domain, active: o.active, appName: o.settings.branding.appName, users: n, createdAt: o.createdAt,
       origin: appOrigin(ctx.config, o),
-      plan: o.plan, status: o.subStatus, interval: o.billingInterval, billing: o.billingMode, maxUsers: plan.maxUsers,
+      plan: o.plan, status: o.subStatus, interval: o.billingInterval, billing: o.billingMode, seats,
       trialEndsAt: o.trialEndsAt, currentPeriodEnd: o.currentPeriodEnd, canceledAt: o.canceledAt,
-      mrr: paying && o.active ? mrrOf(plan, o.billingInterval) : 0,
+      mrr: paying && o.active ? mrrOf(plan, o.billingInterval, seats) : 0,
     };
   };
   const emailFree = async (email: string, username: string) => {

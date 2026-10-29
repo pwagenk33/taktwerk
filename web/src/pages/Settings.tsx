@@ -658,11 +658,11 @@ function Operator() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const demoOrgs: PlatformOrg[] = [
-    { id: "o1", name: "Beispiel AG", slug: "beispiel", domain: "zeit.beispiel.ch", active: true, appName: "TrackInsight", users: 7, createdAt: "2026-01-05", plan: "business", status: "active", interval: "year", billing: "invoice", maxUsers: 200, mrr: 658.33, currentPeriodEnd: "2027-01-05T00:00:00Z" },
-    { id: "o2", name: "Zweite GmbH", slug: "zweite-gmbh", domain: null, active: true, appName: "ZweiteZeit", users: 12, createdAt: "2026-06-12", plan: "team", status: "active", interval: "month", billing: "stripe", maxUsers: 50, mrr: 290, currentPeriodEnd: "2026-11-12T00:00:00Z" },
-    { id: "o4", name: "Holzbau Gisler GmbH", slug: "holzbau-gisler", domain: null, active: true, appName: "TrackInsight", users: 6, createdAt: "2026-10-16", plan: "start", status: "trialing", interval: "month", billing: "invoice", maxUsers: 10, mrr: 0, trialEndsAt: "2026-11-15T00:00:00Z" },
-    { id: "o5", name: "Atelier Nord", slug: "atelier-nord", domain: null, active: true, appName: "TrackInsight", users: 9, createdAt: "2026-05-02", plan: "start", status: "past_due", interval: "month", billing: "stripe", maxUsers: 10, mrr: 79, currentPeriodEnd: "2026-10-02T00:00:00Z" },
-    { id: "o3", name: "Alte AG", slug: "alte-ag", domain: null, active: false, appName: "TrackInsight", users: 3, createdAt: "2025-11-20", plan: "start", status: "canceled", interval: "month", billing: "invoice", maxUsers: 10, mrr: 0 },
+    { id: "o1", name: "Beispiel AG", slug: "beispiel", domain: "zeit.beispiel.ch", active: true, appName: "TrackInsight", users: 7, createdAt: "2026-01-05", plan: "business", status: "active", interval: "year", billing: "invoice", seats: 7, mrr: 128.33, currentPeriodEnd: "2027-01-05T00:00:00Z" },
+    { id: "o2", name: "Zweite GmbH", slug: "zweite-gmbh", domain: null, active: true, appName: "ZweiteZeit", users: 12, createdAt: "2026-06-12", plan: "team", status: "active", interval: "month", billing: "stripe", seats: 12, mrr: 180, currentPeriodEnd: "2026-11-12T00:00:00Z" },
+    { id: "o4", name: "Holzbau Gisler GmbH", slug: "holzbau-gisler", domain: null, active: true, appName: "TrackInsight", users: 6, createdAt: "2026-10-16", plan: "start", status: "trialing", interval: "month", billing: "invoice", seats: 6, mrr: 0, trialEndsAt: "2026-11-15T00:00:00Z" },
+    { id: "o5", name: "Atelier Nord", slug: "atelier-nord", domain: null, active: true, appName: "TrackInsight", users: 9, createdAt: "2026-05-02", plan: "start", status: "past_due", interval: "month", billing: "stripe", seats: 9, mrr: 81, currentPeriodEnd: "2026-10-02T00:00:00Z" },
+    { id: "o3", name: "Alte AG", slug: "alte-ag", domain: null, active: false, appName: "TrackInsight", users: 3, createdAt: "2025-11-20", plan: "start", status: "canceled", interval: "month", billing: "invoice", seats: 3, mrr: 0 },
   ];
   const demoSummary = (orgs: PlatformOrg[]): PlatformSummary => ({
     mrr: orgs.reduce((s, o) => s + (o.active ? o.mrr ?? 0 : 0), 0),
@@ -750,7 +750,7 @@ function Operator() {
                         <div className="muted" style={{ fontSize: "0.74rem" }}>{o.billing === "stripe" ? "Karte" : "Rechnung"}{o.interval === "year" ? " · jährlich" : ""}</div>
                       </td>
                     )}
-                    <td className={`r num ${o.maxUsers && o.users > o.maxUsers ? "crit-text" : ""}`}>{o.users}{data.saas && o.maxUsers ? <span className="muted"> / {o.maxUsers}</span> : null}</td>
+                    <td className="r num">{o.users}</td>
                     {data.saas && <td className="r num">{o.mrr ? fmtCHF2(o.mrr) : "–"}</td>}
                     <td>
                       {!o.active ? <span className="pill neutral">Deaktiviert</span> : data.saas && o.status ? (

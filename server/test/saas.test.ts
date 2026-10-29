@@ -63,15 +63,12 @@ describe("SaaS: packages, trial and own address", () => {
     expect(shared.json().redirect).toMatch(new RegExp(`^https://${SAMPLE.replace(/\./g, "\\.")}/api/auth/handoff\\?token=`));
   });
 
-  it("the package limits the number of active people", async () => {
+  it("adding people is never blocked (price per person); the auditor account needs Business", async () => {
     await t.db.update(organizations).set({ plan: "start" }).where(eq(organizations.slug, "beispiel"));
     const anna = await login("anna.keller");
     const add = (i: number, role = "employee") => req("POST", "/api/users", SAMPLE, anna, { name: `Person ${i}`, email: `p${i}@beispiel.ch`, username: `person.${i}`, role });
-    // The sample company has 7 people; the start package allows 10.
-    for (const i of [1, 2, 3]) expect((await add(i)).statusCode).toBe(201);
-    const full = await add(4);
-    expect(full.statusCode).toBe(402);
-    expect(full.json().error).toContain("Team");
+    // The sample company has 7 people; packages are billed per person, so there is no upper limit.
+    for (const i of [1, 2, 3, 4]) expect((await add(i)).statusCode).toBe(201);
     // Auditor accounts are free, but only from Business.
     expect((await add(5, "auditor")).statusCode).toBe(402);
     await t.db.update(organizations).set({ plan: "business" }).where(eq(organizations.slug, "beispiel"));
@@ -97,16 +94,14 @@ describe("SaaS: packages, trial and own address", () => {
     const anna = await login("anna.keller");
     await req("POST", "/api/users", SAMPLE, anna, { name: "Person 11", email: "p11@beispiel.ch", username: "person.11", role: "employee" });
     const before = (await req("GET", "/api/subscription", SAMPLE, anna)).json();
-    expect(before).toMatchObject({ payment: "invoice", seats: 11 });
+    expect(before).toMatchObject({ payment: "invoice", seats: 12 });
     expect(before.plans).toHaveLength(3);
     expect((await req("GET", "/api/subscription", SAMPLE, await login("marco.brunner"))).statusCode).toBe(403);
 
-    // 11 people do not fit into Start.
-    expect((await req("POST", "/api/subscription/checkout", SAMPLE, anna, { plan: "start", interval: "month" })).statusCode).toBe(400);
     const booked = await req("POST", "/api/subscription/checkout", SAMPLE, anna, { plan: "team", interval: "year" });
     expect(booked.statusCode).toBe(200);
     expect(booked.json().subscription).toMatchObject({ plan: "team", status: "active", interval: "year", billing: "invoice" });
-    expect(t.mailer.outbox.some((m) => m.to === "betrieb@trackinsight.test" && m.subject === "Rechnung stellen: Beispiel AG, Team" && m.text.includes("CHF 2’900"))).toBe(true);
+    expect(t.mailer.outbox.some((m) => m.to === "betrieb@trackinsight.test" && m.subject === "Rechnung stellen: Beispiel AG, Team" && m.text.includes("CHF 1’800 jährlich für 12 Personen"))).toBe(true);
 
     // Renewal at the end of the period: the operator is told to invoice again, once.
     const org = await sampleOrg();
@@ -164,8 +159,9 @@ describe("SaaS: packages, trial and own address", () => {
     const list = (await req("GET", "/api/platform/orgs", SAMPLE, anna)).json();
     expect(list.saas).toBe(true);
     const beispiel = list.orgs.find((o: { slug: string }) => o.slug === "beispiel");
-    expect(beispiel).toMatchObject({ plan: "business", status: "active", interval: "month", mrr: 790, maxUsers: 200, origin: `https://${SAMPLE}` });
-    expect(list.summary).toMatchObject({ mrr: 790, active: 1 });
+    expect(beispiel).toMatchObject({ plan: "business", status: "active", interval: "month", origin: `https://${SAMPLE}` });
+    expect(beispiel.mrr).toBe(22 * Math.max(3, beispiel.seats));
+    expect(list.summary).toMatchObject({ mrr: beispiel.mrr, active: 1 });
     const neu = list.orgs.find((o: { slug: string }) => o.slug === "neue-firma-gmbh");
     const patched = await req("PATCH", `/api/platform/orgs/${neu.id}`, SAMPLE, anna, { subStatus: "trialing", trialEndsAt: "2099-01-31" });
     expect(patched.json()).toMatchObject({ status: "trialing", mrr: 0 });

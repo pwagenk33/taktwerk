@@ -61,6 +61,8 @@ describe("card payment through Stripe", () => {
     expect(checkout.json()).toEqual({ url: "https://checkout.stripe.com/c/cs_1" });
     const sent = new URLSearchParams(calls.at(-1)!.body);
     expect(sent.get("line_items[0][price]")).toBe("price_tm");
+    // Per person: the sample company has 7 people.
+    expect(sent.get("line_items[0][quantity]")).toBe("7");
     expect(sent.get("success_url")).toBe(`https://${HOST}/einstellungen?abo=ok`);
     const orgId = (await org()).id;
     expect(sent.get("client_reference_id")).toBe(orgId);
@@ -76,6 +78,12 @@ describe("card payment through Stripe", () => {
     const change = await post("/api/subscription/checkout", cookie, { plan: "business", interval: "year" });
     expect(change.json().subscription).toMatchObject({ plan: "business", interval: "year" });
     expect(new URLSearchParams(calls.at(-1)!.body).get("items[0][price]")).toBe("price_by");
+
+    // A new person raises the quantity of the running subscription.
+    expect((await post("/api/users", cookie, { name: "Neu Person", email: "neu.person@beispiel.ch", username: "neu.person", role: "employee" })).statusCode).toBe(201);
+    const seat = new URLSearchParams(calls.at(-1)!.body);
+    expect(calls.at(-1)!.url).toBe("https://api.stripe.com/v1/subscriptions/sub_1");
+    expect([seat.get("items[0][id]"), seat.get("items[0][quantity]"), seat.get("proration_behavior")]).toEqual(["si_1", "8", "create_prorations"]);
 
     expect((await post("/api/subscription/portal", cookie)).json().url).toBe("https://billing.stripe.com/p/1");
 

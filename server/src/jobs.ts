@@ -1,4 +1,4 @@
-import { WorkCalendar, addMonths, canWrite, fmtCHF, fmtDate, fmtMonthLong, planById, priceOf, projectReports, trialDaysLeft } from "@taktwerk/domain";
+import { WorkCalendar, addMonths, billableSeats, canWrite, fmtCHF, fmtDate, fmtMonthLong, planById, priceOf, projectReports, trialDaysLeft } from "@taktwerk/domain";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import type { AppContext } from "./app";
 import { purgeExpired } from "./routes/privacy";
@@ -11,7 +11,7 @@ import { digestMail } from "./reports/digest";
 import { loadDataset } from "./routes/data";
 import { intervalLabel, mailAdmins, notifyOperator, periodEnd } from "./routes/subscription";
 import { syncAllJira } from "./jira";
-import { saasOn, subscriptionOf } from "./saas";
+import { saasOn, seatsUsed, subscriptionOf } from "./saas";
 
 const THRESHOLDS = ["80", "95", "100"] as const;
 type Threshold = (typeof THRESHOLDS)[number];
@@ -388,8 +388,9 @@ export async function runSubscriptionJobs(ctx: AppContext, now = new Date()) {
         const next = periodEnd(org.currentPeriodEnd, org.billingInterval);
         await ctx.db.update(organizations).set({ currentPeriodEnd: next }).where(eq(organizations.id, org.id));
         const plan = planById(org.plan);
+        const seats = billableSeats(await seatsUsed(ctx, org.id));
         await notifyOperator(ctx, `Rechnung stellen: ${org.name}, ${plan.name}`, [
-          `Neue Periode für ${org.name}: ${plan.name}, ${intervalLabel(org.billingInterval)}, CHF ${priceOf(plan, org.billingInterval)} zzgl. MWST.`,
+          `Neue Periode für ${org.name}: ${plan.name}, ${intervalLabel(org.billingInterval)}, ${seats} Personen, CHF ${priceOf(plan, org.billingInterval, seats)} zzgl. MWST.`,
           `Periode ${fmtDate(period)} bis ${fmtDate(next.toISOString().slice(0, 10))}.`,
         ]);
         done.push(`renewed:${org.slug}`);

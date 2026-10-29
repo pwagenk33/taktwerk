@@ -8,7 +8,7 @@ import { HttpError, SESSION_COOKIE, appOrigin, organizationForHost, requireUser,
 import { hashPassword, newToken, passwordProblem, sha256, verifyPassword } from "../auth/crypto";
 import { DEFAULT_BRANDING, oauthAccounts, organizations, passkeys, passwordTokens, sessions, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
-import { assertSeats } from "../saas";
+import { syncSeats } from "../saas";
 
 type Provider = "microsoft" | "google";
 
@@ -264,13 +264,9 @@ export async function resolveOAuthUser(ctx: AppContext, provider: Provider, subj
     const claiming = all.filter((o) => o.settings.ssoAutoProvisionDomains.map((d) => d.toLowerCase()).includes(domain));
     const org = claiming.length === 1 ? claiming[0]! : null;
     if (!org) return null;
-    try {
-      await assertSeats(ctx, org.id);
-    } catch {
-      return null; // package full: the admin has to make room or upgrade first
-    }
     userId = randomUUID();
     await ctx.db.insert(users).values({ id: userId, organizationId: org.id, username: email, email, name, role: "employee", trackingStart: todayZurich() });
+    await syncSeats(ctx, org.id);
   }
   if (!userId) return null;
   await ctx.db.insert(oauthAccounts).values({ provider, providerUserId: subject, userId });

@@ -19,11 +19,11 @@ const preview = process.argv.includes("--preview");
 // Packages come straight from the domain code.
 const tmp = join(here, ".plans.mjs");
 await build({ entryPoints: [join(here, "../packages/domain/src/plans.ts")], bundle: true, format: "esm", platform: "node", outfile: tmp, logLevel: "error" });
-const { PLANS, TRIAL_DAYS, priceOf } = await import(`${pathToFileURL(tmp).href}?t=${Date.now()}`);
+const { PLANS, TRIAL_DAYS, MIN_SEATS } = await import(`${pathToFileURL(tmp).href}?t=${Date.now()}`);
 rmSync(tmp);
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const chf = (n) => n.toLocaleString("de-CH").replace(/[’']/g, "’");
+const chf = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2)).replace(/\B(?=(\d{3})+(?!\d))/g, "’");
 const attrs = (s) => Object.fromEntries([...s.matchAll(/(\w+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
 
 function plansHtml() {
@@ -32,9 +32,9 @@ function plansHtml() {
     return `<article class="plan${featured ? " featured" : ""}" aria-labelledby="plan-${p.id}">
   ${featured ? '<p class="plan-flag">Am häufigsten gewählt</p>' : ""}
   <h3 id="plan-${p.id}">${esc(p.name)}</h3>
-  <p class="plan-size">bis ${p.maxUsers} Personen</p>
-  <p class="plan-price"><span class="cur">CHF</span> <strong data-month="${chf(priceOf(p, "month"))}" data-year="${chf(Math.round(priceOf(p, "year") / 12))}">${chf(priceOf(p, "month"))}</strong> <span class="per">pro Monat</span></p>
-  <p class="plan-bill" data-month="monatlich verrechnet" data-year="CHF ${chf(priceOf(p, "year"))} jährlich verrechnet">monatlich verrechnet</p>
+  <p class="plan-size">${esc(p.tagline)}</p>
+  <p class="plan-price"><span class="cur">CHF</span> <strong data-month="${chf(p.perUser)}" data-year="${chf(Math.round((p.perUser * 10 * 100) / 12) / 100)}">${chf(p.perUser)}</strong> <span class="per">pro Person<br>und Monat</span></p>
+  <p class="plan-bill" data-month="monatlich verrechnet" data-year="CHF ${chf(p.perUser * 10)} pro Person jährlich verrechnet">monatlich verrechnet</p>
   <ul>${p.highlights.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>
   <a class="btn${featured ? " primary" : ""}" href="%APP_URL%/registrieren?paket=${p.id}">${TRIAL_DAYS} Tage testen</a>
 </article>`;
@@ -104,7 +104,7 @@ for (const file of readdirSync(join(src, "pages")).filter((f) => f.endsWith(".ht
   html = html.replace("<!--@footer-->", () => partial("footer"));
   html = html.replace("<!--@plans-->", () => plansHtml());
   html = html.replace(/<!--@markdown ([^ ]+)-->/g, (_, p) => markdown(readFileSync(resolve(here, p), "utf8")));
-  html = html.replaceAll("{{trialDays}}", String(TRIAL_DAYS));
+  html = html.replaceAll("{{trialDays}}", String(TRIAL_DAYS)).replaceAll("{{minSeats}}", String(MIN_SEATS));
   html = html.replace(/href="\/(\w[\w-]*)?"/g, (m, p) => (p && NAV.concat([["roadmap"], ["impressum"], ["datenschutz"], ["agb"], ["avv"]]).some(([id]) => id === p) ? `href="${link(p)}"` : !p ? `href="${link("index")}"` : m));
   if (preview) html = html.replace('<html lang="de-CH">', '<html lang="de-CH" data-preview="1">').replace(/(href|src)="\/(site\.css|site\.js|favicon\.svg|img\/|fonts\/)/g, '$1="$2');
   if (appUrl) html = html.replaceAll("%APP_URL%", appUrl);

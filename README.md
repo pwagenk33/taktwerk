@@ -100,7 +100,7 @@ Die Buttons erscheinen auf der Anmeldeseite, sobald die Werte gesetzt sind.
 
 ## SaaS mit Abo
 
-Mit `SAAS=true` läuft die Installation als Abo-Dienst für viele Firmen: Pakete nach Teamgrösse (Start bis 10, Team bis 50, Business bis 200 Personen), 30 Tage Testphase, Bezahlung per Stripe oder auf Rechnung, jede Firma unter `<kürzel>.<SAAS_BASE_DOMAIN>`, Einrichtungsassistent und Umsatzübersicht für den Betreiber. Ohne `SAAS` gibt es keine Pakete und keine Grenzen. Einrichtung: [docs/BETRIEB.md](docs/BETRIEB.md), Abschnitt 15.
+Mit `SAAS=true` läuft die Installation als Abo-Dienst für viele Firmen: Pakete Start, Team und Business mit Preis pro Person (CHF 9, 15 und 22 pro Monat, mindestens 3 Personen), 30 Tage Testphase, Bezahlung per Stripe oder auf Rechnung, jede Firma unter `<kürzel>.<SAAS_BASE_DOMAIN>`, Einrichtungsassistent und Umsatzübersicht für den Betreiber. Ohne `SAAS` gibt es keine Pakete. Einrichtung: [docs/BETRIEB.md](docs/BETRIEB.md), Abschnitt 15.
 
 ## Betrieb in der Schweiz
 

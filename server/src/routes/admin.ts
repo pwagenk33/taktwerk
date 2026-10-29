@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { HttpError, requireRole, requireUser } from "../app";
-import { assertSeats, requireFeature } from "../saas";
+import { requireFeature, syncSeats } from "../saas";
 import { VAT_RATES } from "@taktwerk/domain";
 import { customers, organizations, sessions, teams, users, type OrgSettings } from "../db/schema";
 import { actionMail } from "../mail/mailer";
@@ -197,9 +197,9 @@ export async function adminRoutes(app: FastifyInstance) {
       .limit(1);
     if (clash) throw new HttpError(409, "Benutzername oder E-Mail ist bereits vergeben.");
     if (body.role === "auditor") requireFeature(admin, "auditor");
-    else await assertSeats(ctx, admin.organizationId);
     const id = randomUUID();
     await ctx.db.insert(users).values({ id, organizationId: admin.organizationId, ...body, teamId: body.teamId || null, trackingStart: todayZurich() });
+    await syncSeats(ctx, admin.organizationId);
     const token = await createPasswordToken(ctx, id, "invite");
     const org = await orgOf(admin.organizationId);
     await ctx.mailer.send(
@@ -228,11 +228,10 @@ export async function adminRoutes(app: FastifyInstance) {
     const [target] = await ctx.db.select().from(users).where(and(eq(users.id, id), eq(users.organizationId, admin.organizationId))).limit(1);
     if (!target) throw new HttpError(404, "Benutzer nicht gefunden.");
     if (body.role === "auditor" && target.role !== "auditor") requireFeature(admin, "auditor");
-    // Counts against the package: reactivating someone, or turning a free auditor account into a regular one.
+    // Billed people change when someone is (de)activated or moves between a free role (auditor) and a regular one.
     const free = (r: string) => r === "auditor" || r === "customer";
     const willCount = (body.active ?? target.active) && !free(body.role ?? target.role);
     const counted = target.active && !free(target.role);
-    if (willCount && !counted) await assertSeats(ctx, admin.organizationId);
     const demotes = (body.role && body.role !== "admin") || body.active === false;
     if (target.role === "admin" && demotes) {
       const [other] = await ctx.db
@@ -243,6 +242,7 @@ export async function adminRoutes(app: FastifyInstance) {
       if (!other) throw new HttpError(400, "Es muss mindestens ein aktiver Admin bleiben.");
     }
     await ctx.db.update(users).set(body).where(eq(users.id, id));
+    if (willCount !== counted) await syncSeats(ctx, admin.organizationId);
     if (body.active === false) await ctx.db.delete(sessions).where(eq(sessions.userId, id));
     return { ok: true };
   });

@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { canWrite, hasFeature, mrrOf, planById, planForUsers, priceOf, trialDaysLeft } from "../plans";
+import { billableSeats, canWrite, hasFeature, mrrOf, planById, priceOf, trialDaysLeft } from "../plans";
 
 const now = new Date("2026-11-01T12:00:00Z");
 const days = (n: number) => new Date(now.getTime() + n * 86_400_000).toISOString();
 
 describe("packages", () => {
   it("prices, yearly discount and MRR", () => {
-    expect(priceOf(planById("team"), "year")).toBe(2900);
-    expect(mrrOf(planById("team"), "year")).toBe(241.67);
-    expect(mrrOf(planById("start"), "month")).toBe(79);
-    expect([1, 10, 11, 50, 51, 500].map((n) => planForUsers(n).id)).toEqual(["start", "start", "team", "team", "business", "business"]);
+    // CHF per person and month, a year costs ten months, at least three people.
+    expect(priceOf(planById("team"), "month", 12)).toBe(180);
+    expect(priceOf(planById("team"), "year", 12)).toBe(1800);
+    expect(mrrOf(planById("team"), "year", 12)).toBe(150);
+    expect(mrrOf(planById("start"), "month", 1)).toBe(27);
+    expect([0, 1, 3, 4, 50].map(billableSeats)).toEqual([3, 3, 3, 4, 50]);
   });
 
   it("features by package; no subscription means self-hosted with everything", () => {

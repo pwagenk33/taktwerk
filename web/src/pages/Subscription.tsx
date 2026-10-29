@@ -1,4 +1,4 @@
-import { FEATURE_LABEL, PLANS, TRIAL_DAYS, canWrite, fmtCHF, fmtDate, hasFeature, planById, priceOf, trialDaysLeft, type BillingInterval, type Feature, type PlanId, type Subscription } from "@taktwerk/domain";
+import { FEATURE_LABEL, MIN_SEATS, PLANS, TRIAL_DAYS, canWrite, fmtCHF, fmtCHF2, fmtDate, hasFeature, planById, priceOf, trialDaysLeft, type BillingInterval, type Feature, type PlanId, type Subscription } from "@taktwerk/domain";
 import { useEffect, useState } from "react";
 import { api, type SubscriptionInfo } from "../api";
 import { loadLocal, saveLocal, useStore } from "../store";
@@ -88,7 +88,7 @@ export function FeatureGate({ feature, children }: { feature: Feature; children:
     <section className="card upgrade" id="upgrade-hint">
       <div className="upgrade-icon"><Icon.lock /></div>
       <h2>{FEATURE_LABEL[feature]} gehört zum Paket {from.name}</h2>
-      <p className="muted">Deine Firma nutzt {planById(sub!.plan).name}. Mit {from.name} ({fmtCHF(from.monthly)} pro Monat, bis {from.maxUsers} Personen) ist {FEATURE_LABEL[feature]} sofort freigeschaltet; die Daten sind schon da.</p>
+      <p className="muted">Deine Firma nutzt {planById(sub!.plan).name}. Mit {from.name} ({fmtCHF(from.perUser)} pro Person und Monat) ist {FEATURE_LABEL[feature]} sofort freigeschaltet; die Daten sind schon da.</p>
       {role === "admin" ? <a className="btn primary" href="#einstellungen/abo">Pakete ansehen</a> : <p className="muted">Die Admin-Person deiner Firma kann das Paket wechseln.</p>}
     </section>
   );
@@ -172,7 +172,6 @@ export function SubscriptionTab({ onSetup }: { onSetup: () => void }) {
       notify("Kündigung zurückgenommen");
     });
 
-  const seatPct = Math.min(100, Math.round((info.seats / plan.maxUsers) * 100));
   return (
     <div className="stack" id="abo">
       <section className="card sub-status">
@@ -185,14 +184,13 @@ export function SubscriptionTab({ onSetup }: { onSetup: () => void }) {
             </div>
             <p className="muted" style={{ margin: "2px 0 0" }}>
               {sub.status === "trialing" && left !== null && (left >= 0 ? `Kostenlos bis ${dateOf(sub.trialEndsAt)}, noch ${left} ${left === 1 ? "Tag" : "Tage"}.` : `Testphase seit ${dateOf(sub.trialEndsAt)} vorbei.`)}
-              {paying && `${fmtCHF(priceOf(plan, sub.interval))} ${sub.interval === "year" ? "pro Jahr" : "pro Monat"}, zzgl. MWST · ${info.canceledAt ? "endet" : "nächste Periode ab"} ${dateOf(sub.currentPeriodEnd)} · ${sub.billing === "stripe" ? "Karte" : "Rechnung"}`}
+              {paying && `${fmtCHF(priceOf(plan, sub.interval, info.seats))} ${sub.interval === "year" ? "pro Jahr" : "pro Monat"}, zzgl. MWST · ${info.canceledAt ? "endet" : "nächste Periode ab"} ${dateOf(sub.currentPeriodEnd)} · ${sub.billing === "stripe" ? "Karte" : "Rechnung"}`}
               {(sub.status === "canceled" || sub.status === "expired") && "Die Daten sind lesbar und exportierbar. Mit einem Paket geht es sofort weiter."}
             </p>
           </div>
-          <div className="seats" aria-label={`${info.seats} von ${plan.maxUsers} Personen`}>
-            <div className="seats-num"><strong className="num">{info.seats}</strong><span className="muted"> von {plan.maxUsers} Personen</span></div>
-            <div className={`bar ${seatPct >= 100 ? "over" : seatPct >= 85 ? "risk" : ""}`}><span style={{ width: `${seatPct}%` }} /></div>
-            <div className="muted seats-note">Kundenportal und Treuhand zählen nicht.</div>
+          <div className="seats" aria-label={`${info.seats} aktive Personen`}>
+            <div className="seats-num"><strong className="num">{info.seats}</strong><span className="muted"> {info.seats === 1 ? "Person" : "Personen"} aktiv</span></div>
+            <div className="muted seats-note">Verrechnet werden mindestens {MIN_SEATS}. Kundenportal und Treuhand zählen nicht.</div>
           </div>
         </div>
         {(info.cardOnFile || paying) && (
@@ -205,7 +203,7 @@ export function SubscriptionTab({ onSetup }: { onSetup: () => void }) {
       </section>
 
       <div className="plans-head">
-        <h2>Pakete nach Teamgrösse</h2>
+        <h2>Preis pro Person</h2>
         <div className="seg" role="radiogroup" aria-label="Zahlungsweise">
           <button role="radio" id="iv-month" aria-checked={interval === "month"} className={interval === "month" ? "on" : ""} onClick={() => setBilling("month")}>Monatlich</button>
           <button role="radio" id="iv-year" aria-checked={interval === "year"} className={interval === "year" ? "on" : ""} onClick={() => setBilling("year")}>Jährlich <span className="save-tag">2 Monate gratis</span></button>
@@ -214,23 +212,22 @@ export function SubscriptionTab({ onSetup }: { onSetup: () => void }) {
       <div className="plans" id="plans">
         {PLANS.map((p) => {
           const isCurrent = p.id === sub.plan && paying && sub.interval === interval;
-          const tooSmall = info.seats > p.maxUsers;
-          const label = isCurrent ? "Dein Paket" : paying ? (p.maxUsers > plan.maxUsers ? `Auf ${p.name} wechseln` : `Zu ${p.name} wechseln`) : `${p.name} wählen`;
+          const label = isCurrent ? "Dein Paket" : paying ? (p.perUser > plan.perUser ? `Auf ${p.name} wechseln` : `Zu ${p.name} wechseln`) : `${p.name} wählen`;
           return (
             <article key={p.id} className={`card plan ${p.id === "team" ? "featured" : ""} ${p.id === sub.plan ? "mine" : ""}`} id={`plan-${p.id}`}>
               {p.id === "team" && <span className="plan-flag">Beliebt</span>}
               <h3>{p.name}</h3>
-              <div className="plan-users">bis {p.maxUsers} Personen</div>
+              <div className="plan-users">{p.tagline}</div>
               <div className="plan-price">
-                <span className="num">{fmtCHF(interval === "year" ? Math.round(priceOf(p, "year") / 12) : p.monthly)}</span>
-                <span className="muted">pro Monat</span>
+                <span className="num">{interval === "year" ? fmtCHF2((p.perUser * 10) / 12) : fmtCHF(p.perUser)}</span>
+                <span className="muted">pro Person und Monat</span>
               </div>
-              <div className="muted plan-billing">{interval === "year" ? `${fmtCHF(priceOf(p, "year"))} jährlich verrechnet` : "monatlich kündbar"}, zzgl. MWST</div>
+              <div className="muted plan-billing">Für {Math.max(MIN_SEATS, info.seats)} Personen {fmtCHF(priceOf(p, interval, info.seats))} {interval === "year" ? "jährlich" : "monatlich"}, zzgl. MWST</div>
               <ul className="plan-list">
                 {p.highlights.map((h) => <li key={h}><Tick />{h}</li>)}
               </ul>
-              <button className={`btn block ${isCurrent ? "" : p.id === "team" ? "primary" : ""}`} disabled={isCurrent || tooSmall || !!busy} onClick={() => void choose(p.id)} title={tooSmall ? `Aktiv sind ${info.seats} Personen` : undefined}>
-                {busy === p.id ? "Einen Moment …" : tooSmall ? `Zu klein für ${info.seats} Personen` : label}
+              <button className={`btn block ${isCurrent ? "" : p.id === "team" ? "primary" : ""}`} disabled={isCurrent || !!busy} onClick={() => void choose(p.id)}>
+                {busy === p.id ? "Einen Moment …" : label}
               </button>
             </article>
           );
@@ -239,9 +236,9 @@ export function SubscriptionTab({ onSetup }: { onSetup: () => void }) {
       {error && <p className="error" role="alert">{error}</p>}
       <p className="muted plans-foot">
         {info.payment === "stripe"
-          ? "Bezahlung per Karte über Stripe. Wechsel nach oben gelten sofort und werden anteilig verrechnet."
+          ? "Bezahlung per Karte über Stripe. Wechsel und neue Personen gelten sofort und werden anteilig verrechnet."
           : "Bezahlung auf Rechnung, zahlbar innert 30 Tagen. Das Paket ist sofort aktiv."}
-        {" "}Neue Firmen testen {TRIAL_DAYS} Tage kostenlos. Grösser als 200 Personen? Wir machen ein Angebot.
+        {" "}Neue Firmen testen {TRIAL_DAYS} Tage kostenlos. Ab 100 Personen machen wir ein Angebot.
       </p>
 
       <section className="card card-pad setup-teaser">
