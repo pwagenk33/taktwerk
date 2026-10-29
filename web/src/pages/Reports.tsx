@@ -4,6 +4,7 @@ import { api, type Invoice, type InvoicePosition, type InvoiceStatus } from "../
 import { useStore } from "../store";
 import { BulletBars, BurnUpChart, Icon, Money, StatusPill, reportToBullet } from "../ui/components";
 import { Select } from "../ui/Select";
+import { Field, FieldRow, FormDialog } from "../ui/Dialog";
 
 /** PDF/Excel download, recipients and «send now» for one customer. */
 function ReportExport({ customerId }: { customerId: string }) {
@@ -116,7 +117,7 @@ function Invoices({ customerId }: { customerId: string }) {
   const [rows, setRows] = useState<Invoice[]>([]);
   const [ready, setReady] = useState<string | null>(null);
   const [address, setAddress] = useState<PostalAddress>(EMPTY_ADDRESS);
-  const [savedAddress, setSavedAddress] = useState("");
+  const [editAddress, setEditAddress] = useState(false);
   const [preview, setPreview] = useState<{ positions: InvoicePosition[]; net: number } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -136,7 +137,6 @@ function Invoices({ customerId }: { customerId: string }) {
     api<PostalAddress>(`/api/customers/${customerId}/address`)
       .then((a) => {
         setAddress(a);
-        setSavedAddress(JSON.stringify(a));
       })
       .catch(() => {});
   }, [customerId, demo]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -159,12 +159,6 @@ function Invoices({ customerId }: { customerId: string }) {
       setBusy(false);
     }
   };
-  const saveAddress = () =>
-    run(async () => {
-      const a = await api<PostalAddress>(`/api/customers/${customerId}/address`, { method: "PUT", body: address });
-      setAddress(a);
-      setSavedAddress(JSON.stringify(a));
-    }, "Rechnungsadresse gespeichert");
   const create = () => run(() => api("/api/invoices", { body: { customerId, month } }), `Rechnung für ${fmtMonthLong(month)} erstellt`);
   const send = (i: Invoice) => run(() => api(`/api/invoices/${i.id}/send`, { body: {} }), `Rechnung ${i.number} versendet`);
   const status = (i: Invoice, status: InvoiceStatus, msg: string) => run(() => api(`/api/invoices/${i.id}/status`, { body: { status } }), msg);
@@ -189,19 +183,17 @@ function Invoices({ customerId }: { customerId: string }) {
         <h2>Rechnungen</h2>
         {ready && <span className="pill risk">{ready}</span>}
       </div>
-      <details className="address" open={!addressOk}>
-        <summary>Rechnungsadresse: {addressOk ? `${address.name}, ${address.zip} ${address.city}` : <span className="neg">fehlt</span>}</summary>
-        <div className="form-grid" style={{ marginTop: 10 }}>
-          <label className="field"><span>Firma / Name</span><input id="i-name" className="input" value={address.name} onChange={(e) => setAddress({ ...address, name: e.target.value })} /></label>
-          <label className="field"><span>Strasse</span><input id="i-street" className="input" value={address.street} onChange={(e) => setAddress({ ...address, street: e.target.value })} /></label>
-          <label className="field"><span>PLZ</span><input id="i-zip" className="input" value={address.zip} onChange={(e) => setAddress({ ...address, zip: e.target.value })} /></label>
-          <label className="field"><span>Ort</span><input id="i-city" className="input" value={address.city} onChange={(e) => setAddress({ ...address, city: e.target.value })} /></label>
-          <label className="field"><span>Land</span><input className="input" maxLength={2} value={address.country} onChange={(e) => setAddress({ ...address, country: e.target.value.toUpperCase() })} /></label>
-        </div>
-        <div className="toolbar" style={{ marginTop: 8 }}>
-          <button id="i-save-address" className="btn small" disabled={busy || JSON.stringify(address) === savedAddress || !addressOk} onClick={saveAddress}>Adresse speichern</button>
-        </div>
-      </details>
+      <div className="address-line">
+        <span>Rechnungsadresse: {addressOk ? `${address.name}, ${address.street ? `${address.street}, ` : ""}${address.zip} ${address.city}` : <span className="neg">fehlt, für die QR-Rechnung nötig</span>}</span>
+        <button id="i-edit-address" className="btn small" onClick={() => setEditAddress(true)}>{addressOk ? "Bearbeiten" : "Erfassen"}</button>
+      </div>
+      {editAddress && (
+        <AddressDialog initial={address} onClose={() => setEditAddress(false)} onSave={async (a) => {
+          const saved = await api<PostalAddress>(`/api/customers/${customerId}/address`, { method: "PUT", body: a });
+          setAddress(saved);
+          notify("Rechnungsadresse gespeichert");
+        }} />
+      )}
       <div className="export-bar">
         <label className="field">
           <span>Rechnung für</span>
@@ -460,5 +452,31 @@ export function Reports() {
         </p>
       </section>
     </>
+  );
+}
+
+/** Billing address of a customer, required for the Swiss QR bill. */
+function AddressDialog({ initial, onClose, onSave }: { initial: PostalAddress; onClose: () => void; onSave: (a: PostalAddress) => Promise<void> }) {
+  const [a, setA] = useState(initial);
+  const submit = async (): Promise<Record<string, string> | void> => {
+    const e: Record<string, string> = {};
+    if (!a.name.trim()) e.name = "Firma oder Name der Rechnungsempfängerin.";
+    if (!a.zip.trim()) e.zip = "Für die QR-Rechnung braucht es die PLZ.";
+    if (!a.city.trim()) e.city = "Für die QR-Rechnung braucht es den Ort.";
+    if (!/^[A-Z]{2}$/.test(a.country.trim().toUpperCase())) e.country = "Zwei Buchstaben, z. B. CH.";
+    if (Object.keys(e).length) return e;
+    await onSave({ ...a, name: a.name.trim(), street: a.street.trim(), zip: a.zip.trim(), city: a.city.trim(), country: a.country.trim().toUpperCase() });
+    onClose();
+  };
+  return (
+    <FormDialog id="address-dialog" title="Rechnungsadresse" subtitle="Steht auf der Rechnung und im Empfangsschein der QR-Rechnung." onClose={onClose} onSubmit={submit}>
+      <Field label="Firma oder Name" name="name" required><input id="i-name" className="input" value={a.name} onChange={(e) => setA({ ...a, name: e.target.value })} /></Field>
+      <Field label="Strasse und Nummer" name="street"><input id="i-street" className="input" value={a.street} onChange={(e) => setA({ ...a, street: e.target.value })} /></Field>
+      <FieldRow>
+        <Field label="PLZ" name="zip" required><input id="i-zip" className="input" value={a.zip} onChange={(e) => setA({ ...a, zip: e.target.value })} /></Field>
+        <Field label="Ort" name="city" required><input id="i-city" className="input" value={a.city} onChange={(e) => setA({ ...a, city: e.target.value })} /></Field>
+        <Field label="Land" name="country" required><input id="i-country" className="input" maxLength={2} value={a.country} onChange={(e) => setA({ ...a, country: e.target.value.toUpperCase() })} /></Field>
+      </FieldRow>
+    </FormDialog>
   );
 }

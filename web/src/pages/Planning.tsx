@@ -5,6 +5,7 @@ import { allocationsOf, capacityPlan, fmt1, fmtDate, planningWeeks, weekLabel, w
 import { useStore } from "../store";
 import { Icon } from "../ui/components";
 import { Select } from "../ui/Select";
+import { Dialog } from "../ui/Dialog";
 
 const WEEKS = 12;
 const STATUS_TITLE: Record<LoadStatus, string> = { idle: "Noch Luft", ok: "Gut ausgelastet", tight: "Knapp", over: "Überplant", none: "Keine Kapazität" };
@@ -59,12 +60,8 @@ function CellEditor({ employeeId, week, onClose }: { employeeId: string; week: s
   };
   const total = rows.reduce((s, a) => s + a.hours, 0);
   return (
-    <section className="card plan-editor" id="plan-editor">
-      <div className="card-head">
-        <h2>{person?.name} · {weekLabel(week)} <span className="muted" style={{ fontWeight: 400 }}>({fmtDate(from).slice(0, 5)} – {fmtDate(to).slice(0, 5)})</span></h2>
-        <button className="btn small ghost" onClick={onClose} aria-label="Schliessen"><Icon.close /></button>
-      </div>
-      <div className="card-pad plan-editor-rows">
+    <Dialog id="plan-editor" title={`${person?.name} · ${weekLabel(week)}`} subtitle={`${fmtDate(from).slice(0, 5)} bis ${fmtDate(to).slice(0, 5)}. Stunden pro Projekt reservieren; Änderungen gelten sofort.`} onClose={onClose} footer={<><span className="muted num">Total {h(total)} h</span><button type="button" className="btn primary" onClick={onClose}>Fertig</button></>}>
+      <div className="plan-editor-rows">
         {rows.length === 0 && <p className="muted">Noch nichts geplant. Projekt wählen und Stunden eintragen.</p>}
         {rows.map((a) => (
           <div className="plan-editor-row" key={a.id}>
@@ -76,10 +73,9 @@ function CellEditor({ employeeId, week, onClose }: { employeeId: string; week: s
         ))}
         <div className="plan-editor-add">
           <Select id="al-project" ariaLabel="Projekt hinzufügen" placeholder="Projekt hinzufügen …" value={adding} onChange={(v) => { setAdding(""); if (v) void save(v, 8).then(() => notify("8 h reserviert, Stunden anpassen")); }} options={free.map((p) => ({ value: p.id, label: projectName(p.id) }))} small />
-          <span className="muted num">Total {h(total)} h</span>
         </div>
       </div>
-    </section>
+    </Dialog>
   );
 }
 

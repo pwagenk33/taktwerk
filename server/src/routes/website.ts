@@ -18,9 +18,12 @@ const TYPES: Record<string, string> = {
 
 /** True when the request is for the public website: the SaaS base domain or www.<base>, unless the app itself runs there. */
 export function isWebsiteHost(ctx: AppContext, host: string | undefined) {
-  const base = ctx.config.SAAS_BASE_DOMAIN?.toLowerCase();
-  if (!base || !ctx.config.WEBSITE_DIR) return false;
+  if (!ctx.config.WEBSITE_DIR) return false;
   const h = (host ?? "").split(":")[0]!.toLowerCase();
+  // Local preview: browsers resolve *.localhost to this computer, so http://website.localhost:3000 shows the website.
+  if (h === "website.localhost") return true;
+  const base = ctx.config.SAAS_BASE_DOMAIN?.toLowerCase();
+  if (!base) return false;
   if (h === new URL(ctx.config.APP_URL).hostname.toLowerCase()) return false;
   return h === base || h === `www.${base}`;
 }
@@ -44,8 +47,8 @@ export function serveWebsite(app: FastifyInstance, ctx: AppContext) {
   if (dir && existsSync(dir)) {
     app.addHook("onRequest", async (req, reply) => {
       if (req.url.startsWith("/api/") || !isWebsiteHost(ctx, req.headers.host)) return;
-      const base = ctx.config.SAAS_BASE_DOMAIN!.toLowerCase();
-      if ((req.headers.host ?? "").toLowerCase().startsWith("www.")) return reply.redirect(`https://${base}${req.url}`, 301);
+      const base = ctx.config.SAAS_BASE_DOMAIN?.toLowerCase();
+      if (base && (req.headers.host ?? "").toLowerCase().startsWith("www.")) return reply.redirect(`https://${base}${req.url}`, 301);
       if (req.method !== "GET" && req.method !== "HEAD") return reply.status(405).send();
       const path = decodeURIComponent(req.url.split("?")[0]!);
       let rel = path === "/" ? "index.html" : normalize(path).replace(/^[/\\]+/, "");

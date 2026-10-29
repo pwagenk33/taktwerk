@@ -50,6 +50,11 @@ describe("Website", () => {
     expect(res.headers.location).toBe(`https://${BASE}/preise`);
   });
 
+  it("shows the website locally on website.localhost", async () => {
+    const res = await get("/preise", "website.localhost:3000");
+    expect(res.body).toBe("<h1>Preise</h1>");
+  });
+
   it("leaves the app and company hosts alone", async () => {
     expect((await get("/", `app.${BASE}`)).body).not.toContain("Testen");
     expect((await get("/api/health", BASE)).json()).toEqual({ ok: true });

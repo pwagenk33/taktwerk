@@ -974,3 +974,50 @@ a.ib-row:hover, button.ib-row:hover { background: var(--hover); }
 .jira-site { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
 .jira-site h3 a { color: inherit; }
 .jira-actions { display: flex; gap: 8px; align-items: center; }
+
+/* Popups for creating and editing (ui/Dialog.tsx) */
+body.dialog-open { overflow: hidden; }
+.dialog.form-dialog { width: min(560px, 100%); padding: 0; gap: 0; overflow: hidden; display: flex; flex-direction: column; }
+.dialog.form-dialog.wide { width: min(760px, 100%); }
+.form-dialog .dialog-head { padding: 18px 20px 14px; border-bottom: 1px solid var(--line); align-items: flex-start; gap: 12px; }
+.form-dialog .dialog-head h2 { font-size: 1.05rem; letter-spacing: -0.01em; }
+.dialog-sub { margin: 4px 0 0; color: var(--muted); font-size: 0.84rem; line-height: 1.45; max-width: 60ch; }
+.form-dialog .dialog-body { padding: 18px 20px; overflow-y: auto; flex: 1; min-height: 0; }
+.dialog-form { display: flex; flex-direction: column; gap: 14px; }
+.dialog-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--surface-2); flex-wrap: wrap; }
+.dialog-foot-left, .dialog-foot-right { display: flex; gap: 8px; align-items: center; }
+.dialog-foot-right { margin-left: auto; }
+.req-note { font-size: 0.76rem; color: var(--muted); }
+.req { color: var(--accent); font-weight: 600; }
+.dialog-error { margin: 12px 0 0; }
+.form-dialog .field-label { font-size: 0.8rem; font-weight: 600; color: var(--ink); }
+.form-dialog .field { gap: 5px; }
+.field-control { display: flex; flex-direction: column; min-width: 0; }
+.field-control > .input, .field-control > textarea, .field-control > select { width: 100%; }
+.field-hint { font-size: 0.76rem; color: var(--muted); line-height: 1.4; }
+.field-error { font-size: 0.76rem; color: var(--crit-ink); line-height: 1.4; }
+.field.has-error .input, .field.has-error textarea, .field.has-error [role=combobox] { border-color: var(--crit-ink); box-shadow: 0 0 0 1px var(--crit-ink); }
+.field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+.field-section { border: 0; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 14px; }
+.field-section legend { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 0 0 6px; border-bottom: 1px solid var(--line); width: 100%; margin-bottom: 4px; }
+.check-field { display: flex; gap: 10px; align-items: flex-start; font-size: 0.88rem; }
+.check-field input { margin-top: 3px; }
+.check-field small { display: block; color: var(--muted); font-size: 0.76rem; }
+@media (max-width: 560px) {
+  .overlay:has(.form-dialog) { padding: 0; place-items: end stretch; }
+  .dialog.form-dialog { width: 100%; max-height: 92vh; border-radius: 10px 10px 0 0; }
+  .dialog-foot-right { width: 100%; }
+  .dialog-foot-right .btn { flex: 1; }
+}
+
+/* Scheduled reports as a list; each opens its popup. */
+.report-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-s); }
+.report-list li { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 0; }
+.report-list li + li { border-top: 1px solid var(--line); }
+.report-item { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; background: none; border: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; border-radius: var(--radius-s); }
+.report-item .muted { font-size: 0.8rem; overflow-wrap: anywhere; }
+.report-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.btn.danger { color: var(--crit-ink); }
+@media (hover: hover) { .report-item:hover { background: var(--hover); } }
+.address-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-s); font-size: 0.88rem; }
+#plan-editor .plan-editor-rows { padding: 0; }

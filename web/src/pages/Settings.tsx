@@ -1,4 +1,4 @@
-import { DEFAULT_RATES, EXPORT_ENTITIES, PLANS, TIME_MODELS, VAT_RATES, defaultHolidays, type TimeModel, exportRows, fmt1, fmtCHF2, fmtDate, toCsv, type ExportEntity, type Holiday, type PostalAddress, type Role } from "@taktwerk/domain";
+import { DEFAULT_RATES, EXPORT_ENTITIES, PLANS, TIME_MODELS, VAT_RATES, defaultHolidays, type TimeModel, exportRows, fmt1, fmtCHF2, fmtDate, toCsv, type ExportEntity, type Holiday, type PostalAddress } from "@taktwerk/domain";
 import { useEffect, useState } from "react";
 import { api, type BillingSettings, type Branding, type PlatformOrg, type PlatformSummary, type ScheduledReport, type Settings as OrgSettings, type UserRow } from "../api";
 import { useStore } from "../store";
@@ -6,6 +6,8 @@ import { JiraTab } from "./Jira";
 import { STATUS_LABEL, SubscriptionTab, statusPill, useSubscription } from "./Subscription";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
 import { Select } from "../ui/Select";
+import { Icon } from "../ui/components";
+import { OrgDialog, ROLE_LABEL, ReportDialog, TeamDialog, UserDialog } from "./SettingsDialogs";
 
 export const PRESETS = [
   { name: "Schweizer Rot", color: "#D52B1E" },
@@ -14,62 +16,43 @@ export const PRESETS = [
   { name: "Gletscherblau", color: "#1E5F99" },
   { name: "Anthrazit", color: "#2E3136" },
 ];
-const ROLE_LABEL: Record<Role, string> = { admin: "Admin", consultant: "Consultant", employee: "Mitarbeitende", auditor: "Treuhand (nur lesen)", customer: "Kunde (Portal)" };
 const ROLE_HINT = "Admin und Consultant sehen alles. Mitarbeitende sehen nur Eigenes, ausser sie leiten ein Projekt oder ein Team. Treuhand sieht alles, ändert nichts.";
 
 /** Teams with their leads; members are assigned in the user table. */
 function Teams({ users, onChanged }: { users: UserRow[] | null; onChanged: () => void }) {
-  const { data, mode, notify } = useStore();
-  const [name, setName] = useState("");
-  const [error, setError] = useState("");
+  const { data, mode } = useStore();
+  const [dialog, setDialog] = useState<null | "new" | string>(null);
   const people = (users ?? []).filter((u) => u.active && u.role !== "customer" && u.role !== "auditor");
   const teams = data.teams;
   const members = (teamId: string) => (users ?? []).filter((u) => u.teamId === teamId).length;
-  const run = (f: () => Promise<unknown>, msg: string) =>
-    f()
-      .then(() => { setError(""); notify(msg); onChanged(); })
-      .catch((e: Error) => setError(e.message));
-  const add = () => {
-    if (!name.trim()) return;
-    void run(() => api("/api/teams", { body: { name: name.trim() } }), `Team ${name.trim()} angelegt`).then(() => setName(""));
-  };
+  const leadName = (id?: string | null) => data.employees.find((e) => e.id === id)?.name ?? (users ?? []).find((u) => u.id === id)?.name;
+  const editing = dialog && dialog !== "new" ? teams.find((t) => t.id === dialog) : undefined;
   return (
-    <section className="card card-pad" id="teams" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div>
-        <h3>Teams und Teamleitung</h3>
-        <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>Die Teamleitung bewilligt Absenzen, schliesst Monate ab und sieht die Wochen ihres Teams. Projektleitung vergibst du auf der Projektseite.</p>
+    <section className="card" id="teams">
+      <div className="card-head">
+        <div>
+          <h3>Teams und Teamleitung</h3>
+          <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>Die Teamleitung bewilligt Absenzen, schliesst Monate ab und sieht die Wochen ihres Teams. Projektleitung vergibst du beim Projekt.</p>
+        </div>
+        {mode === "api" && <button id="team-add" className="btn small" onClick={() => setDialog("new")}>+ Team</button>}
       </div>
-      {mode === "demo" ? (
-        <ul className="muted" style={{ margin: 0, paddingLeft: 18 }}>
-          {teams.map((t) => <li key={t.id}>{t.name} · Leitung {data.employees.find((e) => e.id === t.leadUserId)?.name ?? "keine"}</li>)}
-        </ul>
-      ) : (
-        <>
-          <div className="table-wrap">
-            <table className="data">
-              <thead><tr><th>Team</th><th>Teamleitung</th><th className="r">Personen</th><th /></tr></thead>
-              <tbody>
-                {teams.map((t) => (
-                  <tr key={t.id}>
-                    <td>{t.name}</td>
-                    <td>
-                      <Select small ariaLabel={`Teamleitung von ${t.name}`} value={t.leadUserId ?? ""} placeholder="Keine" onChange={(v) => void run(() => api(`/api/teams/${t.id}`, { method: "PATCH", body: { leadUserId: v || null } }), "Teamleitung gespeichert")} options={[{ value: "", label: "Keine" }, ...people.map((u) => ({ value: u.id, label: u.name }))]} />
-                    </td>
-                    <td className="r num">{members(t.id)}</td>
-                    <td className="r"><button className="btn small ghost" onClick={() => { if (confirm(`Team ${t.name} löschen? Die Personen bleiben ohne Team.`)) void run(() => api(`/api/teams/${t.id}`, { method: "DELETE" }), "Team gelöscht"); }}>Löschen</button></td>
-                  </tr>
-                ))}
-                {teams.length === 0 && <tr><td colSpan={4} className="muted">Noch keine Teams.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-          <div className="toolbar">
-            <input id="team-name" className="input" placeholder="Neues Team, z. B. Beratung" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} style={{ maxWidth: 280 }} />
-            <button id="team-add" className="btn" onClick={add}>Team anlegen</button>
-          </div>
-        </>
-      )}
-      {error && <p className="error">{error}</p>}
+      <div className="table-wrap">
+        <table className="data">
+          <thead><tr><th>Team</th><th>Teamleitung</th><th className="r">Personen</th><th /></tr></thead>
+          <tbody>
+            {teams.map((t) => (
+              <tr key={t.id} className={mode === "api" ? "clickable" : ""} onClick={() => mode === "api" && setDialog(t.id)}>
+                <td><strong>{t.name}</strong></td>
+                <td>{leadName(t.leadUserId) ?? <span className="muted">Keine</span>}</td>
+                <td className="r num">{users ? members(t.id) : data.employees.filter((e) => e.teamId === t.id).length}</td>
+                <td className="r">{mode === "api" && <button className="btn small ghost" onClick={(e) => { e.stopPropagation(); setDialog(t.id); }}>Bearbeiten</button>}</td>
+              </tr>
+            ))}
+            {teams.length === 0 && <tr><td colSpan={4} className="muted">Noch keine Teams. Mit «+ Team» anlegen.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {dialog && <TeamDialog team={editing} people={people} onClose={() => setDialog(null)} onSaved={onChanged} />}
     </section>
   );
 }
@@ -163,7 +146,7 @@ function Appearance() {
 function Users() {
   const { mode, notify, data, reload: reloadData } = useStore();
   const [rows, setRows] = useState<UserRow[] | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", username: "", role: "employee" as Role });
+  const [dialog, setDialog] = useState<null | "new" | UserRow>(null);
   const [error, setError] = useState("");
   const reload = () => api<UserRow[]>("/api/users").then(setRows).catch((e) => setError(e.message));
   useEffect(() => {
@@ -178,17 +161,6 @@ function Users() {
       </div>
     );
 
-  const invite = async () => {
-    try {
-      await api("/api/users", { body: form });
-      setForm({ name: "", email: "", username: "", role: "employee" });
-      setError("");
-      notify(`Einladung an ${form.email} gesendet`);
-      reload();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
   const patch = async (id: string, body: object) => {
     try {
       await api(`/api/users/${id}`, { method: "PATCH", body });
@@ -200,20 +172,12 @@ function Users() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <h3>Person einladen</h3>
-        <div className="form-grid" style={{ alignItems: "end" }}>
-          <label className="field"><span>Name</span><input id="u-name" className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-          <label className="field"><span>E-Mail</span><input id="u-email" type="email" className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
-          <label className="field"><span>Benutzername</span><input id="u-username" className="input" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="z. B. vorname.nachname" /></label>
-          <label className="field"><span>Rolle</span>
-            <Select id="u-role" value={form.role} onChange={(v) => setForm({ ...form, role: v as Role })} options={(Object.keys(ROLE_LABEL) as Role[]).filter((r) => r !== "customer").map((r) => ({ value: r, label: ROLE_LABEL[r] }))} />
-          </label>
-          <button className="btn primary" onClick={invite}>Einladung senden</button>
+      <section className="card" id="people">
+        <div className="card-head">
+          <h3>Personen</h3>
+          <button id="u-invite" className="btn small primary" onClick={() => setDialog("new")}>+ Person einladen</button>
         </div>
-        {error && <p className="error">{error}</p>}
-      </section>
-      <section className="card">
+        {error && <p className="error card-pad" style={{ paddingTop: 0 }}>{error}</p>}
         <div className="table-wrap">
           <table className="data">
             <thead><tr><th>Name</th><th>Benutzername</th><th>E-Mail</th><th>Rolle</th><th>Team</th><th className="r">Kostensatz CHF/h</th><th>Status</th><th /></tr></thead>
@@ -223,19 +187,14 @@ function Users() {
                   <td>{u.name}</td>
                   <td className="mono">{u.username}</td>
                   <td>{u.email}</td>
-                  <td>
-                    <Select small ariaLabel={`Rolle von ${u.name}`} value={u.role} onChange={(v) => patch(u.id, { role: v })} options={(Object.keys(ROLE_LABEL) as Role[]).filter((r) => r !== "customer").map((r) => ({ value: r, label: ROLE_LABEL[r] }))} />
-                  </td>
-                  <td>
-                    <Select small ariaLabel={`Team von ${u.name}`} value={u.teamId ?? ""} placeholder="Kein Team" onChange={(v) => patch(u.id, { teamId: v || null })} options={[{ value: "", label: "Kein Team" }, ...data.teams.map((t) => ({ value: t.id, label: t.name }))]} />
-                  </td>
-                  <td className="r">
-                    <input className="input num" type="number" min={0} step={5} style={{ width: 90, textAlign: "right" }} aria-label={`Kostensatz von ${u.name}`} placeholder="Standard" defaultValue={u.costRate ?? ""} onBlur={(e) => { const v = e.target.value.trim(); const next = v === "" ? null : Number(v); if ((u.costRate ?? null) !== next) patch(u.id, { costRate: next }); }} />
-                  </td>
+                  <td>{ROLE_LABEL[u.role]}</td>
+                  <td>{data.teams.find((t) => t.id === u.teamId)?.name ?? <span className="muted">–</span>}</td>
+                  <td className="r num">{u.costRate ?? <span className="muted">Standard</span>}</td>
                   <td>{!u.active ? <span className="pill neutral">Deaktiviert</span> : u.lastLoginAt ? <span className="pill ok">Aktiv</span> : <span className="pill risk">Eingeladen</span>}</td>
                   <td className="r" style={{ whiteSpace: "nowrap" }}>
                     <button className="btn small ghost" title="Zweiten Faktor und Passkeys entfernen, alle Geräte abmelden" onClick={() => { if (confirm(`Zweiten Faktor von ${u.name} zurücksetzen? Alle Geräte werden abgemeldet.`)) void api(`/api/users/${u.id}/security/reset`, { body: {} }).then(() => notify("Zweiter Faktor zurückgesetzt")).catch((e: Error) => setError(e.message)); }}>2FA zurücksetzen</button>
-                    <button className="btn small ghost" onClick={() => patch(u.id, { active: !u.active })}>{u.active ? "Deaktivieren" : "Aktivieren"}</button>
+                    <button className="btn small" onClick={() => setDialog(u)}>Bearbeiten</button>
+                    {!u.active && <button className="btn small ghost" onClick={() => patch(u.id, { active: true })}>Aktivieren</button>}
                     {!u.active && !u.username.startsWith("ehemalig-") && (
                       <>
                         <a className="btn small ghost" href={`/api/users/${u.id}/export`} download title="Auskunft nach DSG als Datei">Auskunft</a>
@@ -250,6 +209,7 @@ function Users() {
         </div>
       </section>
       <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>{ROLE_HINT}</p>
+      {dialog && <UserDialog user={dialog === "new" ? undefined : dialog} onClose={() => setDialog(null)} onSaved={() => { reload(); void reloadData(); }} />}
       <Teams users={rows} onChanged={() => { reload(); void reloadData(); }} />
     </div>
   );
@@ -547,26 +507,21 @@ const newReport = (kind: ScheduledReport["kind"]): ScheduledReport =>
 function ReportsAndExport() {
   const { mode, data, notify } = useStore();
   const [list, setList] = useState<ScheduledReport[]>([]);
-  const [saved, setSaved] = useState("[]");
+  const [dialog, setDialog] = useState<{ report: ScheduledReport; isNew: boolean } | null>(null);
   const [error, setError] = useState("");
   const [entity, setEntity] = useState<ExportEntity | "invoices">("time-entries");
   const [from, setFrom] = useState(`${data.today.slice(0, 4)}-01-01`);
   const [to, setTo] = useState(data.today);
   useEffect(() => {
     if (mode !== "api") return;
-    api<OrgSettings>("/api/settings").then((s) => { setList(s.scheduledReports ?? []); setSaved(JSON.stringify(s.scheduledReports ?? [])); }).catch((e) => setError((e as Error).message));
+    api<OrgSettings>("/api/settings").then((s) => setList(s.scheduledReports ?? [])).catch((e) => setError((e as Error).message));
   }, [mode]);
-  const update = (id: string, patch: Partial<ScheduledReport>) => setList(list.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const save = async () => {
-    try {
-      const s = await api<OrgSettings>("/api/settings", { method: "PUT", body: { scheduledReports: list } });
-      setList(s.scheduledReports ?? []);
-      setSaved(JSON.stringify(s.scheduledReports ?? []));
-      setError("");
-      notify("Berichte gespeichert");
-    } catch (e) {
-      setError((e as Error).message);
-    }
+  /** Every change saves the whole list right away. */
+  const store = async (next: ScheduledReport[], msg: string) => {
+    const s = await api<OrgSettings>("/api/settings", { method: "PUT", body: { scheduledReports: next } });
+    setList(s.scheduledReports ?? []);
+    setError("");
+    notify(msg);
   };
   const sendNow = async (r: ScheduledReport) => {
     try {
@@ -592,7 +547,6 @@ function ReportsAndExport() {
     URL.revokeObjectURL(a.href);
     notify(`${rows.length} Zeilen exportiert`);
   };
-  const dirty = JSON.stringify(list) !== saved;
   const rangeApplies = !(entity === "customers" || entity === "projects" || entity === "employees");
   return (
     <div className="grid-2" style={{ alignItems: "start" }}>
@@ -603,31 +557,28 @@ function ReportsAndExport() {
           <p className="notice">Im Prototyp werden keine E-Mails verschickt. In der installierten Version richtest du hier beliebig viele Berichte mit Empfängern, Wochentag oder Monatstag und Uhrzeit ein.</p>
         ) : (
           <>
-            {list.map((r) => (
-              <div key={r.id} className="report-row">
-                <div className="form-grid" style={{ alignItems: "end" }}>
-                  <label className="field"><span>Name</span><input className="input" value={r.name} onChange={(e) => update(r.id, { name: e.target.value })} /></label>
-                  <label className="field"><span>Art</span><Select small value={r.kind} onChange={(v) => update(r.id, v === "weekly" ? { kind: "weekly", dayOfWeek: r.dayOfWeek ?? 1, dayOfMonth: undefined } : { kind: "monthly", dayOfMonth: r.dayOfMonth ?? 2, dayOfWeek: undefined })} options={[{ value: "weekly", label: "Wöchentlich (Projektleitung)" }, { value: "monthly", label: "Monatlich (Geschäftsführung)" }]} /></label>
-                  {r.kind === "weekly" ? (
-                    <label className="field"><span>Wochentag</span><Select small value={String(r.dayOfWeek ?? 1)} onChange={(v) => update(r.id, { dayOfWeek: Number(v) })} options={WEEKDAYS.map((d, i) => ({ value: String(i + 1), label: d }))} /></label>
-                  ) : (
-                    <label className="field"><span>Tag im Monat</span><input className="input num" type="number" min={1} max={28} value={r.dayOfMonth ?? 2} onChange={(e) => update(r.id, { dayOfMonth: Number(e.target.value) })} /></label>
-                  )}
-                  <label className="field"><span>Uhrzeit</span><input className="input num" type="number" min={0} max={23} value={r.hour} onChange={(e) => update(r.id, { hour: Number(e.target.value) })} /></label>
-                </div>
-                <label className="field" style={{ marginTop: 8 }}><span>Empfänger (E-Mails, durch Komma getrennt)</span><input className="input" value={r.recipients.join(", ")} onChange={(e) => update(r.id, { recipients: e.target.value.split(/[\s,;]+/).filter(Boolean) })} placeholder="z. B. gl@firma.ch, pl@firma.ch" /></label>
-                <div className="toolbar" style={{ marginTop: 8, gap: 8, flexWrap: "wrap" }}>
-                  <label className="check"><input type="checkbox" checked={r.enabled} onChange={(e) => update(r.id, { enabled: e.target.checked })} />Aktiv</label>
-                  <button className="btn small ghost" disabled={dirty} title={dirty ? "Zuerst speichern" : "Schickt den Bericht jetzt an dich"} onClick={() => sendNow(r)}>Jetzt an mich senden</button>
-                  <button className="btn small ghost" onClick={() => setList(list.filter((x) => x.id !== r.id))}>Entfernen</button>
-                </div>
-              </div>
-            ))}
+            {list.length === 0 && <p className="muted" style={{ margin: 0 }}>Noch kein Bericht geplant.</p>}
+            {list.length > 0 && (
+              <ul className="report-list">
+                {list.map((r) => (
+                  <li key={r.id}>
+                    <button className="report-item" onClick={() => setDialog({ report: r, isNew: false })}>
+                      <strong>{r.name}</strong> {!r.enabled && <span className="pill neutral">Aus</span>}
+                      <span className="muted">{r.kind === "weekly" ? `Jeden ${WEEKDAYS[(r.dayOfWeek ?? 1) - 1]}` : `Am ${r.dayOfMonth ?? 2}. des Monats`} um {String(r.hour).padStart(2, "0")}:00 · an {r.recipients.length ? r.recipients.join(", ") : "niemanden"}</span>
+                    </button>
+                    <span className="report-actions">
+                      <button className="btn small ghost" title="Schickt den Bericht jetzt an dich" onClick={() => sendNow(r)}>Jetzt an mich</button>
+                      <button className="btn small ghost" aria-label={`${r.name} entfernen`} onClick={() => { if (confirm(`Bericht «${r.name}» entfernen?`)) void store(list.filter((x) => x.id !== r.id), "Bericht entfernt"); }}><Icon.trash /></button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="toolbar" style={{ gap: 8, flexWrap: "wrap" }}>
-              <button id="rep-add-weekly" className="btn small" onClick={() => setList([...list, newReport("weekly")])}>+ Wochenmail</button>
-              <button id="rep-add-monthly" className="btn small" onClick={() => setList([...list, newReport("monthly")])}>+ Monatsmail</button>
-              <button id="rep-save" className="btn primary" disabled={!dirty} onClick={save}>Speichern</button>
+              <button id="rep-add-weekly" className="btn small" onClick={() => setDialog({ report: newReport("weekly"), isNew: true })}>+ Wochenmail</button>
+              <button id="rep-add-monthly" className="btn small" onClick={() => setDialog({ report: newReport("monthly"), isNew: true })}>+ Monatsmail</button>
             </div>
+            {dialog && <ReportDialog report={dialog.report} isNew={dialog.isNew} onClose={() => setDialog(null)} onSave={(r) => store(dialog.isNew ? [...list, r] : list.map((x) => (x.id === r.id ? r : x)), dialog.isNew ? "Bericht angelegt" : "Bericht gespeichert")} />}
           </>
         )}
         {error && <p className="error">{error}</p>}
@@ -653,10 +604,8 @@ function ReportsAndExport() {
 function Operator() {
   const { mode, notify } = useStore();
   const [data, setData] = useState<{ registrationOpen: boolean; saas?: boolean; mainOrigin: string; summary?: PlatformSummary; orgs: PlatformOrg[] } | null>(null);
-  const [form, setForm] = useState({ name: "", domain: "", adminName: "", adminEmail: "" });
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const demoOrgs: PlatformOrg[] = [
     { id: "o1", name: "Beispiel AG", slug: "beispiel", domain: "zeit.beispiel.ch", active: true, appName: "TrackInsight", users: 7, createdAt: "2026-01-05", plan: "business", status: "active", interval: "year", billing: "invoice", seats: 7, mrr: 128.33, currentPeriodEnd: "2027-01-05T00:00:00Z" },
     { id: "o2", name: "Zweite GmbH", slug: "zweite-gmbh", domain: null, active: true, appName: "ZweiteZeit", users: 12, createdAt: "2026-06-12", plan: "team", status: "active", interval: "month", billing: "stripe", seats: 12, mrr: 180, currentPeriodEnd: "2026-11-12T00:00:00Z" },
@@ -673,21 +622,11 @@ function Operator() {
   });
   const load = () => (mode === "api" ? api<typeof data>("/api/platform/orgs").then(setData).catch((e: Error) => setError(e.message)) : Promise.resolve(setData({ registrationOpen: true, saas: true, mainOrigin: "https://trackinsight.ch", summary: demoSummary(demoOrgs), orgs: demoOrgs })));
   useEffect(() => { void load(); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
-  const create = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      if (mode === "api") await api("/api/platform/orgs", { body: { name: form.name, domain: form.domain || undefined, adminName: form.adminName, adminEmail: form.adminEmail } });
-      else setData((d) => d && { ...d, orgs: [...d.orgs, { id: `o${d.orgs.length + 1}`, name: form.name, slug: form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), domain: form.domain || null, active: true, appName: "TrackInsight", users: 1, createdAt: new Date().toISOString() }] });
-      notify(`${form.name} angelegt, Einladung an ${form.adminEmail} geschickt`);
-      setForm({ name: "", domain: "", adminName: "", adminEmail: "" });
-      setOpen(false);
-      if (mode === "api") await load();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
+  const create = async (form: { name: string; domain: string; adminName: string; adminEmail: string }) => {
+    if (mode === "api") await api("/api/platform/orgs", { body: { name: form.name, domain: form.domain || undefined, adminName: form.adminName, adminEmail: form.adminEmail } });
+    else setData((d) => d && { ...d, orgs: [...d.orgs, { id: `o${d.orgs.length + 1}`, name: form.name, slug: form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), domain: form.domain || null, active: true, appName: "TrackInsight", users: 1, createdAt: new Date().toISOString() }] });
+    notify(`${form.name} angelegt, Einladung an ${form.adminEmail} geschickt`);
+    if (mode === "api") await load();
   };
   const patch = async (o: PlatformOrg, body: Partial<Pick<PlatformOrg, "active" | "domain" | "plan" | "status">>) => {
     if (body.active === false && !confirm(`${o.name} deaktivieren? Alle Personen werden sofort abgemeldet und können sich nicht mehr anmelden.`)) return;
@@ -714,23 +653,14 @@ function Operator() {
       <section className="card">
         <div className="card-head">
           <h2>Firmen auf dieser Installation</h2>
-          <button id="org-add" className="btn small" onClick={() => setOpen((o) => !o)}>+ Firma</button>
+          <button id="org-add" className="btn small" onClick={() => setOpen(true)}>+ Firma</button>
         </div>
         <div className="card-pad" style={{ paddingTop: 10 }}>
           <p className="muted" style={{ marginTop: 0 }}>
             Jede Firma ist strikt getrennt: eigene Benutzer, Kunden, Daten und Design. Mit eigener Domain (DNS-Eintrag auf diesen Server) erscheint ihr Design schon auf der Anmeldeseite, und nur ihre Benutzer können sich dort anmelden.
             {" "}Selbstregistrierung unter {data.mainOrigin}/registrieren ist {data.registrationOpen ? "offen" : "geschlossen"} (Umgebungsvariable REGISTRATION_OPEN).
           </p>
-          {open && (
-            <form className="form-grid" style={{ marginBottom: 14 }} onSubmit={(e) => { e.preventDefault(); void create(); }}>
-              <label className="field"><span>Firma</span><input id="org-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></label>
-              <label className="field"><span>Eigene Domain (optional)</span><input id="org-domain" value={form.domain} onChange={(e) => setForm({ ...form, domain: e.target.value })} placeholder="zeit.firma.ch" /></label>
-              <label className="field"><span>Admin, Name</span><input id="org-admin" value={form.adminName} onChange={(e) => setForm({ ...form, adminName: e.target.value })} required /></label>
-              <label className="field"><span>Admin, E-Mail</span><input id="org-email" type="email" value={form.adminEmail} onChange={(e) => setForm({ ...form, adminEmail: e.target.value })} required /></label>
-              <div className="field"><span>&nbsp;</span><button id="org-create" className="btn primary" disabled={busy}>Anlegen und einladen</button></div>
-              {error && <p className="error" style={{ gridColumn: "1 / -1" }}>{error}</p>}
-            </form>
-          )}
+          {open && <OrgDialog onClose={() => setOpen(false)} onCreate={create} />}
           <div className="table-wrap">
             <table className="data" id="org-table">
               <thead><tr><th>Firma</th><th>Kürzel</th><th>Domain</th>{data.saas && <th>Paket</th>}<th className="r">Benutzer</th>{data.saas && <th className="r">MRR</th>}<th>Status</th><th /></tr></thead>
@@ -770,7 +700,7 @@ function Operator() {
               </tbody>
             </table>
           </div>
-          {error && !open && <p className="error">{error}</p>}
+          {error && <p className="error">{error}</p>}
         </div>
       </section>
     </div>

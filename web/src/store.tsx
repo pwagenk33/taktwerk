@@ -128,7 +128,7 @@ interface Store {
   deleteTimeEntry: (id: string) => Promise<void>;
   updateExpense: Patch<Expense>;
   updateProject: Patch<Project>;
-  updateCustomer: (id: string, patch: { name?: string; currency?: Customer["currency"] }) => Promise<void>;
+  updateCustomer: (id: string, patch: { name?: string; currency?: Customer["currency"]; address?: Customer["address"]; rate?: Customer["rates"][number] }) => Promise<void>;
   /** Resource planning: reserve `hours` of a person for a project in an ISO week (0 removes the reservation). */
   setAllocation: (employeeId: string, projectId: string, week: string, hours: number) => Promise<void>;
   /** Customer portal accounts of a customer (leads). */
@@ -399,7 +399,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     },
     addCustomer:
       mode === "api"
-        ? (c) => remote("/api/customers", { name: c.name, hourlyRate: c.rates[0].hourlyRate, validFrom: c.rates[0].validFrom, currency: c.currency })
+        ? (c) => remote("/api/customers", { name: c.name, hourlyRate: c.rates[0].hourlyRate, validFrom: c.rates[0].validFrom, currency: c.currency, address: c.address })
         : local("customers", "c"),
     setAllocation: async (employeeId, projectId, week, hours) => {
       const h = Math.round(hours * 2) / 2;
@@ -435,7 +435,11 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
         setData(await loadDataset());
         return;
       }
-      setData((d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
+      const { rate, ...rest } = patch;
+      setData((d) => ({
+        ...d,
+        customers: d.customers.map((c) => (c.id === id ? { ...c, ...rest, rates: rate ? [...c.rates.filter((r) => r.validFrom !== rate.validFrom), rate].sort((a, b) => a.validFrom.localeCompare(b.validFrom)) : c.rates } : c)),
+      }));
     },
     profit,
     addProject: mode === "api" ? (p) => remote("/api/projects", p) : local("projects", "p"),

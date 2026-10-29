@@ -7,6 +7,7 @@ import { loadLocal, saveLocal, useStore } from "../store";
 import { Icon } from "../ui/components";
 import { TYPE_CLASS, WorkTiles, signedH } from "./WorkTime";
 import { Select } from "../ui/Select";
+import { Field, FieldRow, FormDialog } from "../ui/Dialog";
 
 const CATEGORIES = EXPENSE_CATEGORIES as readonly ExpenseCategory[];
 
@@ -597,19 +598,21 @@ function EntryRow(props: EntryProps) {
       setError((e as Error).message);
     }
   };
-  const save = () => {
-    const n = Number(amount);
-    if (!reason.trim()) return setError("Bitte einen Grund angeben.");
-    if (kind === "time" && !(n > 0 && n <= 24)) return setError("Dauer muss zwischen 0 und 24 Stunden liegen.");
-    if (kind === "expense" && !(n > 0)) return setError("Bitte einen Betrag grösser als 0 eingeben.");
+  const save = async (): Promise<Record<string, string> | void> => {
+    const n = Number(amount.replace(",", "."));
+    const e: Record<string, string> = {};
+    if (!date) e.date = "Bitte ein Datum wählen.";
+    if (!reason.trim()) e.reason = "Bitte einen Grund angeben.";
+    if (kind === "time" && !(n > 0 && n <= 24)) e.amount = "Zwischen 0 und 24 Stunden.";
+    if (kind === "expense" && !(n > 0)) e.amount = "Bitte einen Betrag grösser als 0 eingeben.";
+    if (Object.keys(e).length) return e;
     const base = { date, reason: reason.trim(), billable };
-    return run(
-      () =>
-        kind === "time"
-          ? updateTimeEntry(item.id, { ...base, hours: Math.round(n * 100) / 100 })
-          : updateExpense(item.id, expense?.category === "Kilometer" ? { ...base, km: n } : { ...base, amount: n, vatRate }),
-      "Änderung gespeichert",
-    );
+    if (kind === "time") await updateTimeEntry(item.id, { ...base, hours: Math.round(n * 100) / 100 });
+    else await updateExpense(item.id, expense?.category === "Kilometer" ? { ...base, km: n } : { ...base, amount: n, vatRate });
+    setError("");
+    setState("view");
+    setHistory(false);
+    notify("Änderung gespeichert");
   };
   const remove = () => run(() => (kind === "time" ? deleteTimeEntry(item.id) : deleteExpense(item.id)), kind === "time" ? "Buchung gelöscht" : "Spese gelöscht");
 
@@ -642,55 +645,58 @@ function EntryRow(props: EntryProps) {
             </>
           ) : (
             <>
-              <button className="icon-btn" title="Bearbeiten" aria-label="Bearbeiten" onClick={() => setState(state === "edit" ? "view" : "edit")}><Icon.edit /></button>
+              <button className="icon-btn" title="Bearbeiten" aria-label="Bearbeiten" onClick={() => setState("edit")}><Icon.edit /></button>
               <button className="icon-btn" title="Löschen" aria-label="Löschen" onClick={() => setState("confirm")}><Icon.trash /></button>
             </>
           )}
         </div>
       </div>
       {state === "edit" && (
-        <div className="entry-edit">
-          <div className="form-grid">
-            <label className="field"><span>Datum</span><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-            <label className="field">
-              <span>{kind === "time" ? "Dauer (h)" : expense?.category === "Kilometer" ? "Kilometer" : "Betrag brutto (CHF)"}</span>
-              <input type="number" step={kind === "time" ? "0.25" : expense?.category === "Kilometer" ? "1" : "0.05"} min="0" className="input num" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            </label>
+        <FormDialog
+          id="entry-edit-dialog"
+          title={kind === "time" ? "Buchung bearbeiten" : "Spese bearbeiten"}
+          subtitle={props.title}
+          onClose={() => { setState("view"); setHistory(false); setError(""); }}
+          onSubmit={save}
+          danger={mode === "api" ? <button type="button" className="btn ghost" onClick={() => setHistory(!history)}>{history ? "Verlauf ausblenden" : "Verlauf"}</button> : undefined}
+        >
+          <FieldRow>
+            <Field label="Datum" name="date" required><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+            <Field label={kind === "time" ? "Dauer (h)" : expense?.category === "Kilometer" ? "Kilometer" : "Betrag brutto (CHF)"} name="amount" required hint={kind === "time" ? "z. B. 1.5 für 1 h 30 min" : undefined}>
+              <input inputMode="decimal" className="input num" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </Field>
             {expense && expense.category !== "Kilometer" && (
-              <label className="field">
-                <span>MwSt enthalten</span>
+              <Field label="MwSt enthalten">
                 <Select value={String(vatRate)} onChange={(v) => setVatRate(Number(v))} options={VAT_RATES.map((v) => ({ value: String(v), label: v === 0 ? "keine" : `${fmt1(v)} %` }))} />
-              </label>
+              </Field>
             )}
-            {expense && (
-              <label className="field">
-                <span>{expense.receipt ? `Beleg ersetzen (${expense.receipt.name})` : "Beleg hochladen"}</span>
-                <input type="file" className="input" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) run(() => uploadReceipt(expense.id, f), "Beleg gespeichert");
-                }} />
-              </label>
-            )}
-          </div>
-          <label className="field"><span>Grund</span><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} /></label>
-          <div className="tree-row">
-            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              <label className="check"><input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />Verrechenbar</label>
-              {expense?.receipt && <button className="btn small ghost" onClick={() => run(() => deleteReceipt(expense.id), "Beleg entfernt")}>Beleg entfernen</button>}
+          </FieldRow>
+          <Field label="Grund" name="reason" required hint="Erscheint im Report und auf der Rechnung."><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
+          <label className="check-field">
+            <input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />
+            <span><strong>Verrechenbar</strong><br /><span className="muted">Nicht verrechenbare Einträge zählen zum Aufwand, aber nicht auf die Rechnung.</span></span>
+          </label>
+          {expense && (
+            <Field label={expense.receipt ? `Beleg (${expense.receipt.name})` : "Beleg"} hint="Bild oder PDF. Wird sofort gespeichert.">
+              <input type="file" className="input" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void uploadReceipt(expense.id, f).then(() => notify("Beleg gespeichert")).catch((err: Error) => setError(err.message));
+              }} />
+            </Field>
+          )}
+          {(expense?.receipt || (expense && status === "rejected" && (expense.employeeId === currentUserId || scope.lead))) && (
+            <div className="toolbar" style={{ gap: 8 }}>
+              {expense?.receipt && <button type="button" className="btn small ghost" onClick={() => run(() => deleteReceipt(expense.id), "Beleg entfernt")}>Beleg entfernen</button>}
               {expense && status === "rejected" && (expense.employeeId === currentUserId || scope.lead) && (
-                <button className="btn small" onClick={() => run(() => resubmitExpense(expense.id), "Spese erneut eingereicht")}>Erneut einreichen</button>
+                <button type="button" className="btn small" onClick={() => run(() => resubmitExpense(expense.id), "Spese erneut eingereicht")}>Erneut einreichen</button>
               )}
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {mode === "api" && <button className="btn small ghost" onClick={() => setHistory(!history)}>{history ? "Verlauf ausblenden" : "Verlauf"}</button>}
-              <button className="btn small ghost" onClick={() => { setState("view"); setHistory(false); }}>Abbrechen</button>
-              <button className="btn small primary" onClick={save}>Speichern</button>
-            </div>
-          </div>
+          )}
+          {error && <p className="error">{error}</p>}
           {history && <History id={item.id} />}
-        </div>
+        </FormDialog>
       )}
-      {error && <p className="error" style={{ padding: "0 16px 10px" }}>{error}</p>}
+      {error && state !== "edit" && <p className="error" style={{ padding: "0 16px 10px" }}>{error}</p>}
     </div>
   );
 }

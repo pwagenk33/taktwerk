@@ -22,6 +22,7 @@ import {
   workPeriods
 } from "../db/schema";
 import { assertBookable, audit } from "./billing";
+import { postalAddress } from "./admin";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT");
 const projectKind = z.enum(["tm", "fixed", "retainer"]);
@@ -148,6 +149,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser, opts: { de
       name: c.name,
       currency: c.currency,
       rates: rateRows.filter((r) => r.r.customerId === c.id).map((r) => ({ validFrom: r.r.validFrom, hourlyRate: r.r.hourlyRate })),
+      ...(isLead(user) && c.billingAddress ? { address: c.billingAddress } : {}),
     })),
     projects: projectRows.map((p) => ({ id: p.id, customerId: p.customerId, name: p.name, budget: seesBudget(p.id) ? p.budget : 0, jiraProjectKey: p.jiraProjectKey ?? undefined, leadUserId: p.leadUserId ?? undefined, kind: p.kind, retainerHours: p.retainerHours ?? undefined })),
     subProjects: subRows.map((s) => ({ id: s.id, projectId: s.projectId, name: s.name, budget: seesBudget(s.projectId) ? s.budget : 0, jiraEpicKey: s.jiraEpicKey ?? undefined })),
@@ -357,23 +359,30 @@ export async function dataRoutes(app: FastifyInstance) {
 
   app.post("/api/customers", async (req, reply) => {
     const user = requireRole(req, "admin");
-    const body = z.object({ name: z.string().trim().min(1).max(200), hourlyRate: z.number().positive(), validFrom: isoDate.optional(), currency: currency.optional() }).parse(req.body);
+    const body = z.object({ name: z.string().trim().min(1).max(200), hourlyRate: z.number().positive(), validFrom: isoDate.optional(), currency: currency.optional(), address: postalAddress.optional() }).parse(req.body);
     const id = randomUUID();
-    await ctx.db.insert(customers).values({ id, organizationId: user.organizationId, name: body.name, currency: body.currency ?? "CHF" });
+    await ctx.db.insert(customers).values({ id, organizationId: user.organizationId, name: body.name, currency: body.currency ?? "CHF", billingAddress: body.address ?? null });
     await ctx.db.insert(customerRates).values({ customerId: id, validFrom: body.validFrom ?? "2000-01-01", hourlyRate: body.hourlyRate });
     return reply.status(201).send({ id });
   });
 
-  /** Name and currency of a customer. The currency applies to rates, budgets and new invoices. */
+  /**
+   * Name, currency, invoice address and a new hourly rate of a customer in one go (the edit dialog).
+   * The currency applies to rates, budgets and new invoices; a rate change only to bookings from its date (admins).
+   */
   app.patch("/api/customers/:id", async (req) => {
     const user = requireRole(req, "admin", "consultant");
     const { id } = req.params as { id: string };
-    const body = z.object({ name: z.string().trim().min(1).max(200).optional(), currency: currency.optional() }).parse(req.body);
+    const body = z
+      .object({ name: z.string().trim().min(1).max(200).optional(), currency: currency.optional(), address: postalAddress.optional(), rate: z.object({ hourlyRate: z.number().positive(), validFrom: isoDate }).optional() })
+      .parse(req.body);
     const [c] = await ctx.db.select().from(customers).where(and(eq(customers.id, id), eq(customers.organizationId, user.organizationId))).limit(1);
     if (!c) throw new HttpError(404, "Kunde nicht gefunden.");
-    const next = { name: body.name ?? c.name, currency: body.currency ?? c.currency };
+    if (body.rate && user.role !== "admin") throw new HttpError(403, "Stundensätze ändern nur Admins.");
+    const next = { name: body.name ?? c.name, currency: body.currency ?? c.currency, ...(body.address ? { billingAddress: body.address } : {}) };
     await ctx.db.update(customers).set(next).where(eq(customers.id, id));
-    return { id, ...next };
+    if (body.rate) await ctx.db.insert(customerRates).values({ customerId: id, ...body.rate }).onDuplicateKeyUpdate({ set: { hourlyRate: body.rate.hourlyRate } });
+    return { id, name: next.name, currency: next.currency };
   });
 
   app.post("/api/customers/:id/rates", async (req, reply) => {
@@ -388,11 +397,15 @@ export async function dataRoutes(app: FastifyInstance) {
 
   app.post("/api/projects", async (req, reply) => {
     const user = requireRole(req, "admin");
-    const body = z.object({ customerId: z.string(), name: z.string().trim().min(1).max(200), budget: z.number().min(0), jiraProjectKey: z.string().max(20).optional(), kind: projectKind.optional(), retainerHours: z.number().min(0).max(10000).optional() }).parse(req.body);
+    const body = z.object({ customerId: z.string(), name: z.string().trim().min(1).max(200), budget: z.number().min(0), jiraProjectKey: z.string().max(20).optional(), kind: projectKind.optional(), retainerHours: z.number().min(0).max(10000).optional(), leadUserId: z.string().optional() }).parse(req.body);
     const [c] = await ctx.db.select().from(customers).where(and(eq(customers.id, body.customerId), eq(customers.organizationId, user.organizationId))).limit(1);
     if (!c) throw new HttpError(404, "Kunde nicht gefunden.");
+    if (body.leadUserId) {
+      const [lead] = await ctx.db.select({ role: users.role }).from(users).where(and(eq(users.id, body.leadUserId), eq(users.organizationId, user.organizationId), eq(users.active, true))).limit(1);
+      if (!lead || lead.role === "customer" || lead.role === "auditor") throw new HttpError(404, "Person für die Projektleitung nicht gefunden.");
+    }
     const id = randomUUID();
-    await ctx.db.insert(projects).values({ id, organizationId: user.organizationId, ...body, jiraProjectKey: body.jiraProjectKey || null, kind: body.kind ?? "tm", retainerHours: body.kind === "retainer" ? body.retainerHours ?? null : null });
+    await ctx.db.insert(projects).values({ id, organizationId: user.organizationId, ...body, jiraProjectKey: body.jiraProjectKey || null, kind: body.kind ?? "tm", retainerHours: body.kind === "retainer" ? body.retainerHours ?? null : null, leadUserId: body.leadUserId || null });
     return reply.status(201).send({ id });
   });
 
@@ -435,7 +448,7 @@ export async function dataRoutes(app: FastifyInstance) {
       jiraProjectKey: body.jiraProjectKey === undefined ? p.jiraProjectKey : body.jiraProjectKey || null,
       kind,
       retainerHours: kind !== "retainer" ? null : body.retainerHours === undefined ? p.retainerHours : body.retainerHours,
-      leadUserId: body.leadUserId === undefined ? p.leadUserId : body.leadUserId,
+      leadUserId: body.leadUserId === undefined ? p.leadUserId : body.leadUserId || null,
     };
     await ctx.db.update(projects).set(next).where(eq(projects.id, id));
     return { id, ...next };

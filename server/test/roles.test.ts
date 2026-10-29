@@ -60,6 +60,18 @@ describe("project lead", () => {
     expect((await get("/api/reports", jonas)).json()).toHaveLength(1);
     expect((await patch(`/api/projects/${qms}`, { leadUserId: ids["jonas.weber"] }, anna)).statusCode).toBe(200);
   });
+
+  it("is set when creating a project and cleared with an empty value", async () => {
+    const d = (await get("/api/dataset", anna)).json();
+    const customerId = d.projects.find((p: { id: string }) => p.id === other).customerId;
+    const res = await post("/api/projects", { customerId, name: "Mit Leitung", budget: 1000, leadUserId: ids["lea.meier"] }, anna);
+    expect(res.statusCode).toBe(201);
+    const { id } = res.json();
+    const created = (await get("/api/dataset", anna)).json().projects.find((p: { id: string }) => p.id === id);
+    expect(created.leadUserId).toBe(ids["lea.meier"]);
+    expect((await patch(`/api/projects/${id}`, { leadUserId: "" }, anna)).json().leadUserId).toBeNull();
+    expect((await post("/api/projects", { customerId, name: "Fremd", budget: 0, leadUserId: "gibt-es-nicht" }, anna)).statusCode).toBe(404);
+  });
 });
 
 describe("team lead", () => {

@@ -20,6 +20,7 @@ import {
 import { useStore } from "../store";
 import { Icon } from "../ui/components";
 import { Select } from "../ui/Select";
+import { Field, FieldRow, FormDialog } from "../ui/Dialog";
 
 const STATUS: Record<Absence["status"], { label: string; cls: string }> = {
   requested: { label: "Beantragt", cls: "risk" },
@@ -104,7 +105,7 @@ export function WorkTiles({ employee }: { employee: Employee }) {
 
 const workModelHours = (data: { workModel?: { weeklyHours: number } }) => data.workModel?.weeklyHours ?? 42;
 
-function AbsenceForm() {
+function AbsenceDialog({ onClose }: { onClose: () => void }) {
   const { data, scope, currentUserId, addAbsence, notify } = useStore();
   const lead = scope.managesPeople;
   const [employeeId, setEmployeeId] = useState(currentUserId);
@@ -113,50 +114,43 @@ function AbsenceForm() {
   const [endDate, setEnd] = useState(addDays(data.today, 1));
   const [halfDay, setHalfDay] = useState(false);
   const [note, setNote] = useState("");
-  const [error, setError] = useState("");
   const count = endDate >= startDate ? absenceDays(data, { startDate, endDate, halfDay }) : 0;
   const needsApproval = !lead && NEEDS_APPROVAL.includes(type);
 
-  const save = async () => {
-    try {
-      const status = await addAbsence({ employeeId, type, startDate, endDate, halfDay, note: note.trim() || undefined });
-      setError("");
-      setNote("");
-      notify(status === "requested" ? `${type} beantragt` : `${type} erfasst`);
-    } catch (e) {
-      setError((e as Error).message);
-    }
+  const submit = async (): Promise<Record<string, string> | void> => {
+    if (!startDate) return { from: "Ab wann?" };
+    if (!endDate || endDate < startDate) return { to: "Das Ende liegt vor dem Beginn." };
+    if (count === 0) return { to: "Im Zeitraum liegt kein Arbeitstag." };
+    const status = await addAbsence({ employeeId, type, startDate, endDate, halfDay, note: note.trim() || undefined });
+    notify(status === "requested" ? `${type} beantragt` : `${type} erfasst`);
+    onClose();
   };
 
   return (
-    <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <h2>Absenz erfassen</h2>
-      <div className="form-grid">
-        {lead && (
-          <label className="field">
-            <span>Person</span>
-            <Select id="a-person" value={employeeId} onChange={setEmployeeId} options={data.employees.map((e) => ({ value: e.id, label: e.name }))} />
-          </label>
-        )}
-        <label className="field">
-          <span>Art</span>
-          <Select id="a-type" value={type} onChange={(v) => setType(v as AbsenceType)} options={ABSENCE_TYPES.map((t) => ({ value: t, label: t }))} />
-        </label>
-        <label className="field"><span>Von</span><input id="a-from" type="date" className="input" value={startDate} onChange={(e) => { setStart(e.target.value); if (e.target.value > endDate) setEnd(e.target.value); }} /></label>
-        <label className="field"><span>Bis</span><input id="a-to" type="date" className="input" value={endDate} min={startDate} onChange={(e) => setEnd(e.target.value)} /></label>
-      </div>
-      <label className="field"><span>Bemerkung (optional)</span><input id="a-note" className="input" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder={type === "Krankheit" ? "Arztzeugnis ab dem 3. Tag nachreichen" : "z. B. Sommerferien"} /></label>
-      <div className="tree-row">
-        <label className="check"><input id="a-half" type="checkbox" checked={halfDay} onChange={(e) => setHalfDay(e.target.checked)} />Halbe Tage</label>
-        <span className="muted" style={{ fontSize: "0.85rem" }}>
-          {count > 0 ? `${days(count)} Arbeitszeit` : "Kein Arbeitstag im Zeitraum"}
-          {needsApproval ? " · wird zur Bewilligung gesendet" : ""}
-          {type === "Kompensation" ? " · wird vom Überzeit-Saldo abgezogen" : ""}
-        </span>
-        <button className="btn primary" disabled={count === 0} onClick={save}>{needsApproval ? "Beantragen" : "Erfassen"}</button>
-      </div>
-      {error && <p className="error">{error}</p>}
-    </section>
+    <FormDialog
+      id="absence-dialog"
+      title={needsApproval ? "Absenz beantragen" : "Absenz erfassen"}
+      subtitle={needsApproval ? "Ferien und Kompensation gehen zur Bewilligung an die Teamleitung. Du siehst den Stand unter «Meine Absenzen»." : "Wird sofort eingetragen und im Soll berücksichtigt."}
+      submitLabel={needsApproval ? "Beantragen" : "Erfassen"}
+      onClose={onClose}
+      onSubmit={submit}
+    >
+      {lead && (
+        <Field label="Person" required><Select id="a-person" value={employeeId} onChange={setEmployeeId} options={data.employees.map((e) => ({ value: e.id, label: e.name }))} /></Field>
+      )}
+      <Field label="Art" required hint={type === "Kompensation" ? "Wird vom Überzeit-Saldo abgezogen." : type === "Krankheit" ? "Ab dem 3. Tag braucht es meist ein Arztzeugnis." : undefined}>
+        <Select id="a-type" value={type} onChange={(v) => setType(v as AbsenceType)} options={ABSENCE_TYPES.map((t) => ({ value: t, label: t }))} />
+      </Field>
+      <FieldRow>
+        <Field label="Von" name="from" required><input id="a-from" type="date" className="input" value={startDate} onChange={(e) => { setStart(e.target.value); if (e.target.value > endDate) setEnd(e.target.value); }} /></Field>
+        <Field label="Bis" name="to" required hint={count > 0 ? `${days(count)} Arbeitszeit` : "Kein Arbeitstag im Zeitraum"}><input id="a-to" type="date" className="input" value={endDate} min={startDate} onChange={(e) => setEnd(e.target.value)} /></Field>
+      </FieldRow>
+      <label className="check-field">
+        <input id="a-half" type="checkbox" checked={halfDay} onChange={(e) => setHalfDay(e.target.checked)} />
+        <span><strong>Halbe Tage</strong><br /><span className="muted">Jeder Tag im Zeitraum zählt als halber Tag.</span></span>
+      </label>
+      <Field label="Bemerkung"><input id="a-note" className="input" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder={type === "Krankheit" ? "Arztzeugnis ab dem 3. Tag nachreichen" : "z. B. Sommerferien"} /></Field>
+    </FormDialog>
   );
 }
 
@@ -241,9 +235,8 @@ function Requests() {
   );
 }
 
-function WorkModelEditor({ employee, onClose }: { employee: Employee; onClose: () => void }) {
-  const { updateWorkModel } = useStore();
-  const { error, run } = useRun();
+function WorkModelDialog({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+  const { updateWorkModel, notify } = useStore();
   const [f, setF] = useState({
     workload: String(employee.workload ?? 100),
     vacationDays: String(employee.vacationDays ?? 25),
@@ -252,35 +245,30 @@ function WorkModelEditor({ employee, onClose }: { employee: Employee; onClose: (
     vacationCarry: String(employee.vacationCarry ?? 0),
   });
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
-  const save = async () => {
-    const ok = await run(
-      () =>
-        updateWorkModel(employee.id, {
-          workload: Number(f.workload),
-          vacationDays: Number(f.vacationDays),
-          trackingStart: f.trackingStart || undefined,
-          overtimeCarry: Number(f.overtimeCarry),
-          vacationCarry: Number(f.vacationCarry),
-        }),
-      `Arbeitsmodell von ${employee.name} gespeichert`,
-    );
-    if (ok) onClose();
+  const n = (v: string) => (v.trim() === "" ? NaN : Number(v));
+  const submit = async () => {
+    const e: Record<string, string> = {};
+    if (!(n(f.workload) >= 1 && n(f.workload) <= 100)) e.workload = "Zwischen 1 und 100 %.";
+    if (!(n(f.vacationDays) >= 0 && n(f.vacationDays) <= 60)) e.vacationDays = "Zwischen 0 und 60 Tagen.";
+    if (Number.isNaN(n(f.overtimeCarry))) e.overtimeCarry = "Eine Zahl, auch negativ.";
+    if (Number.isNaN(n(f.vacationCarry))) e.vacationCarry = "Eine Zahl, auch negativ.";
+    if (Object.keys(e).length) return e;
+    await updateWorkModel(employee.id, { workload: n(f.workload), vacationDays: n(f.vacationDays), trackingStart: f.trackingStart || undefined, overtimeCarry: n(f.overtimeCarry), vacationCarry: n(f.vacationCarry) });
+    notify(`Arbeitsmodell von ${employee.name} gespeichert`);
+    onClose();
   };
   return (
-    <div className="entry-edit" style={{ paddingTop: 12 }}>
-      <div className="form-grid wm-grid">
-        <label className="field"><span>Pensum %</span><input className="input num" type="number" min={1} max={100} value={f.workload} onChange={set("workload")} /></label>
-        <label className="field"><span>Ferientage / Jahr</span><input className="input num" type="number" step={0.5} min={0} value={f.vacationDays} onChange={set("vacationDays")} /></label>
-        <label className="field"><span>Erfassung ab</span><input className="input" type="date" value={f.trackingStart} onChange={set("trackingStart")} /></label>
-        <label className="field"><span>Übertrag Überzeit (h)</span><input className="input num" type="number" step={0.25} value={f.overtimeCarry} onChange={set("overtimeCarry")} /></label>
-        <label className="field"><span>Übertrag Ferien (Tage)</span><input className="input num" type="number" step={0.5} value={f.vacationCarry} onChange={set("vacationCarry")} /></label>
-      </div>
-      <div className="closing-actions">
-        <button className="btn small ghost" onClick={onClose}>Abbrechen</button>
-        <button className="btn small primary" onClick={save}>Speichern</button>
-      </div>
-      {error && <p className="error">{error}</p>}
-    </div>
+    <FormDialog id="workmodel-dialog" title={`Arbeitsmodell von ${employee.name}`} subtitle="Pensum und Ferienanspruch bestimmen Soll und Saldo. Überträge gelten für Stände vor dem Start der Erfassung." onClose={onClose} onSubmit={submit}>
+      <FieldRow>
+        <Field label="Pensum (%)" name="workload" required><input id="wm-load" className="input num" inputMode="numeric" value={f.workload} onChange={set("workload")} /></Field>
+        <Field label="Ferientage pro Jahr" name="vacationDays" required hint="Bei 100 % Pensum; wird anteilig gerechnet."><input id="wm-vac" className="input num" inputMode="decimal" value={f.vacationDays} onChange={set("vacationDays")} /></Field>
+      </FieldRow>
+      <Field label="Erfassung ab" hint="Leer heisst ab Eintritt. Davor zählt kein Soll."><input id="wm-start" className="input" type="date" value={f.trackingStart} onChange={set("trackingStart")} /></Field>
+      <FieldRow>
+        <Field label="Übertrag Überzeit (h)" name="overtimeCarry" required><input id="wm-ot" className="input num" inputMode="decimal" value={f.overtimeCarry} onChange={set("overtimeCarry")} /></Field>
+        <Field label="Übertrag Ferien (Tage)" name="vacationCarry" required><input id="wm-vc" className="input num" inputMode="decimal" value={f.vacationCarry} onChange={set("vacationCarry")} /></Field>
+      </FieldRow>
+    </FormDialog>
   );
 }
 
@@ -308,14 +296,10 @@ function TeamTable() {
                     <td className="r num">{days(v.remaining)}</td>
                     <td className="r num">{v.requested ? days(v.requested) : "–"}</td>
                     {role === "admin" && (
-                      <td className="r"><button className="btn small ghost" onClick={() => setEditing(editing === e.id ? null : e.id)}>Bearbeiten</button></td>
+                      <td className="r"><button className="btn small ghost" onClick={() => setEditing(e.id)}>Bearbeiten</button></td>
                     )}
                   </tr>
-                  {editing === e.id && (
-                    <tr className="child">
-                      <td colSpan={6} style={{ padding: 0 }}><WorkModelEditor employee={e} onClose={() => setEditing(null)} /></td>
-                    </tr>
-                  )}
+                  {editing === e.id && <WorkModelDialog employee={e} onClose={() => setEditing(null)} />}
                 </Fragment>
               );
             })}
@@ -386,6 +370,7 @@ export function WorkTime() {
   const { data, currentUserId, scope } = useStore();
   const me = data.employees.find((e) => e.id === currentUserId);
   const lead = scope.managesPeople;
+  const [adding, setAdding] = useState(false);
   return (
     <>
       <div className="page-head">
@@ -393,11 +378,10 @@ export function WorkTime() {
           <h1>Ferien & Absenzen</h1>
           <p className="sub">Ferien beantragen, Krankheit und andere Absenzen erfassen. Überzeit-Saldo, Soll und Ist stehen im Kalender der Zeiterfassung und im Monatsabschluss.</p>
         </div>
+        {!scope.readOnly && <button id="a-add" className="btn primary" onClick={() => setAdding(true)}>+ Absenz</button>}
       </div>
-      <div className="grid-2" style={{ alignItems: "start" }}>
-        <AbsenceForm />
-        {me && <MyAbsences employee={me} />}
-      </div>
+      {adding && <AbsenceDialog onClose={() => setAdding(false)} />}
+      {me && <MyAbsences employee={me} />}
       {lead && (
         <>
           <Requests />

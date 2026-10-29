@@ -1,86 +1,37 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { CURRENCIES, PROJECT_KINDS, currencyOf, fmt1, fmtCHF, fmtDate, fmtMoney, fmtMonth, fmtNum, rateOn, scenario, scenarioBand, type BudgetStatus, type Currency, type Customer, type Project, type ProjectKind, type ProjectReport, type SubProject } from "@taktwerk/domain";
-import { Select } from "../ui/Select";
+import { PROJECT_KINDS, currencyOf, fmt1, fmtCHF, fmtDate, fmtMoney, fmtMonth, fmtNum, rateOn, scenario, scenarioBand, type BudgetStatus, type Currency, type Customer, type Project, type ProjectKind, type ProjectReport, type SubProject } from "@taktwerk/domain";
+import { CustomerDialog, PortalInviteDialog, ProjectDialog, SubProjectDialog } from "./EditDialogs";
 import { useStore } from "../store";
 import type { PortalAccount } from "../api";
 import { BurnUpChart, Icon, Money, StatusPill } from "../ui/components";
 
-/** Name, budget and JIRA key of a project or sub-project, editable in place by leads. */
-export interface HeadPatch { name: string; budget: number; jira: string; kind?: ProjectKind; retainerHours?: number }
-
-/** Who leads the project: admins and consultants pick an employee, everyone else sees the name. */
-function ProjectLead({ project, canSet, onChange }: { project: Project; canSet: boolean; onChange: (leadUserId: string | undefined) => Promise<void> }) {
+/** Who leads the project, shown under the project head. Changed in the project's edit popup. */
+function ProjectLead({ project }: { project: Project }) {
   const { data } = useStore();
-  const people = data.employees.filter((e) => e.role !== "customer" && e.role !== "auditor");
-  const lead = people.find((e) => e.id === project.leadUserId);
-  if (!canSet) return lead ? <p className="muted" style={{ fontSize: "0.82rem", margin: "6px 0 0" }}>Projektleitung {lead.name}</p> : null;
-  return (
-    <div className="tree-row" style={{ gap: 8, marginTop: 10, alignItems: "center" }}>
-      <span className="muted" style={{ fontSize: "0.82rem" }}>Projektleitung</span>
-      <Select id="p-lead" small ariaLabel="Projektleitung" value={project.leadUserId ?? ""} placeholder="Keine" onChange={(v) => void onChange(v || undefined)} options={[{ value: "", label: "Keine" }, ...people.map((e) => ({ value: e.id, label: e.name }))]} />
-      <span className="muted" style={{ fontSize: "0.78rem" }}>Sieht Budget und Buchungen dieses Projekts und plant es, ohne Consultant zu sein.</span>
-    </div>
-  );
+  const lead = data.employees.find((e) => e.id === project.leadUserId);
+  return lead ? <p className="muted" style={{ fontSize: "0.82rem", margin: "6px 0 0" }}>Projektleitung {lead.name}</p> : null;
 }
 
 const kindLabel = (k: ProjectKind | undefined) => PROJECT_KINDS.find((x) => x.id === (k ?? "tm"))!.label;
 
-function EditableHead({ item, kind, currency = "CHF", onSave }: { item: Project | SubProject; kind: "project" | "sub"; currency?: Currency; onSave: (p: HeadPatch) => Promise<void> }) {
+/** Name, budget and Jira key of a project or sub-project; «Bearbeiten» opens the popup for leads. */
+function ItemHead({ item, kind, currency = "CHF" }: { item: Project | SubProject; kind: "project" | "sub"; currency?: Currency }) {
   const { scope } = useStore();
   const projectId = kind === "project" ? item.id : (item as SubProject).projectId;
   const jiraKey = kind === "project" ? (item as Project).jiraProjectKey : (item as SubProject).jiraEpicKey;
   const project = kind === "project" ? (item as Project) : null;
   const [edit, setEdit] = useState(false);
-  const [name, setName] = useState(item.name);
-  const [budget, setBudget] = useState(String(item.budget));
-  const [jira, setJira] = useState(jiraKey ?? "");
-  const [pk, setPk] = useState<ProjectKind>(project?.kind ?? "tm");
-  const [retainer, setRetainer] = useState(String(project?.retainerHours ?? ""));
-  const [error, setError] = useState("");
-  const save = async () => {
-    const n = Number(budget);
-    if (!name.trim()) return setError("Bitte einen Namen eingeben.");
-    if (!(n >= 0)) return setError("Budget muss 0 oder grösser sein.");
-    if (project && pk === "retainer" && !(Number(retainer) > 0)) return setError("Bitte das monatliche Stundenkontingent eingeben.");
-    try {
-      await onSave({ name: name.trim(), budget: n, jira: jira.trim().toUpperCase(), ...(project ? { kind: pk, retainerHours: pk === "retainer" ? Number(retainer) : undefined } : {}) });
-      setEdit(false);
-      setError("");
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  if (!edit) {
-    return (
-      <div className="tree-row" style={{ gap: 10, flexWrap: "wrap" }}>
-        <div>
-          {kind === "project" ? <h2 style={{ margin: 0 }}>{item.name}</h2> : <strong>{item.name}</strong>} {jiraKey && <span className="pill neutral mono">{jiraKey}</span>}
-          {project && <span className="pill neutral" style={{ marginLeft: 6 }}>{kindLabel(project.kind)}{project.kind === "retainer" && project.retainerHours ? ` · ${fmtNum(project.retainerHours)} h/Monat` : ""}</span>}
-          <div className="muted num" style={{ fontSize: "0.82rem" }}>{project?.kind === "fixed" ? "Fixpreis" : "Budget"} {fmtMoney(item.budget, currency)}</div>
-        </div>
-        {scope.leadsProject(projectId) && !scope.readOnly && <button className="btn small" onClick={() => setEdit(true)}>Bearbeiten</button>}
-      </div>
-    );
-  }
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div className="form-grid" style={{ alignItems: "end" }}>
-        <label className="field"><span>Name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></label>
-        {project && (
-          <label className="field"><span>Projektart</span><Select id="p-kind" value={pk} onChange={(v) => setPk(v as ProjectKind)} options={PROJECT_KINDS.map((k) => ({ value: k.id, label: k.label }))} /></label>
-        )}
-        {project && pk === "retainer" && (
-          <label className="field"><span>Kontingent (h pro Monat)</span><input id="p-retainer" className="input num" type="number" min={0} step={5} value={retainer} onChange={(e) => setRetainer(e.target.value)} /></label>
-        )}
-        <label className="field"><span>{pk === "fixed" && project ? `Fixpreis (${currency})` : `Budget (${currency})`}</span><input className="input num" type="number" min={0} step={1000} value={budget} onChange={(e) => setBudget(e.target.value)} /></label>
-        <label className="field"><span>{kind === "project" ? "JIRA-Projektschlüssel" : "JIRA-Epic"}</span><input className="input mono" value={jira} onChange={(e) => setJira(e.target.value)} /></label>
-        <div className="toolbar">
-          <button className="btn small primary" onClick={save}>Speichern</button>
-          <button className="btn small ghost" onClick={() => setEdit(false)}>Abbrechen</button>
-        </div>
+    <div className="tree-row" style={{ gap: 10, flexWrap: "wrap" }}>
+      <div>
+        {kind === "project" ? <h2 style={{ margin: 0 }}>{item.name}</h2> : <strong>{item.name}</strong>} {jiraKey && <span className="pill neutral mono">{jiraKey}</span>}
+        {project && <span className="pill neutral" style={{ marginLeft: 6 }}>{kindLabel(project.kind)}{project.kind === "retainer" && project.retainerHours ? ` · ${fmtNum(project.retainerHours)} h/Monat` : ""}</span>}
+        <div className="muted num" style={{ fontSize: "0.82rem" }}>{project?.kind === "fixed" ? "Fixpreis" : "Budget"} {fmtMoney(item.budget, currency)}</div>
       </div>
-      {project && <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>{PROJECT_KINDS.find((k) => k.id === pk)?.hint}</p>}
-      {error && <p className="error">{error}</p>}
+      {scope.leadsProject(projectId) && !scope.readOnly && <button className="btn small" onClick={(e) => { e.stopPropagation(); setEdit(true); }}>Bearbeiten</button>}
+      {edit && (project
+        ? <ProjectDialog project={project} customerId={project.customerId} onClose={() => setEdit(false)} />
+        : <SubProjectDialog sub={item as SubProject} projectId={projectId} onClose={() => setEdit(false)} />)}
     </div>
   );
 }
@@ -144,7 +95,7 @@ function ScenarioCard({ report, currency }: { report: ProjectReport; currency: C
 
 /** One project: figures, sub-projects with their JIRA issues, budgets editable. */
 function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () => void }) {
-  const { data, reports, updateProject, updateSubProject, notify, scope } = useStore();
+  const { data, reports } = useStore();
   const [open, setOpen] = useState<string | null>(null);
   const project = data.projects.find((p) => p.id === projectId)!;
   const customer = data.customers.find((c) => c.id === project.customerId);
@@ -168,9 +119,9 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
         {r && <StatusPill status={r.status} />}
       </div>
       <section className="card card-pad" style={{ marginBottom: 16 }}>
-        <EditableHead item={project} kind="project" currency={cur} onSave={async (p) => { await updateProject(project.id, { name: p.name, budget: p.budget, jiraProjectKey: p.jira || undefined, kind: p.kind, retainerHours: p.retainerHours }); notify("Projekt gespeichert"); }} />
+        <ItemHead item={project} kind="project" currency={cur} />
         <p className="muted num" style={{ fontSize: "0.82rem", margin: "8px 0 0" }}>Auf Subprojekte verteilt {m(allocated)} · Reserve <Money v={project.budget - allocated} signed={project.budget - allocated < 0} currency={cur} /></p>
-        <ProjectLead project={project} canSet={scope.lead && !scope.readOnly} onChange={async (leadUserId) => { await updateProject(project.id, { leadUserId }); notify(leadUserId ? "Projektleitung gesetzt" : "Projektleitung entfernt"); }} />
+        <ProjectLead project={project} />
       </section>
       {r?.retainer && (
         <div className="tiles">
@@ -215,7 +166,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
                       <tr className="child">
                         <td colSpan={7} style={{ padding: "10px 16px 14px 28px" }}>
                           <div style={{ marginBottom: 10 }}>
-                            <EditableHead item={s} kind="sub" currency={cur} onSave={async (p) => { await updateSubProject(s.id, { name: p.name, budget: p.budget, jiraEpicKey: p.jira || undefined }); notify("Subprojekt gespeichert"); }} />
+                            <ItemHead item={s} kind="sub" currency={cur} />
                           </div>
                           {issues.length === 0 ? (
                             <p className="muted" style={{ margin: 0 }}>Keine JIRA-Tickets verknüpft{s.jiraEpicKey ? "" : " (kein Epic hinterlegt)"}.</p>
@@ -259,51 +210,11 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
 
 type Draft = { kind: "customer" } | { kind: "project"; customerId: string } | { kind: "sub"; projectId: string } | null;
 
-function NewItemForm({ draft, onClose }: { draft: NonNullable<Draft>; onClose: () => void }) {
-  const { data, addCustomer, addProject, addSubProject, notify } = useStore();
-  const [name, setName] = useState("");
-  const [num, setNum] = useState("");
-  const [jira, setJira] = useState("");
-  const [cur, setCur] = useState<Currency>("CHF");
-  const [error, setError] = useState("");
-
-  const labels = {
-    customer: { title: "Neuer Kunde", num: `Stundensatz (${cur})`, jira: null },
-    project: { title: "Neues Projekt", num: "Budget (CHF)", jira: "JIRA-Projektschlüssel" },
-    sub: { title: "Neues Subprojekt", num: "Budget (CHF)", jira: "JIRA-Epic" },
-  }[draft.kind];
-
-  const save = async () => {
-    const n = Number(num);
-    if (!name.trim()) return setError("Bitte einen Namen eingeben.");
-    if (!(n > 0)) return setError(`${labels.num} muss grösser als 0 sein.`);
-    try {
-      if (draft.kind === "customer") await addCustomer({ name: name.trim(), currency: cur, rates: [{ validFrom: data.today, hourlyRate: n }] });
-      if (draft.kind === "project") await addProject({ customerId: draft.customerId, name: name.trim(), budget: n, jiraProjectKey: jira || undefined });
-      if (draft.kind === "sub") await addSubProject({ projectId: draft.projectId, name: name.trim(), budget: n, jiraEpicKey: jira || undefined });
-    } catch (e) {
-      return setError((e as Error).message);
-    }
-    notify(`${labels.title.replace("Neuer ", "").replace("Neues ", "")} «${name.trim()}» angelegt`);
-    onClose();
-  };
-
-  return (
-    <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <h2>{labels.title}</h2>
-      <div className="form-grid" style={{ alignItems: "end" }}>
-        <label className="field"><span>Name</span><input id="n-name" className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus /></label>
-        {draft.kind === "customer" && <label className="field"><span>Währung</span><Select id="n-currency" value={cur} onChange={(v) => setCur(v as Currency)} options={CURRENCIES.map((c) => ({ value: c, label: c }))} /></label>}
-        <label className="field"><span>{labels.num}</span><input id="n-num" type="number" className="input num" value={num} onChange={(e) => setNum(e.target.value)} /></label>
-        {labels.jira && <label className="field"><span>{labels.jira}</span><input id="n-jira" className="input mono" value={jira} onChange={(e) => setJira(e.target.value.toUpperCase())} placeholder={draft.kind === "project" ? "z. B. KPR" : "z. B. KPR-4"} /></label>}
-        <div className="toolbar">
-          <button className="btn primary" onClick={save}>Anlegen</button>
-          <button className="btn ghost" onClick={onClose}>Abbrechen</button>
-        </div>
-      </div>
-      {error && <p className="error">{error}</p>}
-    </div>
-  );
+/** The popup for whatever «+ Kunde», «+ Projekt» or «+ Subprojekt» asked for. */
+function NewItemDialog({ draft, onClose }: { draft: NonNullable<Draft>; onClose: () => void }) {
+  if (draft.kind === "customer") return <CustomerDialog onClose={onClose} />;
+  if (draft.kind === "project") return <ProjectDialog customerId={draft.customerId} onClose={onClose} />;
+  return <SubProjectDialog projectId={draft.projectId} onClose={onClose} />;
 }
 
 const RANK: Record<BudgetStatus, number> = { ok: 0, risk: 1, over: 2 };
@@ -350,7 +261,7 @@ function CustomerList({ onOpen }: { onOpen: (id: string) => void }) {
         </div>
         <button className="btn primary" onClick={() => setDraft({ kind: "customer" })}>+ Kunde</button>
       </div>
-      {draft && <NewItemForm key={JSON.stringify(draft)} draft={draft} onClose={() => setDraft(null)} />}
+      {draft && <NewItemDialog key={JSON.stringify(draft)} draft={draft} onClose={() => setDraft(null)} />}
       <section className="card">
         <div className="card-head" style={{ paddingBottom: 10, flexWrap: "wrap" }}>
           <div className="search">
@@ -398,10 +309,11 @@ function CustomerList({ onOpen }: { onOpen: (id: string) => void }) {
 
 /** One customer: rate, figures and the project tree with sub-projects. */
 function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Customer; onBack: () => void; onOpenProject: (id: string) => void }) {
-  const { data, reports, scope, updateCustomer, notify } = useStore();
+  const { data, reports, scope } = useStore();
   const cur = currencyOf(customer);
   const m = (v: number) => fmtMoney(v, cur);
   const [draft, setDraft] = useState<Draft>(null);
+  const [editing, setEditing] = useState(false);
   const projects = data.projects.filter((p) => p.customerId === customer.id);
   const projReport = new Map(reports.map((r) => [r.project.id, r]));
   const subReport = new Map(reports.flatMap((r) => r.subs.map((s) => [s.subProject.id, s] as const)));
@@ -426,13 +338,12 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
           </p>
         </div>
         <div className="toolbar">
-          {scope.lead && (
-            <Select id="c-currency" small ariaLabel="Währung" value={cur} onChange={async (v) => { await updateCustomer(customer.id, { currency: v as Currency }); notify(`Währung auf ${v} gestellt`); }} options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
-          )}
+          {scope.lead && !scope.readOnly && <button className="btn" id="c-edit" onClick={() => setEditing(true)}>Bearbeiten</button>}
           <button className="btn primary" onClick={() => setDraft({ kind: "project", customerId: customer.id })}>+ Projekt</button>
         </div>
       </div>
-      {draft && <NewItemForm key={JSON.stringify(draft)} draft={draft} onClose={() => setDraft(null)} />}
+      {draft && <NewItemDialog key={JSON.stringify(draft)} draft={draft} onClose={() => setDraft(null)} />}
+      {editing && <CustomerDialog customer={customer} onClose={() => setEditing(false)} />}
       <div className="tiles">
         <div className="card tile"><span className="label">Budget</span><span className="value num">{m(budget)}</span></div>
         <div className="card tile"><span className="label">Verbraucht</span><span className="value num">{m(actual)}</span><span className="delta num">{budget > 0 ? `${fmt1((actual / budget) * 100)} % des Budgets` : `${fmt1(hours)} h gebucht`}</span></div>
@@ -481,35 +392,19 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
           );
         })}
       </section>
-      {scope.lead && <PortalAccess customerId={customer.id} />}
+      {scope.lead && <PortalAccess customer={customer} />}
     </>
   );
 }
 
 /** Portal accounts of a customer: who can sign in to the customer portal, invite and revoke. */
-function PortalAccess({ customerId }: { customerId: string }) {
-  const { portalAccounts, invitePortal, revokePortal, notify, mode } = useStore();
+function PortalAccess({ customer }: { customer: Customer }) {
+  const customerId = customer.id;
+  const { portalAccounts, revokePortal, notify } = useStore();
   const [accounts, setAccounts] = useState<PortalAccount[] | null>(null);
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const reload = () => portalAccounts(customerId).then(setAccounts).catch(() => setAccounts([]));
   useEffect(() => { void reload(); }, [customerId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const invite = async () => {
-    setBusy(true);
-    try {
-      await invitePortal(customerId, name.trim(), email.trim());
-      notify(mode === "api" ? `Einladung an ${email.trim()} geschickt` : "Zugang angelegt (Demo: ohne E-Mail)");
-      setName(""); setEmail(""); setOpen(false); setError("");
-      await reload();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
   const revoke = async (a: PortalAccount) => {
     if (!confirm(`Zugang von ${a.name} zum Kundenportal entziehen?`)) return;
     await revokePortal(customerId, a.id);
@@ -520,18 +415,10 @@ function PortalAccess({ customerId }: { customerId: string }) {
     <section className="card" style={{ marginTop: 16 }} id="portal-access">
       <div className="card-head">
         <h2><Icon.users /> Kundenportal</h2>
-        <button className="btn small" id="portal-invite" onClick={() => setOpen((o) => !o)}>+ Zugang</button>
+        <button className="btn small" id="portal-invite" onClick={() => setOpen(true)}>+ Zugang</button>
       </div>
       <div className="card-pad" style={{ paddingTop: 10 }}>
-        {open && (
-          <form className="portal-invite" onSubmit={(e) => { e.preventDefault(); void invite(); }}>
-            <label className="field"><span>Name</span><input id="pi-name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Vorname Nachname" /></label>
-            <label className="field"><span>E-Mail</span><input id="pi-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="name@kunde.ch" /></label>
-            <button className="btn primary" id="pi-send" disabled={busy || !name.trim() || !email.trim()}>Einladen</button>
-            {error && <span className="error">{error}</span>}
-            <span className="muted" style={{ fontSize: "0.8rem", flexBasis: "100%" }}>Die Person erhält eine E-Mail mit Link zum Setzen des Passworts und sieht danach Budget, Restbudget, Prognose, Monatsreports und Rechnungen dieses Kunden.</span>
-          </form>
-        )}
+        {open && <PortalInviteDialog customer={customer} onClose={() => setOpen(false)} onInvited={() => void reload()} />}
         {accounts === null && <p className="muted">Lade …</p>}
         {accounts?.length === 0 && !open && <p className="muted" style={{ margin: 0 }}>Noch niemand hat Zugang zum Portal. Mit «+ Zugang» eine Kontaktperson einladen.</p>}
         {accounts && accounts.length > 0 && (
