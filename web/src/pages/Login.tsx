@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { passkeysSupported, usePasskey } from "../webauthn";
-import { PLANS, TRIAL_DAYS, type PlanId } from "@taktwerk/domain";
+import { PLANS, type PlanId } from "@taktwerk/domain";
 import { api, type Branding, type Providers } from "../api";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
 import { Icon } from "../ui/components";
@@ -72,7 +72,8 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
   const [username, setUsername] = useState(demo ? "anna.keller" : "");
   const [password, setPassword] = useState(demo ? "demo-passwort" : "");
   const [email, setEmail] = useState("");
-  const [plan, setPlan] = useState<PlanId>(() => (PLANS.find((p) => p.id === new URLSearchParams(location.search).get("paket"))?.id ?? "team"));
+  // A package can be preselected by a link from the website (?paket=team); the form itself shows no prices.
+  const [plan] = useState<PlanId>(() => (PLANS.find((p) => p.id === new URLSearchParams(location.search).get("paket"))?.id ?? "team"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(ssoError ? SSO_ERRORS[ssoError] ?? SSO_ERRORS.fehlgeschlagen : "");
 
@@ -234,28 +235,14 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
         <form onSubmit={register} className="login-form">
           <div>
             <h2>Firma registrieren</h2>
-            <p className="muted">
-              Deine Firma bekommt einen eigenen, getrennten Bereich. Du bist Admin und lädst dein Team selbst ein.
-              {providers.saas && ` ${TRIAL_DAYS} Tage kostenlos testen, ohne Kreditkarte; danach wählst du ein Paket oder es endet von selbst.`}
-            </p>
+            <p className="muted">Deine Firma bekommt einen eigenen, getrennten Bereich. Du bist Admin und lädst dein Team selbst ein.</p>
           </div>
-          {providers.saas && (
-            <div className="plan-pick" role="radiogroup" aria-label="Paket für die Testphase">
-              {PLANS.map((p) => (
-                <button type="button" key={p.id} role="radio" aria-checked={plan === p.id} className={plan === p.id ? "on" : ""} onClick={() => setPlan(p.id)}>
-                  <strong>{p.name}</strong>
-                  <span>bis {p.maxUsers} Personen</span>
-                  <span className="num">CHF {p.monthly}/Mt.</span>
-                </button>
-              ))}
-            </div>
-          )}
           <label className="field"><span>Firma</span><input id="r-company" className="input" value={company} onChange={(e) => setCompany(e.target.value)} required minLength={2} /></label>
           <label className="field"><span>Dein Name</span><input id="r-name" className="input" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required /></label>
           <label className="field"><span>E-Mail (ist dein Benutzername)</span><input id="r-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
           <label className="field"><span>Passwort (mindestens 10 Zeichen)</span><input id="r-pass" className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} /></label>
           {error && <p className="error" role="alert">{error}</p>}
-          <button id="r-submit" className="btn primary block" disabled={busy}>{busy ? "Richte ein …" : providers.saas ? "Kostenlos testen" : "Firma anlegen"}</button>
+          <button id="r-submit" className="btn primary block" disabled={busy}>{busy ? "Richte ein …" : "Firma anlegen"}</button>
           <button type="button" className="link" onClick={() => { setView("login"); setError(""); }}>Zurück zur Anmeldung</button>
         </form>
       )}

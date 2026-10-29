@@ -744,12 +744,6 @@ table.plan td:first-child a:hover { color: var(--accent); }
 .stamp-add input[type="date"] { width: 160px; flex: none; }
 
 /* ---------- SaaS: package choice, subscription, banners, setup wizard ---------- */
-.plan-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.plan-pick button { display: flex; flex-direction: column; gap: 1px; align-items: flex-start; text-align: left; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface); color: var(--ink-2); font: inherit; font-size: 0.8rem; cursor: pointer; transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease); }
-.plan-pick button strong { color: var(--ink); font-size: 0.9rem; }
-.plan-pick button.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.plan-pick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (max-width: 420px) { .plan-pick { grid-template-columns: 1fr; } .plan-pick button { flex-direction: row; justify-content: space-between; align-items: center; } }
 .eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .crit-text { color: var(--crit-ink); }
 .op-actions { white-space: nowrap; }
