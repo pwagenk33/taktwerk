@@ -1,75 +1,80 @@
-/* Design direction «Eingang» (Tony, 2026-10-29): warm greys, Instrument Sans, the start page is an inbox.
-   Black is the action colour; the brand colour (--brand, from the organization's settings) only marks what needs attention.
-   Status colours and chart series stay independent of it. */
+/* Design direction «Eingang» (Tony, 2026-10-29) in the colours «Bunt mit System» (Tony, 2026-10-29):
+   light surfaces, Instrument Sans, the start page is an inbox. The main colour (--brand, violet by default,
+   changeable per company) marks actions and the current place; every figure and series has its own fixed hue.
+   Status colours stay independent of the main colour so reports read the same in every company. */
 :root {
-  --brand: #D52B1E;
-  --bg: #f7f7f5;
+  --brand: #6D4CF0;
+  --hue-1: #6d4cf0; --hue-2: #12b76a; --hue-3: #2e90fa; --hue-4: #f79009; --hue-5: #ee46bc;
+  --bg: #f6f6f9;
   --surface: #ffffff;
-  --surface-2: #f3f2ef;
-  --ink: #1c1b19;
-  --ink-2: #57534e;
-  --muted: #8a857e;
-  --line: #e8e6e1;
-  --line-strong: #dad7d0;
+  --surface-2: #f3f3f7;
+  --ink: #18181f;
+  --ink-2: #4a4a57;
+  --muted: #6e6e7c;
+  --line: #e7e7ee;
+  --line-strong: #d9d9e3;
   --accent: var(--brand);
   --accent-ink: #ffffff;
-  --accent-soft: color-mix(in srgb, var(--brand) 8%, #ffffff);
-  --primary: #1c1b19;
+  --accent-soft: color-mix(in srgb, var(--brand) 10%, #ffffff);
+  --accent-strong: color-mix(in srgb, var(--brand) 82%, #000000);
+  --primary: var(--brand);
   --primary-ink: #ffffff;
-  --primary-top: #34312d;
-  --hover: #f6f5f2;
-  --select: #f0eee9;
-  --rail: var(--bg);
-  --rail-ink: #57534e;
-  --rail-ink-strong: #1c1b19;
-  --rail-active: #ebe9e4;
-  --rail-active-ink: #1c1b19;
-  --rail-hover: #efede9;
-  --rail-line: #e8e6e1;
+  --primary-top: color-mix(in srgb, var(--brand) 82%, #000000);
+  --hover: #f4f4f8;
+  --select: #eeeef4;
+  --rail: #ffffff;
+  --rail-ink: #3a3a46;
+  --rail-ink-strong: #18181f;
+  --rail-active: color-mix(in srgb, var(--brand) 11%, #ffffff);
+  --rail-active-ink: color-mix(in srgb, var(--brand) 82%, #000000);
+  --rail-hover: #f4f4f8;
+  --rail-line: #e7e7ee;
   --motif: color-mix(in srgb, var(--brand) 16%, #ffffff);
-  --series-1: #2a2825;
-  --series-2: #e4683a;
-  --series-3: #1f9d72;
-  --series-4: #c9961a;
-  --series-1-soft: #d6d3cd;
-  --grid: #efede9;
-  --axis: #d6d3cd;
-  --good: #1f9d55;
-  --good-ink: #17803f;
-  --warn: #d4a017;
-  --warn-ink: #8a6508;
-  --crit: var(--brand);
-  --crit-ink: color-mix(in srgb, var(--brand) 85%, #000000);
-  --btn-shadow: 0 1px 0 rgba(28, 27, 25, 0.04), inset 0 -1px 0 rgba(28, 27, 25, 0.035);
-  --ring: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--ink) 28%, transparent);
+  --series-1: #6d4cf0;
+  --series-2: #f79009;
+  --series-3: #12b76a;
+  --series-4: #2e90fa;
+  --series-1-soft: #ddd5ff;
+  --grid: #eeeef3;
+  --axis: #d6d6e0;
+  --good: #12b76a;
+  --good-ink: #067647;
+  --warn: #f79009;
+  --warn-ink: #b54708;
+  --crit: #f04438;
+  --crit-ink: #b42318;
+  --btn-shadow: 0 1px 0 rgba(24, 24, 31, 0.04), inset 0 -1px 0 rgba(24, 24, 31, 0.035);
+  --ring: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--brand) 45%, transparent);
   --shadow: none;
-  --shadow-pop: 0 1px 2px rgba(28, 27, 25, 0.05), 0 12px 32px rgba(28, 27, 25, 0.12);
+  --shadow-pop: 0 1px 2px rgba(24, 24, 31, 0.05), 0 12px 32px rgba(24, 24, 31, 0.12);
   --font-ui: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-  --radius: 4px;
+  --radius: 10px;
   --radius-s: 2px;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f0e0d; --surface: #171615; --surface-2: #201f1d; --ink: #edebe7; --ink-2: #aaa49c; --muted: #7c766f; --line: #2a2826; --line-strong: #393632;
-    --accent: color-mix(in srgb, var(--brand) 80%, #ffffff); --accent-ink: #0f0e0d; --accent-soft: color-mix(in srgb, var(--brand) 18%, #171615);
-    --primary: #edebe7; --primary-ink: #171615; --primary-top: #ffffff; --hover: #1d1c1a; --select: #242220;
-    --rail-ink: #aaa49c; --rail-ink-strong: #edebe7; --rail-active: #232120; --rail-active-ink: #edebe7; --rail-hover: #1a1918; --rail-line: #2a2826;
-    --motif: color-mix(in srgb, var(--brand) 32%, #171615);
-    --series-1: #d6d3cd; --series-2: #e4683a; --series-3: #26b081; --series-4: #d99a1a; --series-1-soft: #45423d;
-    --grid: #23211f; --axis: #3a3733; --good: #2fbf6a; --good-ink: #4fd082; --warn-ink: #e5b33a; --crit-ink: color-mix(in srgb, var(--brand) 60%, #ffffff);
+    --bg: #0f0f14; --surface: #17171e; --surface-2: #1f1f28; --ink: #ededf3; --ink-2: #b0b0bf; --muted: #80808f; --line: #2a2a35; --line-strong: #383845;
+    --hue-1: #9b85ff; --hue-2: #3ccf8e; --hue-3: #5aa9ff; --hue-4: #ffad3d; --hue-5: #f472d0;
+    --accent: color-mix(in srgb, var(--brand) 70%, #ffffff); --accent-ink: #0f0f14; --accent-soft: color-mix(in srgb, var(--brand) 22%, #17171e); --accent-strong: color-mix(in srgb, var(--brand) 55%, #ffffff);
+    --primary: color-mix(in srgb, var(--brand) 85%, #ffffff); --primary-ink: #ffffff; --primary-top: color-mix(in srgb, var(--brand) 70%, #ffffff); --hover: #1d1d26; --select: #24242e;
+    --rail: #13131a; --rail-ink: #b0b0bf; --rail-ink-strong: #ededf3; --rail-active: color-mix(in srgb, var(--brand) 26%, #13131a); --rail-active-ink: #ffffff; --rail-hover: #1c1c25; --rail-line: #2a2a35;
+    --motif: color-mix(in srgb, var(--brand) 32%, #17171e);
+    --series-1: #9b85ff; --series-2: #ffad3d; --series-3: #3ccf8e; --series-4: #5aa9ff; --series-1-soft: #3a3166;
+    --grid: #23232c; --axis: #3a3a46; --good: #3ccf8e; --good-ink: #5fe0a5; --warn: #ffad3d; --warn-ink: #ffc46b; --crit: #ff6b5e; --crit-ink: #ff8a80;
     --btn-shadow: 0 1px 0 rgba(0, 0, 0, 0.3); --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.6); color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0f0e0d; --surface: #171615; --surface-2: #201f1d; --ink: #edebe7; --ink-2: #aaa49c; --muted: #7c766f; --line: #2a2826; --line-strong: #393632;
-  --accent: color-mix(in srgb, var(--brand) 80%, #ffffff); --accent-ink: #0f0e0d; --accent-soft: color-mix(in srgb, var(--brand) 18%, #171615);
-  --primary: #edebe7; --primary-ink: #171615; --primary-top: #ffffff; --hover: #1d1c1a; --select: #242220;
-  --rail-ink: #aaa49c; --rail-ink-strong: #edebe7; --rail-active: #232120; --rail-active-ink: #edebe7; --rail-hover: #1a1918; --rail-line: #2a2826;
-  --motif: color-mix(in srgb, var(--brand) 32%, #171615);
-  --series-1: #d6d3cd; --series-2: #e4683a; --series-3: #26b081; --series-4: #d99a1a; --series-1-soft: #45423d;
-  --grid: #23211f; --axis: #3a3733; --good: #2fbf6a; --good-ink: #4fd082; --warn-ink: #e5b33a; --crit-ink: color-mix(in srgb, var(--brand) 60%, #ffffff);
+  --bg: #0f0f14; --surface: #17171e; --surface-2: #1f1f28; --ink: #ededf3; --ink-2: #b0b0bf; --muted: #80808f; --line: #2a2a35; --line-strong: #383845;
+  --hue-1: #9b85ff; --hue-2: #3ccf8e; --hue-3: #5aa9ff; --hue-4: #ffad3d; --hue-5: #f472d0;
+  --accent: color-mix(in srgb, var(--brand) 70%, #ffffff); --accent-ink: #0f0f14; --accent-soft: color-mix(in srgb, var(--brand) 22%, #17171e); --accent-strong: color-mix(in srgb, var(--brand) 55%, #ffffff);
+  --primary: color-mix(in srgb, var(--brand) 85%, #ffffff); --primary-ink: #ffffff; --primary-top: color-mix(in srgb, var(--brand) 70%, #ffffff); --hover: #1d1d26; --select: #24242e;
+  --rail: #13131a; --rail-ink: #b0b0bf; --rail-ink-strong: #ededf3; --rail-active: color-mix(in srgb, var(--brand) 26%, #13131a); --rail-active-ink: #ffffff; --rail-hover: #1c1c25; --rail-line: #2a2a35;
+  --motif: color-mix(in srgb, var(--brand) 32%, #17171e);
+  --series-1: #9b85ff; --series-2: #ffad3d; --series-3: #3ccf8e; --series-4: #5aa9ff; --series-1-soft: #3a3166;
+  --grid: #23232c; --axis: #3a3a46; --good: #3ccf8e; --good-ink: #5fe0a5; --warn: #ffad3d; --warn-ink: #ffc46b; --crit: #ff6b5e; --crit-ink: #ff8a80;
   --btn-shadow: 0 1px 0 rgba(0, 0, 0, 0.3); --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.6); color-scheme: dark;
 }
 
@@ -108,7 +113,7 @@ kbd { font-family: var(--font-mono); font-size: 0.68rem; font-weight: 500; color
 .nav .count { font-family: var(--font-mono); font-size: 0.75rem; color: var(--rail-ink-strong); }
 .nav-sec { font-size: 0.78rem; color: var(--muted); padding: 0 8px 4px; }
 .sq { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--axis); }
-.sq.over { background: var(--accent); }
+.sq.over { background: var(--crit); }
 .sq.risk { background: var(--warn); }
 .rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; font-size: 0.82rem; }
 .rail-foot .select { background: var(--surface); border-color: var(--rail-line); color: var(--rail-ink-strong); }
@@ -893,7 +898,7 @@ table.plan td:first-child a:hover { color: var(--ink-2); }
 .ib-minor div { display: flex; flex-direction: column; gap: 2px; }
 .ib-minor strong { font-size: 1.05rem; font-weight: 500; letter-spacing: -0.01em; }
 @media (max-width: 900px) { .ib-stats { border-top: 0; } .ib-hero { border-right: 0; padding: 14px 0; min-width: 0; flex: 1 1 100%; } .ib-minor { padding: 4px 0 14px; gap: 14px 28px; } }
-.alert { color: var(--accent); }
+.alert { color: var(--crit-ink); }
 .ib-group { display: flex; flex-direction: column; }
 .ib-group-label { display: flex; align-items: baseline; gap: 8px; padding: 22px 20px 6px; font-size: 0.8rem; font-weight: 600; color: var(--ink); }
 .ib-group-label span { font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -917,13 +922,13 @@ a.ib-row:hover, button.ib-row:hover { background: var(--hover); }
 .ib-ring { justify-self: center; }
 .ib-ring .track { fill: none; stroke: var(--line); stroke-width: 2.5; }
 .ib-ring .arc { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke: var(--warn); }
-.ib-ring.over .arc { stroke: var(--accent); }
+.ib-ring.over .arc { stroke: var(--crit); }
 .ib-ring.ok .arc { stroke: var(--muted); }
 .nav .ib-ring { flex: none; }
 .ib-date { color: var(--ink-2); }
 .ib-date::after { content: "·"; margin: 0 6px; color: var(--muted); }
 .ib-dot { width: 8px; height: 8px; border-radius: 50%; justify-self: center; box-sizing: border-box; }
-.ib-dot.over { background: var(--accent); }
+.ib-dot.over { background: var(--crit); }
 .ib-dot.risk { background: var(--warn); }
 .ib-dot.ring { border: 1.5px solid var(--muted); }
 .ib-dot.dashed { width: 14px; height: 14px; border: 1.5px dashed var(--muted); }
@@ -936,7 +941,7 @@ a.ib-row:hover, button.ib-row:hover { background: var(--hover); }
 .ib-bar { position: relative; display: flex; height: 6px; border-radius: 3px; background: var(--surface-2); }
 .ib-bar .act { background: var(--ink); border-radius: 3px 0 0 3px; }
 .ib-bar .fc { background: var(--axis); }
-.ib-bar .fc.over { background: color-mix(in srgb, var(--accent) 55%, var(--surface)); }
+.ib-bar .fc.over { background: color-mix(in srgb, var(--crit) 55%, var(--surface)); }
 .ib-bar .bud { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ink); }
 .ib-figs { margin: 0; display: flex; flex-direction: column; }
 .ib-figs div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
@@ -988,7 +993,7 @@ body.dialog-open { overflow: hidden; }
 .dialog-foot-left, .dialog-foot-right { display: flex; gap: 8px; align-items: center; }
 .dialog-foot-right { margin-left: auto; }
 .req-note { font-size: 0.76rem; color: var(--muted); }
-.req { color: var(--accent); font-weight: 600; }
+.req { color: var(--crit); font-weight: 600; }
 .dialog-error { margin: 12px 0 0; }
 .form-dialog .field-label { font-size: 0.8rem; font-weight: 600; color: var(--ink); }
 .form-dialog .field { gap: 5px; }
@@ -1021,3 +1026,52 @@ body.dialog-open { overflow: hidden; }
 @media (hover: hover) { .report-item:hover { background: var(--hover); } }
 .address-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-s); font-size: 0.88rem; }
 #plan-editor .plan-editor-rows { padding: 0; }
+
+/* ---------- «Bunt mit System»: each figure gets its own hue, the main colour marks actions ---------- */
+.tiles { gap: 10px; background: none; border: 0; border-radius: 0; overflow: visible; }
+.tiles > .card { --hue: var(--hue-1); border: 1px solid color-mix(in srgb, var(--hue) 20%, var(--surface)); border-radius: var(--radius); background: color-mix(in srgb, var(--hue) 9%, var(--surface)); }
+.tiles > .card:nth-child(4n + 2) { --hue: var(--hue-2); }
+.tiles > .card:nth-child(4n + 3) { --hue: var(--hue-3); }
+.tiles > .card:nth-child(4n + 4) { --hue: var(--hue-4); }
+.tiles > .card .value { color: color-mix(in srgb, var(--hue) 62%, var(--ink)); }
+.tiles > .card .label, .tiles > .card .eyebrow, .tiles > .card .delta { color: color-mix(in srgb, var(--hue) 45%, var(--ink-2)); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+@media (hover: hover) { .btn.primary:hover { background: var(--primary-top); border-color: var(--primary-top); color: var(--primary-ink); } }
+@media (hover: hover) { .btn.ghost:hover { color: var(--accent-strong); } }
+.rail { border-right: 1px solid var(--rail-line); }
+.nav a.active { background: var(--rail-active); color: var(--rail-active-ink); font-weight: 600; }
+.nav a.active svg { color: var(--accent); }
+.nav .count { font-family: var(--font-ui); font-size: 0.7rem; font-weight: 600; color: var(--accent-ink); background: var(--accent); border-radius: 99px; padding: 0 7px; line-height: 18px; }
+.brand-mark { background: var(--brand); color: #ffffff; border-radius: 6px; }
+.pill.ok { color: var(--good-ink); background: color-mix(in srgb, var(--good) 13%, transparent); }
+.pill.risk { color: var(--warn-ink); background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.pill.over { color: var(--crit-ink); background: color-mix(in srgb, var(--crit) 12%, transparent); }
+.who { background: var(--accent-soft); color: var(--accent-strong); }
+.seg button.on { color: var(--accent-strong); }
+.dialog-head h2 { color: var(--ink); }
+.field-section legend { color: var(--accent-strong); }
+.react-grid-item { --hue: var(--hue-1); }
+.react-grid-item:nth-child(4n + 2) { --hue: var(--hue-2); }
+.react-grid-item:nth-child(4n + 3) { --hue: var(--hue-3); }
+.react-grid-item:nth-child(4n + 4) { --hue: var(--hue-4); }
+.card.widget:has(.kpi) { background: color-mix(in srgb, var(--hue) 9%, var(--surface)); border-color: color-mix(in srgb, var(--hue) 20%, var(--surface)); }
+.card.widget:has(.kpi) .widget-head h2 { color: color-mix(in srgb, var(--hue) 50%, var(--ink-2)); }
+.kpi .value { color: color-mix(in srgb, var(--hue, var(--brand)) 62%, var(--ink)); }
+.ib-hero { background: color-mix(in srgb, var(--hue-1) 8%, var(--surface)); }
+.ib-hero strong { color: color-mix(in srgb, var(--hue-1) 62%, var(--ink)); }
+.ib-minor > div:nth-child(1) strong { color: color-mix(in srgb, var(--hue-2) 70%, var(--ink)); }
+.ib-minor > div:nth-child(2) strong { color: color-mix(in srgb, var(--hue-3) 70%, var(--ink)); }
+.ib-minor > div:nth-child(3) strong { color: color-mix(in srgb, var(--hue-4) 75%, var(--ink)); }
+.ib-spark .line { stroke: var(--hue-1); stroke-width: 2; }
+.ib-spark .area { fill: color-mix(in srgb, var(--hue-1) 14%, transparent); }
+.ib-spark .dot { stroke: var(--hue-1); }
+.ib-row.on { background: var(--accent-soft); }
+.ib-row.on::before { background: var(--accent); width: 3px; }
+.ib-bar .act { background: var(--accent); }
+.ib-av { background: var(--accent-soft); color: var(--accent-strong); border-color: transparent; }
+.bar > span { background: var(--good); }
+.btn.primary:disabled, .btn.primary:disabled:hover { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); opacity: 0.45; }
+.cal-badge, .toast { background: var(--accent-strong); color: #ffffff; }
+.scan-bar span { background: var(--accent); }
+.page-head h1 { color: var(--ink); }
+.sub-banner:not(.warn):not(.crit) { background: var(--accent-soft); border-color: color-mix(in srgb, var(--brand) 22%, var(--surface)); }

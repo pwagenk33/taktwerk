@@ -109,7 +109,7 @@ describe("invitation and password reset by e-mail", () => {
     expect(res.statusCode).toBe(201);
     const mail = t.mailer.outbox.at(-1)!;
     expect(mail.to).toBe("reto@firma.ch");
-    expect(mail.html).toContain("#D52B1E");
+    expect(mail.html).toContain("#6D4CF0");
     const token = decodeURIComponent(mail.text.match(/token=([^\s]+)/)![1]);
     expect((await post("/api/auth/password/set", "", { token, password: "kurz" })).statusCode).toBe(400);
     expect((await post("/api/auth/password/set", "", { token, password: "ein-gutes-passwort" })).statusCode).toBe(200);

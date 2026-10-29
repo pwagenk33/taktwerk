@@ -10,6 +10,7 @@ import { Icon } from "../ui/components";
 import { OrgDialog, ROLE_LABEL, ReportDialog, TeamDialog, UserDialog } from "./SettingsDialogs";
 
 export const PRESETS = [
+  { name: "Violett", color: "#6D4CF0" },
   { name: "Schweizer Rot", color: "#D52B1E" },
   { name: "Bordeaux", color: "#8C1D2F" },
   { name: "Tannengrün", color: "#1F6B4A" },
