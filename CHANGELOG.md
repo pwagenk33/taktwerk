@@ -4,11 +4,10 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 
 ## Unveröffentlicht
 
+### Neu
 - Neue Farben «Bunt mit System»: Violett als Hauptfarbe, jede Kennzahl mit eigener Farbe, Ampeln unabhängig von der Hauptfarbe. Firmen mit der bisherigen Standardfarbe Rot erhalten Violett; eine eigene Farbe bleibt.
 - Alles, was man anlegt oder bearbeitet, öffnet sich jetzt in einem einheitlichen Fenster mit Pflichtfeldern, Hinweisen und Fehlern direkt am Feld.
 - Die Website läuft lokal unter http://website.localhost:3000.
-
-### Neu
 - Jira Cloud verbinden (Einstellungen → Jira): Anmeldung bei Atlassian mit einem Klick, Jira-Projekte übernehmen oder bestehenden Projekten zuordnen, Epics werden zu Subprojekten, Issues und Story Points werden alle 15 Minuten abgeglichen.
 - Roadmap-Seite auf der Website.
 - Öffentliche Website für trackinsight.ch: Funktionen, Preise direkt aus den Paketen, Sicherheit und Datenschutz, Kontaktformular sowie Vorlagen für Impressum, Datenschutz, AGB und AVV. Läuft im selben Container wie die App.
