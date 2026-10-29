@@ -5,6 +5,7 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 ## Unveröffentlicht
 
 ### Neu
+- Öffentliche Website für trackinsight.ch: Funktionen, Preise direkt aus den Paketen, Sicherheit und Datenschutz, Kontaktformular sowie Vorlagen für Impressum, Datenschutz, AGB und AVV. Läuft im selben Container wie die App.
 - SaaS-Betrieb mit Abo (Umgebungsvariable `SAAS=true`): Pakete Start, Team und Business nach Teamgrösse, 30 Tage kostenlos testen, Bezahlung per Karte über Stripe oder auf Rechnung, monatlich oder jährlich mit zwei Gratismonaten.
 - Einstellungen → Abo: Paket wählen und wechseln, Personen im Paket, Kündigen und Kündigung zurücknehmen, Zahlungsdaten und Quittungen.
 - Hinweis oben in der App, wenn die Testphase bald endet oder eine Zahlung offen ist; ohne Paket bleiben alle Daten lesbar und exportierbar.

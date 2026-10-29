@@ -1,0 +1,47 @@
+<!--@head title="Kontakt und Demo · TrackInsight" description="Demo vereinbaren oder eine Frage stellen. Wir zeigen Ihnen TrackInsight mit Ihren eigenen Projekten."-->
+<body>
+<!--@header-->
+<main id="inhalt">
+  <section class="page-head">
+    <div class="wrap">
+      <p class="eyebrow">Kontakt</p>
+      <h1 class="h-xl" style="max-width:14ch">Lieber zuerst reden?</h1>
+      <p class="lead">In einer halben Stunde zeigen wir Ihnen TrackInsight am Beispiel Ihrer eigenen Kunden und Projekte. Oder Sie stellen einfach Ihre Frage.</p>
+    </div>
+  </section>
+
+  <div class="wrap contact-grid" style="padding-bottom:112px">
+    <form class="form" id="contact-form">
+      <div class="row2">
+        <div class="field"><label for="c-name">Name</label><input id="c-name" name="name" autocomplete="name" required maxlength="120"></div>
+        <div class="field"><label for="c-company">Firma</label><input id="c-company" name="company" autocomplete="organization" maxlength="120"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="c-email">E-Mail</label><input id="c-email" name="email" type="email" autocomplete="email" required maxlength="200"></div>
+        <div class="field"><label for="c-phone">Telefon <span>freiwillig</span></label><input id="c-phone" name="phone" type="tel" autocomplete="tel" maxlength="40"></div>
+      </div>
+      <div class="field">
+        <label for="c-size">Wie viele Personen erfassen Zeit?</label>
+        <select id="c-size" name="size"><option value="">Bitte wählen</option><option>1 bis 10</option><option>11 bis 50</option><option>51 bis 200</option><option>Mehr als 200</option></select>
+      </div>
+      <div class="field"><label for="c-msg">Ihre Nachricht</label><textarea id="c-msg" name="message" required maxlength="4000" placeholder="Zum Beispiel: Wir sind eine Agentur mit 25 Personen und rechnen heute mit Excel ab."></textarea></div>
+      <div class="hp" aria-hidden="true"><label for="c-web">Website</label><input id="c-web" name="website" tabindex="-1" autocomplete="off"></div>
+      <div><button class="btn primary large" type="submit">Anfrage senden</button></div>
+      <p class="form-msg" id="form-msg" role="status" hidden></p>
+      <p class="form-note">Wir verwenden Ihre Angaben nur, um Ihre Anfrage zu beantworten. Mehr in der <a href="/datenschutz">Datenschutzerklärung</a>.</p>
+    </form>
+    <aside class="contact-aside">
+      <dl>
+        <dt>E-Mail</dt><dd><span class="ph">[kontakt@trackinsight.ch]</span></dd>
+        <dt>Telefon</dt><dd><span class="ph">[+41 xx xxx xx xx]</span></dd>
+        <dt>Adresse</dt><dd><span class="ph">[Firma, Strasse, PLZ Ort]</span></dd>
+      </dl>
+      <div>
+        <p style="font-weight:600">Lieber gleich selbst ausprobieren?</p>
+        <p style="color:var(--ink-2);margin:6px 0 16px">{{trialDays}} Tage mit allen Funktionen, ohne Kreditkarte.</p>
+        <a class="btn" href="%APP_URL%/registrieren?paket=team">Firma registrieren</a>
+      </div>
+    </aside>
+  </div>
+</main>
+<!--@footer-->

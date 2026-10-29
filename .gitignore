@@ -5,3 +5,4 @@ dist-single
 .env
 data/
 deploy/.env.prod
+website/.plans.mjs

@@ -44,6 +44,8 @@ const schema = z.object({
   OPERATOR_EMAIL: optional,
   /** Directory with the built web app; served by the API server in production. */
   WEB_DIST: optional,
+  /** Directory with the built public website (website/dist); served on SAAS_BASE_DOMAIN and www.<base> when APP_URL runs on another host. */
+  WEBSITE_DIR: optional,
   /** Where uploaded files (receipts) are stored. */
   DATA_DIR: z.string().default("./data"),
 });

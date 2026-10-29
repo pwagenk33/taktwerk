@@ -384,10 +384,10 @@ Das löscht die Firma mit allen Personen, Buchungen, Rechnungen und Protokollen.
 Für den Verkauf als Abo an viele Firmen. Selbst gehostete Installationen überspringen diesen Abschnitt.
 
 1. **DNS:** zusätzlich zu `trackinsight.ch` einen Wildcard-Eintrag `*.trackinsight.ch` (A-Record) auf die IP der VM. Jede Firma ist danach unter `<kürzel>.trackinsight.ch` erreichbar; Caddy holt das Zertifikat beim ersten Aufruf, aber nur für Adressen, die die App kennt.
-2. **`deploy/.env.prod`:** `SAAS=true`, `SAAS_BASE_DOMAIN=trackinsight.ch`, `REGISTRATION_OPEN=true`, `OPERATOR_EMAIL=…`.
+2. **`deploy/.env.prod`:** `APP_DOMAIN=app.trackinsight.ch`, `APP_URL=https://app.trackinsight.ch`, `SAAS=true`, `SAAS_BASE_DOMAIN=trackinsight.ch`, `REGISTRATION_OPEN=true`, `OPERATOR_EMAIL=…`. Die App läuft so auf `app.trackinsight.ch`, die Website auf `trackinsight.ch` (siehe unten). Die Redirect-URIs für Microsoft und Google zeigen dann ebenfalls auf `https://app.trackinsight.ch/…`.
 3. **Bezahlung:**
    - *Ohne Stripe* (Start): Firmen wählen ein Paket, es ist sofort aktiv, und an `OPERATOR_EMAIL` geht «Rechnung stellen». Bei jeder Verlängerung kommt die Meldung wieder. Bleibt eine Rechnung offen, unter Einstellungen → Betreiber den Status anpassen.
-   - *Mit Stripe:* in Stripe drei Produkte mit je einem Monats- und Jahrespreis anlegen, die Preis-IDs in `STRIPE_PRICES` eintragen, den Webhook auf `https://trackinsight.ch/api/billing/webhook` einrichten (Ereignisse siehe `.env.prod.example`) und `STRIPE_SECRET_KEY` und `STRIPE_WEBHOOK_SECRET` setzen. Firmen zahlen dann per Karte, Quittungen und Kartenwechsel laufen über das Stripe-Kundenportal.
+   - *Mit Stripe:* in Stripe drei Produkte mit je einem Monats- und Jahrespreis anlegen, die Preis-IDs in `STRIPE_PRICES` eintragen, den Webhook auf `https://app.trackinsight.ch/api/billing/webhook` einrichten (Ereignisse siehe `.env.prod.example`) und `STRIPE_SECRET_KEY` und `STRIPE_WEBHOOK_SECRET` setzen. Firmen zahlen dann per Karte, Quittungen und Kartenwechsel laufen über das Stripe-Kundenportal.
 4. `docker compose -f deploy/docker-compose.prod.yml up -d` (Caddy liest das neue Caddyfile).
 
 **Ablauf für eine Firma:** Registrierung unter `/registrieren` (ein Paket vorwählbar mit `?paket=start|team|business`) → 30 Tage Testphase → Erinnerung 7 Tage und 1 Tag vor Ende → nach dem Ende noch 7 Tage Schonfrist → danach nur lesend, bis ein Paket gewählt ist. Daten werden nie automatisch gelöscht.
@@ -395,6 +395,8 @@ Für den Verkauf als Abo an viele Firmen. Selbst gehostete Installationen übers
 **Grenzen pro Paket:** Start bis 10, Team bis 50, Business bis 200 aktive Personen (Kundenportal und Treuhand zählen nicht). Ressourcenplanung, Kundenportal und Forecast ab Team; Treuhand-Zugang und eigene Domain ab Business. Bestehende Firmen beim Umstellen auf `SAAS=true` starten mit Business, Status aktiv.
 
 **Eigene Domain (Business):** Die Firma trägt sie unter Einstellungen → Abo ein und setzt bei ihrem Domain-Anbieter einen CNAME auf `<kürzel>.trackinsight.ch`.
+
+**Website:** Die öffentliche Website (Ordner `website/`, gebaut nach `website/dist`) liefert derselbe Container aus, sobald `SAAS_BASE_DOMAIN` gesetzt ist und `APP_URL` auf einer anderen Adresse läuft. `trackinsight.ch` zeigt dann Startseite, Funktionen, Preise, Sicherheit, Kontakt, Impressum, Datenschutz, AGB und AVV; `www.trackinsight.ch` leitet dorthin um. Die Preise kommen aus `packages/domain/src/plans.ts`, App und Website zeigen also immer dieselben Pakete. Das Kontaktformular schickt an `OPERATOR_EMAIL` (höchstens 5 Anfragen pro Stunde und Adresse). Texte ändern: Dateien in `website/src/pages` bearbeiten, dann wie gewohnt neu bauen. Vorschau ohne Server: `npm run build -w website -- --preview --out=/tmp/site` und `index.html` öffnen. Platzhalter in eckigen Klammern (Firma, Adresse, UID) sind gelb markiert und müssen vor dem Start ersetzt werden; AGB und Datenschutzerklärung vorher rechtlich prüfen lassen.
 
 ## 16. Kurzreferenz
 

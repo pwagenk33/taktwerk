@@ -29,6 +29,7 @@ import { planningRoutes } from "./routes/planning";
 import { portalRoutes } from "./routes/portal";
 import { platformRoutes } from "./routes/platform";
 import { statusRoutes } from "./routes/status";
+import { contactRoutes, serveWebsite } from "./routes/website";
 import { securityRoutes } from "./routes/security";
 import { privacyRoutes } from "./routes/privacy";
 import { subscriptionRoutes } from "./routes/subscription";
@@ -188,6 +189,9 @@ export async function buildApp(ctx: AppContext) {
 
   const mainOrigin = new URL(ctx.config.APP_URL).origin;
 
+  // The public website on the base domain answers before sessions and tenants are looked at.
+  serveWebsite(app, ctx);
+
   // CSRF: state-changing API calls must come from our own origin (cookies are SameSite=Lax as second layer).
   // With several organizations on their own domains, the request's own host is an accepted origin too.
   app.addHook("onRequest", async (req) => {
@@ -271,6 +275,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(privacyRoutes);
   await app.register(presenceRoutes);
   await app.register(subscriptionRoutes);
+  await app.register(contactRoutes);
 
   // Production: serve the built web app with SPA fallback.
   const webDist = ctx.config.WEB_DIST ? resolve(ctx.config.WEB_DIST) : null;
