@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Role } from "@taktwerk/domain";
 import { Closing } from "./pages/Closing";
 import { Dashboard } from "./pages/Dashboard";
+import { Inbox, useInbox, useVisibleReports } from "./pages/Inbox";
 import { Planning } from "./pages/Planning";
 import { Portal } from "./pages/Portal";
 import { Profile } from "./pages/Profile";
@@ -77,7 +78,7 @@ function VersionInfo({ mode }: { mode: "demo" | "api" }) {
 }
 
 const PAGES = [
-  { id: "dashboard", label: "Übersicht", icon: Icon.dashboard, lead: false },
+  { id: "eingang", label: "Eingang", icon: Icon.inbox, lead: false },
   { id: "zeit", label: "Zeiterfassung", icon: Icon.clock, lead: false },
   { id: "arbeitszeit", label: "Absenzen", icon: Icon.balance, lead: false },
   { id: "abschluss", label: "Monatsabschluss", icon: Icon.check, lead: false },
@@ -85,6 +86,7 @@ const PAGES = [
   { id: "planung", label: "Planung", icon: Icon.plan, lead: true },
   { id: "reports", label: "Reports", icon: Icon.report, lead: true },
   { id: "velocity", label: "Velocity", icon: Icon.velocity, lead: true },
+  { id: "dashboard", label: "Dashboard", icon: Icon.dashboard, lead: false },
   { id: "einstellungen", label: "Einstellungen", icon: Icon.settings, lead: true, admin: true },
   { id: "profil", label: "Profil", icon: Icon.settings, lead: false, hidden: true },
 ] as const;
@@ -94,7 +96,13 @@ const ROLE_LABEL: Record<Role, string> = { admin: "Admin · Anna Keller", consul
 /** Lead pages a project lead may open as well. */
 const PROJECT_LEAD_PAGES: PageId[] = ["projekte", "planung", "reports"];
 /** Pages shown in the phone tab bar; the rest sit behind "Mehr". */
-const PHONE_TABS: PageId[] = ["dashboard", "zeit", "arbeitszeit", "projekte"];
+const PHONE_TABS: PageId[] = ["eingang", "zeit", "arbeitszeit", "projekte"];
+/** Rail sections: daily work on top, evaluations below the project list. */
+const DAILY: PageId[] = ["eingang", "zeit", "arbeitszeit", "abschluss"];
+const EVALUATE: PageId[] = ["projekte", "planung", "reports", "velocity", "dashboard"];
+/** Projects listed in the rail; the rest are one click away under «Kunden & Projekte». */
+const RAIL_PROJECTS = 6;
+const SEVERITY = { over: 0, risk: 1, ok: 2 } as const;
 
 const THEMES: { id: Theme; label: string; icon: () => JSX.Element }[] = [
   { id: "light", label: "Hell", icon: Icon.sun },
@@ -105,7 +113,7 @@ const THEMES: { id: Theme; label: string; icon: () => JSX.Element }[] = [
 /** "#projekte/c/abc" → page "projekte"; the rest of the hash is read by the page itself. */
 function readHash(): PageId {
   const h = location.hash.replace("#", "").split("/")[0];
-  return (PAGES.find((p) => p.id === h)?.id ?? "dashboard") as PageId;
+  return (PAGES.find((p) => p.id === h)?.id ?? "eingang") as PageId;
 }
 
 /** Tells the time-tracking page to open the booking dialog; navigates there first if needed. */
@@ -150,11 +158,15 @@ const isTyping = (el: EventTarget | null) => el instanceof HTMLElement && (el.is
 export function App() {
   const { role, setRole, toast, branding, mode, me, logout, pending, flushOutbox, scope } = useStore();
   const [page, setPage] = useState<PageId>(readHash);
+  const [hash, setHash] = useState(location.hash);
   const [theme, setTheme] = useTheme();
   const [palette, setPalette] = useState(false);
   const [more, setMore] = useState(false);
   const [setup, setSetup] = useState(false);
   const sub = useSubscription();
+  const inboxCount = useInbox().reduce((n, g) => n + g.items.length, 0);
+  const projects = useVisibleReports();
+  const openProject = page === "projekte" ? hash.match(/^#projekte\/p\/([^/]+)/)?.[1] ?? null : null;
   const locked = !!sub && !canWrite(sub);
 
   // New companies: the setup wizard opens for admins until it is finished or put off.
@@ -169,7 +181,7 @@ export function App() {
   }, [role, mode]);
 
   useEffect(() => {
-    const onHash = () => { setPage(readHash()); setMore(false); };
+    const onHash = () => { setPage(readHash()); setHash(location.hash); setMore(false); };
     window.addEventListener("hashchange", onHash);
     const onKey = (ev: KeyboardEvent) => {
       if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "k") { ev.preventDefault(); setPalette((p) => !p); return; }
@@ -186,29 +198,48 @@ export function App() {
 
   const allowed = PAGES.filter((p) => (!p.lead || scope.seesAll || (scope.leadsProjects.length > 0 && PROJECT_LEAD_PAGES.includes(p.id))) && !("admin" in p && role !== "admin"));
   const visible = allowed.filter((p) => !("hidden" in p));
-  const current = allowed.some((p) => p.id === page) ? page : "dashboard";
+  const current = allowed.some((p) => p.id === page) ? page : "eingang";
   const name = me?.name ?? ROLE_LABEL[role].split(" · ")[1];
   const initials = name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("");
   const tabs = visible.filter((p) => PHONE_TABS.includes(p.id));
   const rest = visible.filter((p) => !PHONE_TABS.includes(p.id));
 
-  const navLink = (p: (typeof PAGES)[number]) => (
-    <a key={p.id} href={`#${p.id}`} className={current === p.id ? "active" : ""} aria-label={p.label}>
-      <p.icon />
-      <span>{p.label}</span>
+  const navLink = (p: (typeof PAGES)[number], count?: number) => (
+    <a key={p.id} href={`#${p.id}`} className={current === p.id && !(p.id === "projekte" && openProject) ? "active" : ""}>
+      <span className="nm">{p.label}</span>
+      {!!count && <span className="count">{count}</span>}
     </a>
   );
+  const evaluate = visible.filter((p) => EVALUATE.includes(p.id));
+  const settings = visible.find((p) => p.id === "einstellungen");
+  const railProjects = [...projects].sort((a, b) => SEVERITY[a.status] - SEVERITY[b.status] || a.project.name.localeCompare(b.project.name, "de")).slice(0, RAIL_PROJECTS);
 
   return (
     <div className="shell" data-readonly={scope.readOnly || locked || undefined}>
       <aside className="rail">
-        <div className="brand"><BrandMark logo={branding.logo} /><span>{branding.appName}</span></div>
-        <nav className="nav">
-          {visible.filter((p) => !p.lead).map(navLink)}
-          {visible.some((p) => p.lead) && <span className="nav-sec">Leitung</span>}
-          {visible.filter((p) => p.lead).map(navLink)}
+        <div className="brand"><BrandMark logo={branding.logo} size={22} /><span>{branding.appName}</span></div>
+        <nav className="nav" aria-label="Hauptnavigation">
+          {visible.filter((p) => DAILY.includes(p.id)).map((p) => navLink(p, p.id === "eingang" ? inboxCount : undefined))}
         </nav>
+        {railProjects.length > 0 && (
+          <nav className="nav" aria-label="Projekte">
+            <span className="nav-sec">Projekte</span>
+            {railProjects.map((r) => (
+              <a key={r.project.id} href={`#projekte/p/${r.project.id}`} className={openProject === r.project.id ? "active" : ""} title={`${r.customer.name} · ${r.project.name}`}>
+                <span className={`sq ${r.status}`} aria-label={r.status === "over" ? "über Budget" : r.status === "risk" ? "knapp" : "im Budget"} />
+                <span className="nm">{r.project.name}</span>
+              </a>
+            ))}
+          </nav>
+        )}
+        {evaluate.length > 0 && (
+          <nav className="nav" aria-label="Auswerten">
+            <span className="nav-sec">Auswerten</span>
+            {evaluate.map((p) => navLink(p))}
+          </nav>
+        )}
         <div className="rail-foot">
+          {settings && <nav className="nav">{navLink(settings)}</nav>}
           {mode === "demo" && (
             <Select id="role-select" ariaLabel="Rolle" value={role} onChange={(v) => setRole(v as Role)} options={(Object.keys(ROLE_LABEL) as Role[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))} small />
           )}
@@ -226,7 +257,7 @@ export function App() {
 
       <div className="main-col">
         <header className="topbar">
-          <button className="brand brand-phone" onClick={() => (location.hash = "#dashboard")} aria-label="Zur Übersicht"><BrandMark logo={branding.logo} /></button>
+          <button className="brand brand-phone" onClick={() => (location.hash = "#eingang")} aria-label="Zum Eingang"><BrandMark logo={branding.logo} /></button>
           <button id="open-palette" className="search-btn" onClick={() => setPalette(true)} aria-label="Suchen oder Befehl eingeben">
             <Icon.search />
             <span>Suchen oder Befehl …</span>
@@ -239,7 +270,7 @@ export function App() {
             <>
               <HeaderTimer />
               <button id="topbar-new" className="btn primary new-btn" onClick={() => requestNewEntry()}>
-                <span className="plus">+</span><span>Buchen</span><kbd>N</kbd>
+                <span className="plus">+</span><span>Zeit buchen</span><kbd>N</kbd>
               </button>
             </>
           )}
@@ -248,8 +279,9 @@ export function App() {
           </a>
         </header>
         <SubscriptionBanner />
-        <main className="main">
-          {current === "dashboard" && <Dashboard key={role === "employee" ? "employee" : "lead"} firstName={name.split(/\s+/)[0]} />}
+        <main className={`main ${current === "eingang" ? "flush" : ""}`}>
+          {current === "eingang" && <Inbox firstName={name.split(/\s+/)[0]} />}
+          {current === "dashboard" && <Dashboard key={role === "employee" ? "employee" : "lead"} />}
           {current === "zeit" && <TimeTracking />}
           {current === "arbeitszeit" && <WorkTime />}
           {current === "abschluss" && <Closing />}

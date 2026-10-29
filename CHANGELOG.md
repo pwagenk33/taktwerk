@@ -11,6 +11,11 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 - Jede Firma unter ihrer eigenen Adresse (firma.trackinsight.ch), Business auch unter einer eigenen Domain mit automatischem Zertifikat.
 - Einrichtungsassistent für neue Firmen: Name und Farbe, Arbeitszeit, erster Kunde mit Projekt, Team einladen.
 - Betreiber-Übersicht mit monatlichem Umsatz, zahlenden Firmen, Testphasen und Paket pro Firma.
+- Neue Startseite «Eingang»: knappe Budgets, offene Freigaben (Absenzen, Spesen, Monatsabschlüsse) und eigene Pendenzen in einer Liste, direkt bewilligen oder ablehnen, Details zum Budget in der rechten Spalte.
+
+### Neu gestaltet
+- Ruhiges, einfarbiges Erscheinungsbild mit der Schrift Geist; Schwarz für Aktionen, die Firmenfarbe nur noch für das, was Aufmerksamkeit braucht.
+- Menü ohne Symbole mit Zähler beim Eingang, den Projekten mit Budgetstatus und dem Bereich «Auswerten». Das anpassbare Widget-Dashboard ist dort unter «Dashboard» zu finden.
 
 ### Verbessert
 - Wer diesen Monat neu angefangen hat, sieht keinen Hinweis mehr auf einen offenen Vormonat.

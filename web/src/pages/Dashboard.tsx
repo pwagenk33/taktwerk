@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { Responsive, WidthProvider, type Layout, type Layouts } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
-import { addMonths, fmtMonthLong, monthOf } from "@taktwerk/domain";
+import { fmtMonthLong, monthOf } from "@taktwerk/domain";
 import { loadLocal, saveLocal, useStore } from "../store";
 import { Icon } from "../ui/components";
 import { WIDGETS, type WidgetConfig } from "../widgets/registry";
@@ -70,21 +70,9 @@ function defaults(employee: boolean): DashboardState {
   return employee ? { items: EMPLOYEE_ITEMS, layouts: { lg: EMPLOYEE_LG } } : { items: DEFAULT_ITEMS, layouts: { lg: DEFAULT_LG } };
 }
 
-function greeting(): string {
-  const h = new Date().getHours();
-  return h < 11 ? "Guten Morgen" : h < 17 ? "Guten Tag" : "Guten Abend";
-}
-
-export function Dashboard({ firstName }: { firstName: string }) {
-  const { role, data, mode, closings, currentUserId, questions } = useStore();
+export function Dashboard() {
+  const { role, data, mode } = useStore();
   const employee = role === "employee";
-  const myQuestions = questions.filter((q) => q.ownerId === currentUserId);
-  const teamQuestions = employee ? [] : questions.filter((q) => q.ownerId !== currentUserId);
-  const lastMonth = addMonths(monthOf(data.today), -1);
-  // People who started recording this month (e.g. a new company) have nothing to submit for last month.
-  const myStart = data.employees.find((e) => e.id === currentUserId)?.trackingStart;
-  const myLastOpen = (!myStart || myStart.slice(0, 7) <= lastMonth) && !closings.some((c) => c.userId === currentUserId && c.month === lastMonth);
-  const waiting = employee ? 0 : closings.filter((c) => c.month === lastMonth && c.status === "submitted").length;
   const key = `rt.dashboard.${employee ? "employee" : "lead"}`;
   const [state, setStateRaw] = useState<DashboardState>(() => loadLocal(key, defaults(employee)));
   const [editing, setEditing] = useState(false);
@@ -128,17 +116,9 @@ export function Dashboard({ firstName }: { firstName: string }) {
 
   return (
     <>
-      {(myLastOpen || waiting > 0 || myQuestions.length > 0 || teamQuestions.length > 0) && (
-        <div className="todo-strip">
-          {myQuestions.length > 0 && <a href={`#zeit/e/${myQuestions[0].entryId}`} className="todo"><span className="pill risk">{myQuestions.length}</span>{myQuestions.length === 1 ? "Rückfrage zu deiner Buchung" : "Rückfragen zu deinen Buchungen"}<span className="todo-go">Antworten →</span></a>}
-          {teamQuestions.length > 0 && <a href={`#zeit/e/${teamQuestions[0].entryId}`} className="todo"><span className="pill neutral">{teamQuestions.length}</span>{teamQuestions.length === 1 ? "Rückfrage im Team unbeantwortet" : "Rückfragen im Team unbeantwortet"}<span className="todo-go">Ansehen →</span></a>}
-          {myLastOpen && <a href="#abschluss" className="todo"><span className="pill risk">Offen</span>{fmtMonthLong(lastMonth)} noch nicht eingereicht<span className="todo-go">Einreichen →</span></a>}
-          {waiting > 0 && <a href="#abschluss" className="todo"><span className="pill risk">{waiting}</span>{waiting === 1 ? "Monat wartet" : "Monate warten"} auf deine Freigabe<span className="todo-go">Prüfen →</span></a>}
-        </div>
-      )}
       <div className="page-head">
         <div>
-          <h1>{greeting()}, {firstName}</h1>
+          <h1>Dashboard</h1>
           <p className="sub">{fmtMonthLong(monthOf(data.today))} · {employee ? "Meine Zahlen" : "Alle Kunden und Projekte"}</p>
         </div>
         <div className="toolbar">
