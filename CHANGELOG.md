@@ -5,6 +5,8 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 ## Unveröffentlicht
 
 ### Neu
+- Jira Cloud verbinden (Einstellungen → Jira): Anmeldung bei Atlassian mit einem Klick, Jira-Projekte übernehmen oder bestehenden Projekten zuordnen, Epics werden zu Subprojekten, Issues und Story Points werden alle 15 Minuten abgeglichen.
+- Roadmap-Seite auf der Website.
 - Öffentliche Website für trackinsight.ch: Funktionen, Preise direkt aus den Paketen, Sicherheit und Datenschutz, Kontaktformular sowie Vorlagen für Impressum, Datenschutz, AGB und AVV. Läuft im selben Container wie die App.
 - SaaS-Betrieb mit Abo (Umgebungsvariable `SAAS=true`): Pakete Start, Team und Business nach Teamgrösse, 30 Tage kostenlos testen, Bezahlung per Karte über Stripe oder auf Rechnung, monatlich oder jährlich mit zwei Gratismonaten.
 - Einstellungen → Abo: Paket wählen und wechseln, Personen im Paket, Kündigen und Kündigung zurücknehmen, Zahlungsdaten und Quittungen.

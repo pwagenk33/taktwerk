@@ -378,6 +378,26 @@ export const jiraIssues = mysqlTable(
   (t) => [primaryKey({ columns: [t.organizationId, t.key] }), index("ji_sub_idx").on(t.subProjectId)],
 );
 
+/**
+ * Connection of a company to its Jira Cloud site (Atlassian OAuth 2.0, 3LO). One site per company.
+ * The refresh token is only usable together with ATLASSIAN_CLIENT_SECRET, which lives in the environment, not here.
+ */
+export const jiraConnections = mysqlTable("jira_connections", {
+  organizationId: id("organization_id").primaryKey().references(() => organizations.id, { onDelete: "cascade" }),
+  cloudId: varchar("cloud_id", { length: 64 }).notNull(),
+  siteUrl: varchar("site_url", { length: 255 }).notNull(),
+  siteName: varchar("site_name", { length: 255 }).notNull(),
+  accessToken: varchar("access_token", { length: 4096 }).notNull(),
+  refreshToken: varchar("refresh_token", { length: 4096 }),
+  expiresAt: datetime("expires_at", { mode: "date" }).notNull(),
+  /** Custom field ids that hold story points («Story Points», «Story point estimate»), found at connect time. */
+  storyPointFields: json<string[]>("story_point_fields").notNull(),
+  connectedBy: id("connected_by").references(() => users.id, { onDelete: "set null" }),
+  lastSyncAt: datetime("last_sync_at", { mode: "date" }),
+  lastResult: json<{ ok: boolean; message: string; issues?: number; projects?: number }>("last_result"),
+  createdAt: createdAt(),
+});
+
 export const dashboards = mysqlTable("dashboards", {
   userId: id("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   layout: json<unknown>("layout").notNull(),

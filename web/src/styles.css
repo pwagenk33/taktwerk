@@ -967,3 +967,10 @@ a.ib-row:hover, button.ib-row:hover { background: var(--hover); }
 }
 .btn.ghost.step { text-decoration: none; width: 26px; padding: 0; font-size: 1.05rem; border-color: var(--line-strong); }
 @media (hover: hover) { .btn.ghost.step:hover { background: var(--ink); border-color: var(--ink); color: var(--surface); } }
+
+/* Settings → Jira */
+.jira-intro { display: flex; flex-direction: column; gap: 10px; max-width: 720px; }
+.jira-intro p { margin: 0; }
+.jira-site { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.jira-site h3 a { color: inherit; }
+.jira-actions { display: flex; gap: 8px; align-items: center; }

@@ -105,7 +105,7 @@ for (const file of readdirSync(join(src, "pages")).filter((f) => f.endsWith(".ht
   html = html.replace("<!--@plans-->", () => plansHtml());
   html = html.replace(/<!--@markdown ([^ ]+)-->/g, (_, p) => markdown(readFileSync(resolve(here, p), "utf8")));
   html = html.replaceAll("{{trialDays}}", String(TRIAL_DAYS));
-  html = html.replace(/href="\/(\w[\w-]*)?"/g, (m, p) => (p && NAV.concat([["impressum"], ["datenschutz"], ["agb"], ["avv"]]).some(([id]) => id === p) ? `href="${link(p)}"` : !p ? `href="${link("index")}"` : m));
+  html = html.replace(/href="\/(\w[\w-]*)?"/g, (m, p) => (p && NAV.concat([["roadmap"], ["impressum"], ["datenschutz"], ["agb"], ["avv"]]).some(([id]) => id === p) ? `href="${link(p)}"` : !p ? `href="${link("index")}"` : m));
   if (preview) html = html.replace('<html lang="de-CH">', '<html lang="de-CH" data-preview="1">').replace(/(href|src)="\/(site\.css|site\.js|favicon\.svg|img\/|fonts\/)/g, '$1="$2');
   if (appUrl) html = html.replaceAll("%APP_URL%", appUrl);
   writeFileSync(join(out, file), html);

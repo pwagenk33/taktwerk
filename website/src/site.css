@@ -324,3 +324,17 @@ td.c, th.c { text-align: center; padding-right: 0; width: 110px; }
 /* 404 */
 .notfound { padding: 140px 0; }
 .notfound .h-xl { font-family: var(--mono); letter-spacing: -0.06em; }
+
+/* Roadmap: three columns, In Arbeit / Als Nächstes / Später */
+.roadmap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1.5px solid var(--ink); }
+.roadmap > section { padding: 24px 28px 8px 0; min-width: 0; }
+.roadmap > section + section { padding-left: 28px; border-left: 1px solid var(--line); }
+.roadmap h2 { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.roadmap .dot { width: 8px; height: 8px; flex: none; }
+.roadmap .dot.now { background: var(--brand); }
+.roadmap .dot.next { background: var(--ink); }
+.roadmap .dot.later { border: 1.5px solid var(--ink); }
+.roadmap article { padding: 18px 0; border-top: 1px solid var(--line); }
+.roadmap article h3 { font-size: 1.08rem; letter-spacing: -0.012em; }
+.roadmap article p { margin-top: 6px; color: var(--ink-2); font-size: 0.97rem; }
+@media (max-width: 860px) { .roadmap { grid-template-columns: 1fr; } .roadmap > section + section { padding-left: 0; border-left: 0; margin-top: 24px; border-top: 1px solid var(--line); } }

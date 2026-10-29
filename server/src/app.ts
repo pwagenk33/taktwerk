@@ -30,6 +30,7 @@ import { portalRoutes } from "./routes/portal";
 import { platformRoutes } from "./routes/platform";
 import { statusRoutes } from "./routes/status";
 import { contactRoutes, serveWebsite } from "./routes/website";
+import { jiraRoutes } from "./routes/jira";
 import { securityRoutes } from "./routes/security";
 import { privacyRoutes } from "./routes/privacy";
 import { subscriptionRoutes } from "./routes/subscription";
@@ -276,6 +277,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(presenceRoutes);
   await app.register(subscriptionRoutes);
   await app.register(contactRoutes);
+  await app.register(jiraRoutes);
 
   // Production: serve the built web app with SPA fallback.
   const webDist = ctx.config.WEB_DIST ? resolve(ctx.config.WEB_DIST) : null;

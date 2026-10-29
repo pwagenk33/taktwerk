@@ -398,7 +398,21 @@ Für den Verkauf als Abo an viele Firmen. Selbst gehostete Installationen übers
 
 **Website:** Die öffentliche Website (Ordner `website/`, gebaut nach `website/dist`) liefert derselbe Container aus, sobald `SAAS_BASE_DOMAIN` gesetzt ist und `APP_URL` auf einer anderen Adresse läuft. `trackinsight.ch` zeigt dann Startseite, Funktionen, Preise, Sicherheit, Kontakt, Impressum, Datenschutz, AGB und AVV; `www.trackinsight.ch` leitet dorthin um. Die Preise kommen aus `packages/domain/src/plans.ts`, App und Website zeigen also immer dieselben Pakete. Das Kontaktformular schickt an `OPERATOR_EMAIL` (höchstens 5 Anfragen pro Stunde und Adresse). Texte ändern: Dateien in `website/src/pages` bearbeiten, dann wie gewohnt neu bauen. Vorschau ohne Server: `npm run build -w website -- --preview --out=/tmp/site` und `index.html` öffnen. Platzhalter in eckigen Klammern (Firma, Adresse, UID) sind gelb markiert und müssen vor dem Start ersetzt werden; AGB und Datenschutzerklärung vorher rechtlich prüfen lassen.
 
-## 16. Kurzreferenz
+## 16. Jira Cloud verbinden
+
+Firmen verbinden ihre Jira-Cloud-Site unter **Einstellungen → Jira** mit einem Klick. Dafür braucht die Installation einmalig eine App bei Atlassian (kostenlos):
+
+1. Auf [developer.atlassian.com/console/myapps](https://developer.atlassian.com/console/myapps/) mit einem Atlassian-Konto anmelden, **Create → OAuth 2.0 integration**, Name «TrackInsight».
+2. **Permissions → Jira API → Add**, danach **Configure** und unter den klassischen Berechtigungen `read:jira-work` hinzufügen.
+3. **Authorization → OAuth 2.0 (3LO) → Add**, Callback-URL `https://app.trackinsight.ch/api/jira/callback` (lokal: `http://localhost:3000/api/jira/callback`). Es zählt genau die Adresse aus `APP_URL`.
+4. **Settings**: Client ID und Secret kopieren und in `.env` (lokal) bzw. `deploy/.env.prod` als `ATLASSIAN_CLIENT_ID` und `ATLASSIAN_CLIENT_SECRET` eintragen, dann `docker compose up -d`.
+5. **Distribution**: Solange die App «Not sharing» ist, kann nur ihr Besitzer sie benutzen. Für Kundenfirmen auf **Sharing** stellen; Atlassian fragt dabei nach Anbieter, Link zur Datenschutzerklärung und ob Personendaten gespeichert werden (TrackInsight übernimmt aus Jira keine Personendaten, nur Issue-Schlüssel, Titel, Status und Story Points).
+
+Zum Testen gibt es Jira Cloud bis 10 Personen gratis: [atlassian.com/software/jira/free](https://www.atlassian.com/software/jira/free).
+
+**Was beim Verbinden passiert:** TrackInsight findet die Felder «Story Points» bzw. «Story point estimate», listet die Jira-Projekte, und der Admin wählt pro Jira-Projekt ein bestehendes Projekt oder legt ein neues bei einem Kunden an. Beim Abgleich werden Epics zu Subprojekten (verknüpft über den Epic-Schlüssel), Issues ohne Epic landen im Subprojekt «Ohne Epic», Sub-Tasks werden übersprungen. Der Abgleich läuft alle 15 Minuten und auf Knopfdruck; in Jira gelöschte Issues verschwinden auch in TrackInsight. Nach dem Trennen bleiben die geladenen Issues erhalten. Das Paket Start enthält Jira nicht (Forecast ab Team).
+
+## 17. Kurzreferenz
 
 | Aufgabe | Befehl (im Ordner `~/trackinsight`) |
 |---|---|

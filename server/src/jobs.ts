@@ -10,6 +10,7 @@ import { refreshFxRates } from "./fx";
 import { digestMail } from "./reports/digest";
 import { loadDataset } from "./routes/data";
 import { intervalLabel, mailAdmins, notifyOperator, periodEnd } from "./routes/subscription";
+import { syncAllJira } from "./jira";
 import { saasOn, subscriptionOf } from "./saas";
 
 const THRESHOLDS = ["80", "95", "100"] as const;
@@ -409,6 +410,7 @@ export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: stri
     ["Geplante Berichte", () => sendScheduledReports(ctx, now)],
     ["Aufräumen", () => purgeExpired(ctx, now)],
     ["Abo", () => runSubscriptionJobs(ctx, now)],
+    ["Jira-Abgleich", () => syncAllJira(ctx, now, log)],
   ] as const) {
     try {
       await job();

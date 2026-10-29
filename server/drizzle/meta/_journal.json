@@ -120,6 +120,13 @@
       "when": 1793226503152,
       "tag": "0016_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1793312428066,
+      "tag": "0017_jira_connections",
+      "breakpoints": true
     }
   ]
 }
