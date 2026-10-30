@@ -72,7 +72,7 @@ export function ImportTab() {
         const buf = await f.arrayBuffer();
         // Exports from older Excel versions are Windows-1252, not UTF-8.
         let text = new TextDecoder("utf-8").decode(buf);
-        if (text.includes("�")) text = new TextDecoder("windows-1252").decode(buf);
+        if (text.includes("\uFFFD")) text = new TextDecoder("windows-1252").decode(buf);
         table = parseCsv(text);
       }
       if (table.length < 2) throw new Error(tr("Die Datei enthält keine Buchungen."));
