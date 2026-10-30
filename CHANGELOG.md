@@ -5,6 +5,7 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 ## Unveröffentlicht
 
 ### Neu
+- Zeiten als Worklog nach Jira (Einstellungen → Jira): Buchungen mit Issue-Schlüssel erscheinen ab einem gewählten Datum als Worklog am Issue, Änderungen und Löschungen folgen beim Abgleich. Bestehende Jira-Verbindungen müssen dafür einmal neu verbunden werden (Schreibrecht). Anleitung für den Eintrag im Atlassian Marketplace in docs/MARKETPLACE.md.
 - TrackInsight auf Französisch und Englisch: Sprache im Profil oder auf der Anmeldeseite wählen, sonst gilt die Sprache des Browsers. E-Mails gehen in der Sprache der empfangenden Person, Rechnungen, Kundenberichte und Kundenportal in der Sprache, die beim Kunden hinterlegt ist. Zahlen und Daten erscheinen im passenden Format (z. B. «12 300 CHF» auf Französisch).
 - Geführter Start für neue Firmen: Checkliste «Erste Schritte» im Eingang, Beispieldaten auf Knopfdruck (drei Kunden mit sechs Wochen Buchungen, mit einem Klick wieder entfernt) und Hilfe direkt in der App über «?» oben rechts oder die Taste ?.
 - Import aus Clockodo, Toggl Track, Harvest und Excel (Einstellungen → Import): Datei wird erkannt, Spalten lassen sich anpassen, Personen werden zugeordnet, fehlende Kunden, Projekte und Tätigkeiten entstehen automatisch. Abgeschlossene Monate bleiben unberührt, jeder Import lässt sich rückgängig machen.

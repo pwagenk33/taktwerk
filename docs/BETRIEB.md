@@ -405,14 +405,18 @@ Für den Verkauf als Abo an viele Firmen. Selbst gehostete Installationen übers
 Firmen verbinden ihre Jira-Cloud-Site unter **Einstellungen → Jira** mit einem Klick. Dafür braucht die Installation einmalig eine App bei Atlassian (kostenlos):
 
 1. Auf [developer.atlassian.com/console/myapps](https://developer.atlassian.com/console/myapps/) mit einem Atlassian-Konto anmelden, **Create → OAuth 2.0 integration**, Name «TrackInsight».
-2. **Permissions → Jira API → Add**, danach **Configure** und unter den klassischen Berechtigungen `read:jira-work` hinzufügen.
+2. **Permissions → Jira API → Add**, danach **Configure** und unter den klassischen Berechtigungen `read:jira-work` und `write:jira-work` hinzufügen (Schreiben braucht es nur für Worklogs).
 3. **Authorization → OAuth 2.0 (3LO) → Add**, Callback-URL `https://app.trackinsight.ch/api/jira/callback` (lokal: `http://localhost:3000/api/jira/callback`). Es zählt genau die Adresse aus `APP_URL`.
 4. **Settings**: Client ID und Secret kopieren und in `.env` (lokal) bzw. `deploy/.env.prod` als `ATLASSIAN_CLIENT_ID` und `ATLASSIAN_CLIENT_SECRET` eintragen, dann `docker compose up -d`.
-5. **Distribution**: Solange die App «Not sharing» ist, kann nur ihr Besitzer sie benutzen. Für Kundenfirmen auf **Sharing** stellen; Atlassian fragt dabei nach Anbieter, Link zur Datenschutzerklärung und ob Personendaten gespeichert werden (TrackInsight übernimmt aus Jira keine Personendaten, nur Issue-Schlüssel, Titel, Status und Story Points).
+5. **Distribution**: Solange die App «Not sharing» ist, kann nur ihr Besitzer sie benutzen. Für Kundenfirmen auf **Sharing** stellen; Atlassian fragt dabei nach Anbieter, Link zur Datenschutzerklärung und ob Personendaten gespeichert werden (TrackInsight übernimmt aus Jira keine Personendaten, nur Issue-Schlüssel, Titel, Status und Story Points; mit eingeschalteten Worklogs schreibt es Name, Datum, Dauer und Buchungstext der Person nach Jira).
 
 Zum Testen gibt es Jira Cloud bis 10 Personen gratis: [atlassian.com/software/jira/free](https://www.atlassian.com/software/jira/free).
 
 **Was beim Verbinden passiert:** TrackInsight findet die Felder «Story Points» bzw. «Story point estimate», listet die Jira-Projekte, und der Admin wählt pro Jira-Projekt ein bestehendes Projekt oder legt ein neues bei einem Kunden an. Beim Abgleich werden Epics zu Subprojekten (verknüpft über den Epic-Schlüssel), Issues ohne Epic landen im Subprojekt «Ohne Epic», Sub-Tasks werden übersprungen. Der Abgleich läuft alle 15 Minuten und auf Knopfdruck; in Jira gelöschte Issues verschwinden auch in TrackInsight. Nach dem Trennen bleiben die geladenen Issues erhalten. Das Paket Start enthält Jira nicht (Forecast ab Team).
+
+**Worklogs nach Jira:** Unter Einstellungen → Jira → «Zeiten als Worklog nach Jira» schaltet ein Admin das Zurückschreiben ab einem Datum ein. Jede Buchung mit einem Issue-Schlüssel aus einem verknüpften Jira-Projekt wird beim Abgleich zum Worklog am Issue (Start = Kalenderzeit der Buchung oder 09:00 Schweizer Zeit, Dauer, Text «Name: Buchungstext (TrackInsight)»). Geänderte Buchungen ändern den Worklog, gelöschte löschen ihn; die Restschätzung in Jira bleibt unverändert. Pro Abgleich gehen höchstens 300 Änderungen raus, der Rest folgt 15 Minuten später. Die Worklogs stehen in Jira unter dem Atlassian-Konto, das TrackInsight verbunden hat; dieses Konto braucht im Jira-Projekt die Berechtigung «Work on issues». Verbindungen von vor dieser Version haben nur Leserechte; TrackInsight zeigt dann «Neu verbinden». Ausschalten lässt die bereits geschriebenen Worklogs in Jira stehen.
+
+Für den Eintrag im Atlassian Marketplace siehe [MARKETPLACE.md](MARKETPLACE.md).
 
 ## 17. Kurzreferenz
 

@@ -401,8 +401,31 @@ export const jiraConnections = mysqlTable("jira_connections", {
   connectedBy: id("connected_by").references(() => users.id, { onDelete: "set null" }),
   lastSyncAt: datetime("last_sync_at", { mode: "date" }),
   lastResult: json<{ ok: boolean; message: string; issues?: number; projects?: number }>("last_result"),
+  /** Scopes Atlassian granted; connections made before worklogs existed have none stored and may only read. */
+  scopes: json<string[]>("scopes"),
+  /** Bookings on Jira issues from this date on are written back as worklogs; null = off. */
+  worklogsSince: date("worklogs_since", { mode: "string" }),
+  lastWorklogResult: json<{ ok: boolean; message: string; at: string }>("last_worklog_result"),
   createdAt: createdAt(),
 });
+
+/**
+ * Worklogs TrackInsight wrote to Jira, one per booking. No foreign key on the booking: when a booking is
+ * deleted, the row stays until its worklog has been removed in Jira too.
+ */
+export const jiraWorklogs = mysqlTable(
+  "jira_worklogs",
+  {
+    timeEntryId: id("time_entry_id").primaryKey(),
+    organizationId: orgId(),
+    issueKey: varchar("issue_key", { length: 40 }).notNull(),
+    worklogId: varchar("worklog_id", { length: 40 }).notNull(),
+    /** Hash of what was sent (issue, time, duration, text); a different hash means the worklog needs an update. */
+    hash: char("hash", { length: 40 }).notNull(),
+    syncedAt: datetime("synced_at", { mode: "date" }).notNull(),
+  },
+  (t) => [index("jw_org_idx").on(t.organizationId)],
+);
 
 export const dashboards = mysqlTable("dashboards", {
   userId: id("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),

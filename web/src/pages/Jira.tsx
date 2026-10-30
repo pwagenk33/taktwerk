@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useStore } from "../store";
 import { Select } from "../ui/Select";
 import { intlLocale, tr } from "../i18n";
+import { fmtDay } from "@taktwerk/domain";
 
 interface JiraStatus {
   configured: boolean;
@@ -11,6 +12,7 @@ interface JiraStatus {
   storyPointFields?: number;
   lastSyncAt?: string | null;
   lastResult?: { ok: boolean; message: string } | null;
+  worklogs?: { canWrite: boolean; since: string | null; lastResult: { ok: boolean; message: string; at: string } | null };
 }
 interface JiraProjectRow { key: string; name: string; project: { id: string; name: string } | null }
 
@@ -34,7 +36,7 @@ export function JiraTab() {
   const load = async () => {
     if (demo) {
       // Prototype: a connected example site with the sample projects plus one not yet taken over.
-      setStatus({ configured: true, connected: true, site: { name: "beispiel", url: "https://beispiel.atlassian.net" }, storyPointFields: 1, lastSyncAt: new Date(Date.now() - 6 * 60_000).toISOString(), lastResult: { ok: true, message: tr("{0} Issues aus {1} Projekten abgeglichen.", data.issues.length, data.projects.filter((p) => p.jiraProjectKey).length) } });
+      setStatus({ configured: true, connected: true, site: { name: "beispiel", url: "https://beispiel.atlassian.net" }, storyPointFields: 1, lastSyncAt: new Date(Date.now() - 6 * 60_000).toISOString(), lastResult: { ok: true, message: tr("{0} Issues aus {1} Projekten abgeglichen.", data.issues.length, data.projects.filter((p) => p.jiraProjectKey).length) }, worklogs: { canWrite: true, since: null, lastResult: null } });
       setRows([
         ...data.projects.filter((p) => p.jiraProjectKey).map((p) => ({ key: p.jiraProjectKey!, name: p.name, project: { id: p.id, name: p.name } })),
         { key: "INT", name: tr("Intranet 2027"), project: null },
@@ -94,6 +96,12 @@ export function JiraTab() {
     await reload();
     await load();
   });
+  const setWorklogs = (since: string | null) => run(async () => {
+    if (demo) { setStatus((s) => s && { ...s, worklogs: { canWrite: true, since, lastResult: since ? { ok: true, message: tr("In der Demo werden keine Worklogs geschrieben."), at: new Date().toISOString() } : null } }); return; }
+    const r = await api<{ ok: boolean; message: string }>("/api/jira/worklogs", { method: "PUT", body: { since } });
+    notify(r.message);
+    await load();
+  });
   const disconnect = () => run(async () => {
     if (demo) { notify(tr("In der Demo bleibt die Verbindung bestehen.")); return; }
     await api("/api/jira", { method: "DELETE" });
@@ -116,7 +124,7 @@ export function JiraTab() {
       <section className="card card-pad jira-intro">
         <h3>{tr("Jira Cloud verbinden")}</h3>
         <p>{tr("Verbinde TrackInsight mit deiner Jira-Cloud-Site. Danach wählst du, welche Jira-Projekte übernommen werden. Epics werden zu Subprojekten, Issues und Story Points werden alle 15 Minuten abgeglichen und speisen Velocity und Forecast.")}</p>
-        <p className="muted">{tr("TrackInsight liest nur. Es ändert in Jira nichts und speichert von jedem Issue nur Schlüssel, Titel, Status und Story Points.")}</p>
+        <p className="muted">{tr("TrackInsight speichert von jedem Issue nur Schlüssel, Titel, Status und Story Points. In Jira schreibt es nur, wenn du danach die Worklogs einschaltest.")}</p>
         {error && <p className="error">{error}</p>}
         <div><a className="btn primary" id="jira-connect" href="/api/jira/connect">{tr("Mit Atlassian verbinden")}</a></div>
       </section>
@@ -141,6 +149,7 @@ export function JiraTab() {
         </div>
       </section>
       {error && <p className="error">{error}</p>}
+      {status.worklogs && <WorklogCard w={status.worklogs} busy={busy} onSet={setWorklogs} />}
 
       <section className="card">
         <div className="card-head"><h2>{tr("Jira-Projekte")}</h2><span className="muted" style={{ fontSize: "0.8rem" }}>{linked.length}{" "}{tr("von {0} übernommen", (rows ?? []).length)}</span></div>
@@ -171,5 +180,36 @@ export function JiraTab() {
         <p className="muted" style={{ margin: 0, padding: "12px 16px", fontSize: "0.82rem" }}>{tr("Ein neues Projekt startet mit Budget 0. Budgets pro Projekt und Subprojekt trägst du unter Kunden & Projekte ein.")}</p>
       </section>
     </div>
+  );
+}
+
+const firstOfMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; };
+
+/** Worklogs: bookings on Jira issues go back to Jira. */
+function WorklogCard({ w, busy, onSet }: { w: NonNullable<JiraStatus["worklogs"]>; busy: boolean; onSet: (since: string | null) => void }) {
+  const [since, setSince] = useState(firstOfMonth);
+  return (
+    <section className="card card-pad" id="jira-worklogs">
+      <h3 style={{ margin: 0 }}>{tr("Zeiten als Worklog nach Jira")}</h3>
+      <p style={{ margin: "6px 0 0" }}>{tr("Buchungen mit Jira-Issue erscheinen in Jira als Worklog am Issue, mit Datum, Dauer und Text. Änderungen und Löschungen in TrackInsight werden beim nächsten Abgleich übernommen.")}</p>
+      <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.86rem" }}>{tr("In Jira stehen die Worklogs unter dem Atlassian-Konto, mit dem TrackInsight verbunden wurde. Der Text nennt die Person, die gebucht hat. Restschätzungen in Jira bleiben unverändert.")}</p>
+      {!w.canWrite ? (
+        <div style={{ marginTop: 12 }}>
+          <p className="error" style={{ margin: "0 0 8px" }}>{tr("Für Worklogs braucht TrackInsight Schreibrechte in Jira. Verbinde neu, um sie zu erteilen.")}</p>
+          <a className="btn" href="/api/jira/connect">{tr("Neu verbinden")}</a>
+        </div>
+      ) : w.since ? (
+        <div style={{ marginTop: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="pill ok">{tr("Eingeschaltet ab {0}", fmtDay(w.since))}</span>
+          <button className="btn small ghost" disabled={busy} onClick={() => onSet(null)}>{tr("Ausschalten")}</button>
+          {w.lastResult && <span className={w.lastResult.ok ? "muted" : "error"} style={{ fontSize: "0.86rem" }}>{w.lastResult.message}</span>}
+        </div>
+      ) : (
+        <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <label className="field" style={{ margin: 0 }}><span>{tr("Buchungen ab")}</span><input id="jira-worklogs-since" type="date" className="input" value={since} onChange={(e) => setSince(e.target.value)} /></label>
+          <button className="btn primary" id="jira-worklogs-on" disabled={busy || !since} onClick={() => onSet(since)}>{tr("Einschalten")}</button>
+        </div>
+      )}
+    </section>
   );
 }

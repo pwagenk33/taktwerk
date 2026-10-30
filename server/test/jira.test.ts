@@ -1,6 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { customers, jiraConnections, jiraIssues, projects, subProjects } from "../src/db/schema";
+import { randomUUID } from "node:crypto";
+import { customers, jiraConnections, jiraIssues, jiraWorklogs, projects, subProjects, timeEntries, users } from "../src/db/schema";
+import { jiraStarted } from "../src/jira";
 import { runJobs } from "../src/jobs";
 import { login, setup } from "./helpers";
 
@@ -9,6 +11,8 @@ let admin = "";
 const calls: { url: string; body?: Record<string, unknown> }[] = [];
 /** The issues Jira currently has in project SHOP. */
 let shop: unknown[] = [];
+/** Worklogs on the fake Jira site by id. */
+const worklogs = new Map<string, { issue: string; body: Record<string, unknown> }>();
 
 const issue = (key: string, type: { name: string; hierarchyLevel: number; subtask?: boolean }, fields: Record<string, unknown> = {}) => ({
   key,
@@ -32,12 +36,22 @@ beforeAll(async () => {
     calls.push({ url, body });
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { "content-type": "application/json" } });
     if (url === "https://auth.atlassian.com/oauth/token") {
-      if (body.grant_type === "authorization_code") return body.code === "gut" ? json({ access_token: "at1", refresh_token: "rt1", expires_in: 3600 }) : json({ error: "invalid_grant" }, 403);
+      if (body.grant_type === "authorization_code") return body.code === "gut" ? json({ access_token: "at1", refresh_token: "rt1", expires_in: 3600, scope: "read:jira-work write:jira-work offline_access" }) : json({ error: "invalid_grant" }, 403);
       return body.refresh_token === "rt1" ? json({ access_token: "at2", refresh_token: "rt2", expires_in: 3600 }) : json({ error: "invalid_grant" }, 403);
     }
     if (url.endsWith("/oauth/token/accessible-resources")) return json([{ id: "cloud-1", url: "https://beispiel.atlassian.net", name: "beispiel", scopes: ["read:jira-work", "read:jira-user"] }]);
     if (url.endsWith("/rest/api/3/field")) return json([{ id: "summary", name: "Summary" }, { id: "customfield_10016", name: "Story point estimate", custom: true }]);
     if (url.includes("/rest/api/3/project/search")) return json({ values: [{ key: "SHOP", name: "Webshop" }, { key: "APP", name: "App" }], isLast: true });
+    const wl = url.match(/\/rest\/api\/3\/issue\/([^/]+)\/worklog(?:\/([^?]+))?\?adjustEstimate=leave$/);
+    if (wl) {
+      const method = (init as { method?: string }).method;
+      const [, issue, id] = wl;
+      if (issue === "SHOP-9") return json({ errorMessages: ["Keine Berechtigung"] }, 403);
+      if (method === "POST") { const nid = String(10000 + worklogs.size + calls.length); worklogs.set(nid, { issue: issue!, body }); return json({ id: nid }, 201); }
+      if (!worklogs.has(id!) || worklogs.get(id!)!.issue !== issue) return json({ errorMessages: ["nicht gefunden"] }, 404);
+      if (method === "PUT") { worklogs.set(id!, { issue: issue!, body }); return json({ id }); }
+      if (method === "DELETE") { worklogs.delete(id!); return new Response(null, { status: 204 }); }
+    }
     if (url.endsWith("/rest/api/3/search/jql")) {
       if (body.jql.includes('"PHX"')) return json({ errorMessages: ["Das Projekt 'PHX' existiert nicht."] }, 400);
       if (!body.jql.includes('"SHOP"')) return json({ issues: [] });
@@ -120,6 +134,58 @@ describe("Jira Cloud", () => {
     const [conn] = await t.db.select().from(jiraConnections);
     expect(conn).toMatchObject({ accessToken: "at2", refreshToken: "rt2" });
     expect(conn!.lastResult).toMatchObject({ ok: true, issues: 1 });
+  });
+
+  it("writes bookings on Jira issues back as worklogs and keeps them in step", async () => {
+    const [anna] = await t.db.select().from(users).where(eq(users.username, "anna.keller"));
+    const [model] = await t.db.select().from(timeEntries).where(eq(timeEntries.userId, anna!.id)).limit(1);
+    const entry = (over: Partial<typeof timeEntries.$inferInsert>) => ({ ...model!, id: randomUUID(), createdAt: new Date(), importBatchId: null, ...over });
+    const a = entry({ date: "2026-10-20", hours: 1.5, startTime: "13:30", reason: "Checkout-Fehler", jiraIssueKey: "shop-2" });
+    const old = entry({ date: "2026-09-01", hours: 2, jiraIssueKey: "SHOP-2" });
+    const unknown = entry({ date: "2026-10-21", hours: 1, jiraIssueKey: "NOPE-1" });
+    await t.db.insert(timeEntries).values([a, old, unknown]);
+
+    expect((await req("GET", "/api/jira")).json().worklogs).toMatchObject({ canWrite: true, since: null });
+    const on = (await t.app.inject({ method: "PUT", url: "/api/jira/worklogs", headers: { cookie: admin }, payload: { since: "2026-10-01" } })).json();
+    expect(on).toMatchObject({ ok: true });
+    // Only the booking from October on a known issue: not the September one, not the unknown key.
+    expect([...worklogs.values()]).toEqual([{ issue: "SHOP-2", body: { started: "2026-10-20T13:30:00.000+0200", timeSpentSeconds: 5400, comment: expect.objectContaining({ type: "doc" }) } }]);
+    expect(JSON.stringify([...worklogs.values()][0]!.body.comment)).toContain("Anna Keller: Checkout-Fehler (TrackInsight)");
+
+    // Unchanged: nothing is sent again.
+    const before = calls.length;
+    await req("POST", "/api/jira/sync");
+    expect(calls.slice(before).some((c) => c.url.includes("/worklog"))).toBe(false);
+
+    // Changed hours update the same worklog; a deleted booking removes it.
+    await t.db.update(timeEntries).set({ hours: 2 }).where(eq(timeEntries.id, a.id));
+    await req("POST", "/api/jira/sync");
+    expect([...worklogs.values()][0]!.body.timeSpentSeconds).toBe(7200);
+    expect(worklogs.size).toBe(1);
+    await t.db.delete(timeEntries).where(eq(timeEntries.id, a.id));
+    await req("POST", "/api/jira/sync");
+    expect(worklogs.size).toBe(0);
+    expect(await t.db.select().from(jiraWorklogs)).toEqual([]);
+
+    // A worklog Jira refuses is reported, the others still go through.
+    shop.push(issue("SHOP-9", STORY, { summary: "Gesperrt" }));
+    await t.db.insert(timeEntries).values([entry({ date: "2026-10-22", jiraIssueKey: "SHOP-9" }), entry({ date: "2026-10-23", hours: 1, jiraIssueKey: "SHOP-2" })]);
+    await req("POST", "/api/jira/sync");
+    const status = (await req("GET", "/api/jira")).json().worklogs;
+    expect(status.lastResult).toMatchObject({ ok: false });
+    expect(status.lastResult.message).toContain("SHOP-9");
+    expect(worklogs.size).toBe(1);
+
+    // Connections from before worklogs existed may only read.
+    await t.db.update(jiraConnections).set({ scopes: null });
+    expect((await t.app.inject({ method: "PUT", url: "/api/jira/worklogs", headers: { cookie: admin }, payload: { since: "2026-10-01" } })).statusCode).toBe(409);
+    expect((await t.app.inject({ method: "PUT", url: "/api/jira/worklogs", headers: { cookie: admin }, payload: { since: null } })).statusCode).toBe(200);
+    shop.pop();
+  });
+
+  it("gives Jira the Swiss offset in summer and winter", () => {
+    expect(jiraStarted("2026-07-01", "08:15")).toBe("2026-07-01T08:15:00.000+0200");
+    expect(jiraStarted("2026-12-01", null)).toBe("2026-12-01T09:00:00.000+0100");
   });
 
   it("keeps syncing the other projects when one Jira project is gone", async () => {

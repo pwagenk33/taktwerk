@@ -1,16 +1,21 @@
 // Jira Cloud through Atlassian OAuth 2.0 (3LO): connect a company's site, list its projects and mirror
-// epics, issues and story points into jira_issues, which feed velocity and forecast.
+// epics, issues and story points into jira_issues, which feed velocity and forecast. When the company
+// switches it on, bookings on Jira issues go back to Jira as worklogs.
 // Docs: https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/
-import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
+import { and, eq, gte, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import { HttpError, type AppContext } from "./app";
-import { jiraConnections, jiraIssues, projects, subProjects } from "./db/schema";
+import { jiraConnections, jiraIssues, jiraWorklogs, projects, subProjects, timeEntries, users } from "./db/schema";
 import { tr } from "@taktwerk/domain";
 
 export const ATLASSIAN_AUTH = "https://auth.atlassian.com";
 export const ATLASSIAN_API = "https://api.atlassian.com";
-/** Read access to projects and issues; offline_access gives the refresh token for the background sync. */
-export const JIRA_SCOPES = ["read:jira-work", "offline_access"];
+/**
+ * Read access to projects and issues, write access for worklogs (only used when the company switches
+ * worklogs on), offline_access for the refresh token of the background sync.
+ */
+export const JIRA_SCOPES = ["read:jira-work", "write:jira-work", "offline_access"];
+export const WRITE_SCOPE = "write:jira-work";
 /** Story points live in a custom field whose name differs between company- and team-managed projects. */
 const STORY_POINT_NAMES = ["story points", "story point estimate"];
 /** Sub-project for issues that belong to no epic. */
@@ -33,7 +38,7 @@ export function authorizeUrl(ctx: AppContext, state: string) {
   return `${ATLASSIAN_AUTH}/authorize?${q}`;
 }
 
-interface TokenAnswer { access_token: string; refresh_token?: string; expires_in: number }
+interface TokenAnswer { access_token: string; refresh_token?: string; expires_in: number; scope?: string }
 
 async function tokenRequest(ctx: AppContext, body: Record<string, string>): Promise<TokenAnswer> {
   const res = await fetch(`${ATLASSIAN_AUTH}/oauth/token`, {
@@ -71,8 +76,8 @@ async function accessToken(ctx: AppContext, conn: JiraConnection, force = false)
   return conn.accessToken;
 }
 
-/** Calls the Jira REST API of the connected site; retries once with a fresh token after a 401. */
-export async function jiraApi<T>(ctx: AppContext, conn: JiraConnection, path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+/** Calls the Jira REST API of the connected site; retries once with a fresh token after a 401. With missingOk, a 404 answers null. */
+export async function jiraApi<T>(ctx: AppContext, conn: JiraConnection, path: string, init: { method?: string; body?: unknown; missingOk?: boolean } = {}): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     const token = await accessToken(ctx, conn, attempt > 0);
     const res = await fetch(`${ATLASSIAN_API}/ex/jira/${conn.cloudId}${path}`, {
@@ -81,8 +86,10 @@ export async function jiraApi<T>(ctx: AppContext, conn: JiraConnection, path: st
       ...(init.body ? { body: JSON.stringify(init.body) } : {}),
     });
     if (res.status === 401 && attempt === 0) continue;
+    if (res.status === 404 && init.missingOk) return null as T;
     if (!res.ok) throw new HttpError(502, tr("Jira antwortet mit Fehler {0} auf {1}.", res.status, path.split("?")[0]));
-    return (await res.json()) as T;
+    const text = await res.text();
+    return (text ? JSON.parse(text) : null) as T;
   }
 }
 
@@ -177,6 +184,7 @@ export async function syncOrganization(ctx: AppContext, orgId: string): Promise<
     result = { ok: false, message: err instanceof Error ? err.message : tr("Abgleich fehlgeschlagen.") };
   }
   await ctx.db.update(jiraConnections).set({ lastSyncAt: new Date(), lastResult: result }).where(eq(jiraConnections.organizationId, orgId));
+  if (result.ok && conn.worklogsSince) await pushWorklogs(ctx, conn);
   return result;
 }
 
@@ -237,3 +245,100 @@ export async function syncAllJira(ctx: AppContext, now = new Date(), log: (msg: 
   }
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// Worklogs: bookings on Jira issues go back to Jira, so the issue shows the time spent.
+
+export const canWrite = (conn: Pick<JiraConnection, "scopes">) => !!conn.scopes?.includes(WRITE_SCOPE);
+
+/** Jira wants the start with a UTC offset; bookings are Swiss local time. */
+export function jiraStarted(date: string, time: string | null) {
+  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+  const [hh, mm] = (time ?? "09:00").split(":").map(Number) as [number, number];
+  const guess = new Date(Date.UTC(y, m - 1, d, hh, mm));
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Zurich", timeZoneName: "longOffset" }).formatToParts(guess).find((p) => p.type === "timeZoneName")?.value ?? "GMT+01:00";
+  const off = name === "GMT" ? "+0000" : name.replace("GMT", "").replace(":", "");
+  return `${date}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00.000${off}`;
+}
+
+const adf = (text: string) => ({ type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text }] }] });
+
+/** Writes per run at most this many changes, so a first run over a long history cannot block the job. */
+const MAX_CHANGES = 300;
+
+export interface WorklogResult { ok: boolean; message: string; at: string }
+
+/**
+ * Brings Jira's worklogs in line with the bookings: new bookings on known issues (from worklogsSince on)
+ * create a worklog, changed bookings update it, deleted bookings or a removed issue key delete it.
+ * Worklogs appear under the Atlassian account that connected TrackInsight; the text names the person.
+ */
+export async function pushWorklogs(ctx: AppContext, conn: JiraConnection): Promise<WorklogResult> {
+  const orgId = conn.organizationId;
+  const at = new Date().toISOString();
+  let result: WorklogResult;
+  if (!canWrite(conn)) {
+    result = { ok: false, message: tr("TrackInsight darf in Jira noch nicht schreiben. Bitte die Verbindung mit Atlassian neu herstellen."), at };
+  } else {
+    const known = new Set((await ctx.db.select({ key: jiraIssues.key }).from(jiraIssues).where(eq(jiraIssues.organizationId, orgId))).map((r) => r.key.toUpperCase()));
+    const entries = await ctx.db
+      .select({ id: timeEntries.id, key: timeEntries.jiraIssueKey, date: timeEntries.date, start: timeEntries.startTime, hours: timeEntries.hours, reason: timeEntries.reason, name: users.name })
+      .from(timeEntries)
+      .innerJoin(users, eq(users.id, timeEntries.userId))
+      .where(and(eq(timeEntries.organizationId, orgId), isNotNull(timeEntries.jiraIssueKey), gte(timeEntries.date, conn.worklogsSince!)));
+    const wanted = new Map<string, { key: string; body: Record<string, unknown>; hash: string }>();
+    for (const e of entries) {
+      const key = e.key!.trim().toUpperCase();
+      const seconds = Math.round(e.hours * 3600);
+      if (!known.has(key) || seconds < 60) continue;
+      const body = { started: jiraStarted(e.date, e.start), timeSpentSeconds: seconds, comment: adf(`${e.name}: ${e.reason} (TrackInsight)`) };
+      wanted.set(e.id, { key, body, hash: createHash("sha1").update(JSON.stringify([key, body])).digest("hex") });
+    }
+    const done = new Map((await ctx.db.select().from(jiraWorklogs).where(eq(jiraWorklogs.organizationId, orgId))).map((w) => [w.timeEntryId, w]));
+
+    let created = 0, updated = 0, removed = 0, changes = 0;
+    const failed: string[] = [];
+    const path = (key: string, id?: string) => `/rest/api/3/issue/${encodeURIComponent(key)}/worklog${id ? `/${encodeURIComponent(id)}` : ""}?adjustEstimate=leave`;
+    const remove = async (w: typeof jiraWorklogs.$inferSelect) => {
+      await jiraApi(ctx, conn, path(w.issueKey, w.worklogId), { method: "DELETE", missingOk: true });
+      await ctx.db.delete(jiraWorklogs).where(eq(jiraWorklogs.timeEntryId, w.timeEntryId));
+    };
+    const create = async (entryId: string, want: { key: string; body: Record<string, unknown>; hash: string }) => {
+      const r = await jiraApi<{ id: string }>(ctx, conn, path(want.key), { method: "POST", body: want.body });
+      await ctx.db.insert(jiraWorklogs).values({ timeEntryId: entryId, organizationId: orgId, issueKey: want.key, worklogId: String(r.id), hash: want.hash, syncedAt: new Date() });
+    };
+
+    for (const [entryId, w] of done) {
+      if (changes >= MAX_CHANGES) break;
+      if (wanted.has(entryId)) continue;
+      try { await remove(w); removed++; changes++; } catch (err) { if (err instanceof HttpError && err.statusCode === 401) throw err; failed.push(w.issueKey); }
+    }
+    for (const [entryId, want] of wanted) {
+      if (changes >= MAX_CHANGES) break;
+      const w = done.get(entryId);
+      if (w?.hash === want.hash) continue;
+      try {
+        if (!w) { await create(entryId, want); created++; }
+        else if (w.issueKey !== want.key) { await remove(w); await create(entryId, want); updated++; }
+        else {
+          const r = await jiraApi<{ id: string } | null>(ctx, conn, path(want.key, w.worklogId), { method: "PUT", body: want.body, missingOk: true });
+          // Deleted by hand in Jira: write it again.
+          if (!r) { await ctx.db.delete(jiraWorklogs).where(eq(jiraWorklogs.timeEntryId, entryId)); await create(entryId, want); }
+          else await ctx.db.update(jiraWorklogs).set({ hash: want.hash, syncedAt: new Date() }).where(eq(jiraWorklogs.timeEntryId, entryId));
+          updated++;
+        }
+        changes++;
+      } catch (err) {
+        if (err instanceof HttpError && err.statusCode === 401) throw err;
+        failed.push(want.key);
+      }
+    }
+    const parts = [tr("{0} neu", created), tr("{0} geändert", updated), tr("{0} entfernt", removed)].join(", ");
+    const more = changes >= MAX_CHANGES ? ` ${tr("Der Rest folgt beim nächsten Abgleich.")}` : "";
+    result = failed.length
+      ? { ok: false, message: tr("Worklogs: {0}. Fehlgeschlagen bei {1}; meist fehlt in Jira die Berechtigung «Work on issues».", parts, [...new Set(failed)].slice(0, 5).join(", ")) + more, at }
+      : { ok: true, message: tr("Worklogs: {0}.", parts) + more, at };
+  }
+  await ctx.db.update(jiraConnections).set({ lastWorklogResult: result }).where(eq(jiraConnections.organizationId, orgId));
+  return result;
+}
