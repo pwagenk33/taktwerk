@@ -47,3 +47,21 @@
     });
   }
 })();
+
+// Calculator (rechner): revenue lost through time that is never booked. Runs only in the browser.
+(() => {
+  const form = document.getElementById("calc");
+  if (!form) return;
+  const num = (name) => Math.max(0, Number(form.elements[name].value) || 0);
+  const fmt = (n) => Math.round(n).toLocaleString("de-CH").replace(/[’']/g, "’");
+  const update = () => {
+    const hours = (num("people") * num("minutes") * num("days")) / 60;
+    const lost = hours * num("rate");
+    document.getElementById("k-lost").textContent = `CHF ${fmt(lost)}`;
+    document.getElementById("k-hours").textContent = `${fmt(hours)} h`;
+    document.getElementById("k-pp").textContent = `CHF ${fmt(num("people") ? lost / num("people") / 12 : 0)}`;
+  };
+  form.addEventListener("input", update);
+  form.addEventListener("submit", (e) => e.preventDefault());
+  update();
+})();

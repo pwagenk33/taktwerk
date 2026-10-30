@@ -1,0 +1,35 @@
+<!--@head title="Rechner: Was unverrechnete Zeit kostet · TrackInsight" description="Wie viel Umsatz geht verloren, wenn pro Person und Tag ein paar Minuten nicht gebucht werden? Mit eigenen Zahlen ausrechnen."-->
+<body>
+<!--@header-->
+<main id="inhalt">
+  <section class="page-head">
+    <div class="wrap">
+      <p class="eyebrow">Rechner</p>
+      <h1 class="h-xl" style="max-width:18ch">Was vergessene Minuten kosten.</h1>
+      <p class="lead">Kurze Telefonate, ein schneller Fix, eine Abstimmung im Flur: Was nicht gebucht wird, wird nicht verrechnet. Rechnen Sie mit Ihren eigenen Zahlen nach.</p>
+    </div>
+  </section>
+  <div class="wrap" style="padding-bottom:112px">
+    <form class="calc" id="calc" novalidate>
+      <div class="form">
+        <div class="field"><label for="k-people">Personen, die verrechenbar arbeiten</label><input id="k-people" name="people" type="number" inputmode="numeric" min="1" max="10000" value="10"></div>
+        <div class="field"><label for="k-rate">Durchschnittlicher Stundensatz <span>CHF</span></label><input id="k-rate" name="rate" type="number" inputmode="decimal" min="0" max="2000" value="150"></div>
+        <div class="field"><label for="k-min">Nicht gebuchte Minuten pro Person und Tag <span>Ihre Schätzung</span></label><input id="k-min" name="minutes" type="number" inputmode="numeric" min="0" max="480" value="15"></div>
+        <div class="field"><label for="k-days">Arbeitstage pro Jahr</label><input id="k-days" name="days" type="number" inputmode="numeric" min="1" max="366" value="220"></div>
+        <p class="form-note">Die Werte sind Beispiele. Der Rechner läuft nur in Ihrem Browser; nichts wird gesendet.</p>
+      </div>
+      <div class="calc-result" aria-live="polite">
+        <p class="eyebrow">Entgangener Umsatz pro Jahr</p>
+        <output class="big" id="k-lost" for="k-people k-rate k-min k-days">CHF 82’500</output>
+        <dl>
+          <div><dt>Nicht gebuchte Stunden pro Jahr</dt><dd id="k-hours">550 h</dd></div>
+          <div><dt>Pro Person und Monat</dt><dd id="k-pp">CHF 688</dd></div>
+          <div><dt>TrackInsight Team pro Person und Monat</dt><dd>CHF {{price.team}}</dd></div>
+        </dl>
+        <p class="form-note" style="margin-top:20px">Ob die Zeit tatsächlich verrechenbar ist, hängt von Ihren Verträgen ab. Bei Pauschalen zeigt die Zahl, wie viel Aufwand im Budget fehlt.</p>
+        <div class="cta-row"><a class="btn primary" href="%APP_URL%/registrieren?paket=team">{{trialDays}} Tage kostenlos testen</a></div>
+      </div>
+    </form>
+  </div>
+</main>
+<!--@footer-->
