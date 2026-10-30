@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, type BillingSettings, type Branding, type PlatformOrg, type PlatformSummary, type ScheduledReport, type Settings as OrgSettings, type UserRow } from "../api";
 import { useStore } from "../store";
 import { JiraTab } from "./Jira";
+import { ImportTab } from "./Import";
 import { STATUS_LABEL, SubscriptionTab, statusPill, useSubscription } from "./Subscription";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
 import { Select } from "../ui/Select";
@@ -708,11 +709,11 @@ function Operator() {
   );
 }
 
-type Tab = "look" | "users" | "signin" | "work" | "billing" | "reports" | "jira" | "abo" | "operator";
+type Tab = "look" | "users" | "signin" | "work" | "billing" | "reports" | "import" | "jira" | "abo" | "operator";
 const tabOfHash = (): Tab | null => (location.hash.startsWith("#einstellungen/") ? (location.hash.split("/")[1] as Tab) : null);
 
 export function Settings() {
-  const { me, mode } = useStore();
+  const { me, mode, role } = useStore();
   const operator = mode === "demo" || !!me?.platformAdmin;
   const sub = useSubscription();
   const [tab, setTab] = useState<Tab>(() => tabOfHash() ?? "look");
@@ -726,7 +727,7 @@ export function Settings() {
       <div className="page-head">
         <div>
           <h1>Einstellungen</h1>
-          <p className="sub">Corporate Design, Benutzer, Anmeldung, Arbeitszeitmodell, Rechnungsstellung, Berichte, Export und Jira.</p>
+          <p className="sub">Corporate Design, Benutzer, Anmeldung, Arbeitszeitmodell, Rechnungsstellung, Berichte, Export, Import und Jira.</p>
         </div>
       </div>
       <div className="tabs" role="tablist">
@@ -736,6 +737,7 @@ export function Settings() {
         <button role="tab" className={tab === "work" ? "on" : ""} onClick={() => setTab("work")}>Arbeitszeit</button>
         <button role="tab" className={tab === "billing" ? "on" : ""} onClick={() => setTab("billing")}>Rechnung</button>
         <button role="tab" className={tab === "reports" ? "on" : ""} onClick={() => setTab("reports")}>Berichte & Export</button>
+        {role === "admin" && <button role="tab" id="tab-import" className={tab === "import" ? "on" : ""} onClick={() => setTab("import")}>Import</button>}
         <button role="tab" id="tab-jira" className={tab === "jira" ? "on" : ""} onClick={() => setTab("jira")}>Jira</button>
         {sub && <button role="tab" id="tab-abo" className={tab === "abo" ? "on" : ""} onClick={() => setTab("abo")}>Abo</button>}
         {operator && <button role="tab" id="tab-operator" className={tab === "operator" ? "on" : ""} onClick={() => setTab("operator")}>Betreiber</button>}
@@ -746,6 +748,7 @@ export function Settings() {
       {tab === "work" && <WorkSettings />}
       {tab === "billing" && <Billing />}
       {tab === "reports" && <ReportsAndExport />}
+      {tab === "import" && role === "admin" && <ImportTab />}
       {tab === "jira" && <JiraTab />}
       {tab === "abo" && sub && <SubscriptionTab onSetup={() => window.dispatchEvent(new CustomEvent("ti:setup"))} />}
       {tab === "operator" && operator && <Operator />}

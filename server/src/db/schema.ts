@@ -275,9 +275,11 @@ export const timeEntries = mysqlTable(
     jiraIssueKey: varchar("jira_issue_key", { length: 40 }),
     /** HH:MM when the booking was placed in the calendar; null for bookings without a time of day. */
     startTime: varchar("start_time", { length: 5 }),
+    /** Set when the booking came from an import (Clockodo, Toggl, Harvest, Excel); the import can be undone as a whole. */
+    importBatchId: id("import_batch_id"),
     createdAt: createdAt(),
   },
-  (t) => [index("te_org_date_idx").on(t.organizationId, t.date), index("te_user_date_idx").on(t.userId, t.date), index("te_sub_idx").on(t.subProjectId), index("te_issue_idx").on(t.jiraIssueKey)],
+  (t) => [index("te_import_idx").on(t.importBatchId), index("te_org_date_idx").on(t.organizationId, t.date), index("te_user_date_idx").on(t.userId, t.date), index("te_sub_idx").on(t.subProjectId), index("te_issue_idx").on(t.jiraIssueKey)],
 );
 
 export const expenses = mysqlTable(
@@ -425,7 +427,7 @@ export const auditLog = mysqlTable(
     id: id().primaryKey(),
     organizationId: orgId(),
     actorId: id("actor_id").references(() => users.id, { onDelete: "set null" }),
-    entity: mysqlEnum("entity", ["time_entry", "expense", "month", "absence", "work_model"]).notNull(),
+    entity: mysqlEnum("entity", ["time_entry", "expense", "month", "absence", "work_model", "import"]).notNull(),
     entityId: varchar("entity_id", { length: 64 }).notNull(),
     action: mysqlEnum("action", ["create", "update", "delete", "submit", "approve", "reopen", "reject"]).notNull(),
     before: json<unknown>("before_data"),
@@ -538,3 +540,20 @@ export const workPeriods = mysqlTable(
   },
   (t) => [index("period_user_date_idx").on(t.userId, t.date), index("period_org_date_idx").on(t.organizationId, t.date)],
 );
+
+/**
+ * One import of bookings from another tool. `created` lists the customers, projects and sub-projects the import added,
+ * so undoing it removes them again when nothing else uses them.
+ */
+export const importBatches = mysqlTable("import_batches", {
+  id: id().primaryKey(),
+  organizationId: orgId(),
+  source: varchar("source", { length: 20 }).notNull(),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  entries: int("entries").notNull(),
+  hours: decimal("hours", { precision: 10, scale: 2, mode: "number" }).notNull(),
+  created: json<{ customers: string[]; projects: string[]; subProjects: string[] }>("created").notNull(),
+  createdBy: id("created_by").references(() => users.id, { onDelete: "set null" }),
+  undoneAt: datetime("undone_at", { mode: "date" }),
+  createdAt: createdAt(),
+});

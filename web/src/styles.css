@@ -1075,3 +1075,20 @@ body.dialog-open { overflow: hidden; }
 .scan-bar span { background: var(--accent); }
 .page-head h1 { color: var(--ink); }
 .sub-banner:not(.warn):not(.crit) { background: var(--accent-soft); border-color: color-mix(in srgb, var(--brand) 22%, var(--surface)); }
+
+/* Import of bookings from other tools */
+.import-steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.import-steps li { display: flex; align-items: center; gap: 8px; font-size: 0.84rem; color: var(--muted); padding: 4px 12px 4px 4px; border-radius: 99px; background: var(--surface-2); }
+.import-steps span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 0.76rem; background: var(--surface); color: var(--muted); }
+.import-steps li.on { color: var(--accent-strong); background: var(--accent-soft); }
+.import-steps li.on span { background: var(--accent); color: #fff; }
+.import-steps li.done span { background: var(--good); color: #fff; }
+.import-sources { display: flex; gap: 8px; flex-wrap: wrap; }
+.import-sources button { border: 1.5px solid var(--line-strong); background: var(--surface); color: var(--ink); border-radius: var(--radius-s); padding: 8px 14px; font-weight: 600; cursor: pointer; }
+.import-sources button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
+.import-drop { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 28px 16px; border: 1.5px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: var(--radius); background: color-mix(in srgb, var(--accent) 4%, var(--surface)); cursor: pointer; text-align: center; overflow-wrap: anywhere; }
+@media (hover: hover) { .import-drop:hover { background: var(--accent-soft); } }
+.import-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 10px 14px; }
+.import-problems summary { cursor: pointer; color: var(--warn-ink); font-size: 0.86rem; }
+.import-problems ul { margin: 8px 0 0; padding-left: 18px; font-size: 0.84rem; color: var(--ink-2); }
+.import-new { display: flex; flex-direction: column; gap: 10px; font-size: 0.88rem; }
