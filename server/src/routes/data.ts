@@ -143,7 +143,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser, opts: { de
         // Work model and balances of colleagues stay private for employees; cost rates only for leads.
         ...(!seesPerson(u.id)
           ? {}
-          : { workload: u.workload, vacationDays: u.vacationDays, trackingStart: u.trackingStart ?? undefined, overtimeCarry: u.overtimeCarry, vacationCarry: u.vacationCarry }),
+          : { workload: u.workload, vacationDays: u.vacationDays, trackingStart: u.trackingStart ?? undefined, overtimeCarry: u.overtimeCarry, vacationCarry: u.vacationCarry, personnelNumber: u.personnelNumber ?? undefined }),
         ...(own ? {} : { costRate: u.costRate ?? undefined }),
       })),
     customers: customerRows.map((c) => ({

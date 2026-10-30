@@ -118,6 +118,7 @@ async function createInvoiceIn(ctx: AppContext, orgId: string, customerId: strin
     snapshot: { sender: billing, recipient: customer.billingAddress, customerName: customer.name, appName: org.settings.branding.appName, primaryColor: org.settings.branding.primaryColor, currency: customer.currency, locale: customer.locale },
     sentAt: null,
     paidAt: null,
+    bexioId: null,
     createdAt: new Date(),
   };
   await ctx.db.insert(invoices).values(row);

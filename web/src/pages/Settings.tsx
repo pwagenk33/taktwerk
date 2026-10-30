@@ -2,6 +2,7 @@ import { DEFAULT_RATES, EXPORT_ENTITIES, PLANS, TIME_MODELS, VAT_RATES, defaultH
 import { useEffect, useState } from "react";
 import { api, type BillingSettings, type Branding, type PlatformOrg, type PlatformSummary, type ScheduledReport, type Settings as OrgSettings, type UserRow } from "../api";
 import { useStore } from "../store";
+import { BexioCard } from "./Bexio";
 import { JiraTab } from "./Jira";
 import { ImportTab } from "./Import";
 import { STATUS_LABEL, SubscriptionTab, statusPill, useSubscription } from "./Subscription";
@@ -746,7 +747,7 @@ export function Settings() {
       {tab === "users" && <Users />}
       {tab === "signin" && <SignIn />}
       {tab === "work" && <WorkSettings />}
-      {tab === "billing" && <Billing />}
+      {tab === "billing" && <><Billing /><BexioCard /></>}
       {tab === "reports" && <ReportsAndExport />}
       {tab === "import" && role === "admin" && <ImportTab />}
       {tab === "jira" && <JiraTab />}

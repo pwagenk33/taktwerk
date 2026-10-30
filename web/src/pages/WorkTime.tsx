@@ -244,6 +244,7 @@ function WorkModelDialog({ employee, onClose }: { employee: Employee; onClose: (
     trackingStart: employee.trackingStart ?? "",
     overtimeCarry: String(employee.overtimeCarry ?? 0),
     vacationCarry: String(employee.vacationCarry ?? 0),
+    personnelNumber: employee.personnelNumber ?? "",
   });
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
   const n = (v: string) => (v.trim() === "" ? NaN : Number(v));
@@ -253,8 +254,9 @@ function WorkModelDialog({ employee, onClose }: { employee: Employee; onClose: (
     if (!(n(f.vacationDays) >= 0 && n(f.vacationDays) <= 60)) e.vacationDays = tr("Zwischen 0 und 60 Tagen.");
     if (Number.isNaN(n(f.overtimeCarry))) e.overtimeCarry = tr("Eine Zahl, auch negativ.");
     if (Number.isNaN(n(f.vacationCarry))) e.vacationCarry = tr("Eine Zahl, auch negativ.");
+    if (f.personnelNumber.trim().length > 20) e.personnelNumber = tr("Höchstens 20 Zeichen.");
     if (Object.keys(e).length) return e;
-    await updateWorkModel(employee.id, { workload: n(f.workload), vacationDays: n(f.vacationDays), trackingStart: f.trackingStart || undefined, overtimeCarry: n(f.overtimeCarry), vacationCarry: n(f.vacationCarry) });
+    await updateWorkModel(employee.id, { workload: n(f.workload), vacationDays: n(f.vacationDays), trackingStart: f.trackingStart || undefined, overtimeCarry: n(f.overtimeCarry), vacationCarry: n(f.vacationCarry), personnelNumber: f.personnelNumber.trim() });
     notify(tr("Arbeitsmodell von {0} gespeichert", employee.name));
     onClose();
   };
@@ -264,7 +266,10 @@ function WorkModelDialog({ employee, onClose }: { employee: Employee; onClose: (
         <Field label={tr("Pensum (%)")} name="workload" required><input id="wm-load" className="input num" inputMode="numeric" value={f.workload} onChange={set("workload")} /></Field>
         <Field label={tr("Ferientage pro Jahr")} name="vacationDays" required hint={tr("Bei 100 % Pensum; wird anteilig gerechnet.")}><input id="wm-vac" className="input num" inputMode="decimal" value={f.vacationDays} onChange={set("vacationDays")} /></Field>
       </FieldRow>
-      <Field label={tr("Erfassung ab")} hint={tr("Leer heisst ab Eintritt. Davor zählt kein Soll.")}><input id="wm-start" className="input" type="date" value={f.trackingStart} onChange={set("trackingStart")} /></Field>
+      <FieldRow>
+        <Field label={tr("Erfassung ab")} hint={tr("Leer heisst ab Eintritt. Davor zählt kein Soll.")}><input id="wm-start" className="input" type="date" value={f.trackingStart} onChange={set("trackingStart")} /></Field>
+        <Field label={tr("Personalnummer")} name="personnelNumber" hint={tr("Für den Lohnexport.")}><input id="wm-pnr" className="input" value={f.personnelNumber} onChange={set("personnelNumber")} /></Field>
+      </FieldRow>
       <FieldRow>
         <Field label={tr("Übertrag Überzeit (h)")} name="overtimeCarry" required><input id="wm-ot" className="input num" inputMode="decimal" value={f.overtimeCarry} onChange={set("overtimeCarry")} /></Field>
         <Field label={tr("Übertrag Ferien (Tage)")} name="vacationCarry" required><input id="wm-vc" className="input num" inputMode="decimal" value={f.vacationCarry} onChange={set("vacationCarry")} /></Field>

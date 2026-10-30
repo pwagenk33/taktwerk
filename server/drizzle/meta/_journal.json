@@ -162,6 +162,20 @@
       "when": 1793322189319,
       "tag": "0022_calendar",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1793322776481,
+      "tag": "0023_personnel_number",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1793322951543,
+      "tag": "0024_bexio",
+      "breakpoints": true
     }
   ]
 }

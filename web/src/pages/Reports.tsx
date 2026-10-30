@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { PROJECT_KINDS, addMonths, currencyOf, fmt1, fmtCHF, fmtCHF2, fmtDate, fmtMoney, fmtMonth, fmtMonthLong, fmtNum, monthOf, type Currency, type Figures, type PostalAddress, type ProfitRow } from "@taktwerk/domain";
+import { useBexio } from "./Bexio";
 import { api, type Invoice, type InvoicePosition, type InvoiceStatus } from "../api";
 import { useStore } from "../store";
 import { BulletBars, BurnUpChart, Icon, Money, StatusPill, reportToBullet } from "../ui/components";
@@ -122,6 +123,7 @@ function Invoices({ customerId }: { customerId: string }) {
   const [preview, setPreview] = useState<{ positions: InvoicePosition[]; net: number } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [busy, setBusy] = useState(false);
+  const bexio = useBexio();
   const [error, setError] = useState("");
   const demo = mode === "demo";
 
@@ -163,6 +165,10 @@ function Invoices({ customerId }: { customerId: string }) {
   const create = () => run(() => api("/api/invoices", { body: { customerId, month } }), tr("Rechnung für {0} erstellt", fmtMonthLong(month)));
   const send = (i: Invoice) => run(() => api(`/api/invoices/${i.id}/send`, { body: {} }), tr("Rechnung {0} versendet", i.number));
   const status = (i: Invoice, status: InvoiceStatus, msg: string) => run(() => api(`/api/invoices/${i.id}/status`, { body: { status } }), msg);
+  const toBexio = (i: Invoice) => run(async () => {
+    const r = await api<{ url: string }>(`/api/invoices/${i.id}/bexio`, { body: {} });
+    window.open(r.url, "_blank", "noopener");
+  }, tr("{0} als Entwurf in bexio angelegt", i.number));
   const remove = (i: Invoice) => run(() => api(`/api/invoices/${i.id}`, { method: "DELETE" }), tr("Entwurf gelöscht"));
   const existing = rows.find((i) => i.month === month && i.status !== "cancelled");
   const addressOk = address.name.trim() && address.zip.trim() && address.city.trim();
@@ -239,6 +245,9 @@ function Invoices({ customerId }: { customerId: string }) {
                       <a className="btn small" href={`/api/invoices/${i.id}/pdf`} download title={tr("PDF mit QR-Rechnung")}><Icon.download />{tr("PDF")}</a>
                       {i.status !== "cancelled" && i.status !== "paid" && <button className="btn small" disabled={busy} onClick={() => send(i)}><Icon.mail />{i.status === "sent" ? tr("Erneut senden") : tr("Senden")}</button>}
                       {i.status === "sent" && <button className="btn small primary" disabled={busy} onClick={() => status(i, "paid", tr("{0} als bezahlt markiert", i.number))}>{tr("Bezahlt")}</button>}
+                      {bexio && i.status !== "cancelled" && (i.bexioId
+                        ? <a className="btn small ghost" href={`https://office.bexio.com/index.php/kb_invoice/show/id/${i.bexioId}`} target="_blank" rel="noreferrer">{tr("In bexio")}</a>
+                        : <button className="btn small" disabled={busy} onClick={() => toBexio(i)}>{tr("An bexio")}</button>)}
                       {i.status === "draft" && <button className="btn small ghost" disabled={busy} onClick={() => remove(i)}>{tr("Löschen")}</button>}
                       {(i.status === "sent" || i.status === "paid") && <button className="btn small ghost" disabled={busy} onClick={() => status(i, "cancelled", tr("{0} storniert", i.number))}>{tr("Stornieren")}</button>}
                     </div>

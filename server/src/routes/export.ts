@@ -1,9 +1,9 @@
-import { EXPORT_ENTITIES, exportRows, toCsv } from "@taktwerk/domain";
+import { EXPORT_ENTITIES, exportRows, payrollRows, payrollTable, toCsv } from "@taktwerk/domain";
 import { desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { HttpError, requireRole, requireUser } from "../app";
-import { invoices } from "../db/schema";
+import { invoices, organizations } from "../db/schema";
 import { loadDataset } from "./data";
 import { tr } from "@taktwerk/domain";
 
@@ -12,6 +12,17 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 /** Complete data export as CSV (Excel, de-CH) or JSON for Power BI and friends; employees get their own data only. */
 export async function exportRoutes(app: FastifyInstance) {
   const ctx = app.ctx;
+
+  /** Payroll file for one month: hours, overtime, absence days and expenses per person with the company's wage types. */
+  app.get("/api/export/payroll", async (req, reply) => {
+    const user = requireRole(req, "admin");
+    const q = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/), format: z.enum(["csv", "json"]).default("csv") }).parse(req.query);
+    const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
+    const rows = payrollRows(await loadDataset(ctx, user, { detailFrom: `${q.month}-01` }), q.month, org?.settings.payrollCodes ?? {});
+    const name = `lohn-${q.month}`;
+    if (q.format === "json") return reply.header("content-disposition", `attachment; filename="${name}.json"`).type("application/json").send(JSON.stringify(rows, null, 2));
+    return reply.header("content-disposition", `attachment; filename="${name}.csv"`).type("text/csv; charset=utf-8").send(toCsv(payrollTable(rows)));
+  });
 
   app.get("/api/export/:entity", async (req, reply) => {
     const user = requireUser(req);

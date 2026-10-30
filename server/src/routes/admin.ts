@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { HttpError, requireRole, requireUser } from "../app";
 import { requireFeature, syncSeats } from "../saas";
-import { VAT_RATES } from "@taktwerk/domain";
+import { PAYROLL_ITEMS, VAT_RATES, type PayrollItem } from "@taktwerk/domain";
 import { customers, organizations, sessions, teams, users, type OrgSettings } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { createPasswordToken, passwordLink } from "./auth";
@@ -79,6 +79,7 @@ export async function adminRoutes(app: FastifyInstance) {
         timeModel: z.enum(["simplified", "full"]).optional(),
         onboarding: z.enum(["open", "done"]).optional(),
         costRate: z.number().min(0).max(1000).optional(),
+        payrollCodes: z.record(z.enum(PAYROLL_ITEMS.map((i) => i.id) as [PayrollItem, ...PayrollItem[]]), z.string().trim().max(20)).optional(),
         scheduledReports: z
           .array(
             z.object({
@@ -125,6 +126,7 @@ export async function adminRoutes(app: FastifyInstance) {
       timeModel: body.timeModel ?? org.settings.timeModel,
       billing: body.billing ?? org.settings.billing,
       costRate: body.costRate ?? org.settings.costRate,
+      payrollCodes: body.payrollCodes ?? org.settings.payrollCodes,
       scheduledReports: body.scheduledReports ?? org.settings.scheduledReports,
       fx: body.fx ? { rates: { ...org.settings.fx?.rates, ...body.fx.rates }, asOf: todayZurich(), source: "manuell", manual: body.fx.manual ?? true } : org.settings.fx,
     };

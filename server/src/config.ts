@@ -47,6 +47,9 @@ const schema = z.object({
   /** Atlassian OAuth 2.0 (3LO) app from developer.atlassian.com: companies connect their Jira Cloud site with it. Callback: <APP_URL>/api/jira/callback */
   ATLASSIAN_CLIENT_ID: optional,
   ATLASSIAN_CLIENT_SECRET: optional,
+  /** bexio OAuth app from developer.bexio.com: companies send invoices to their bexio. Redirect: <APP_URL>/api/bexio/callback */
+  BEXIO_CLIENT_ID: optional,
+  BEXIO_CLIENT_SECRET: optional,
   /** Directory with the built public website (website/dist); served on SAAS_BASE_DOMAIN and www.<base> when APP_URL runs on another host. */
   WEBSITE_DIR: optional,
   /** Where uploaded files (receipts) are stored. */

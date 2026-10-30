@@ -13,4 +13,5 @@ export * from "./plans";
 export * from "./import";
 export * from "./i18n";
 export * from "./calendar";
+export * from "./payroll";
 export { MESSAGES } from "./messages";

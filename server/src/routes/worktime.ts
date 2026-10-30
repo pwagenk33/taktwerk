@@ -193,11 +193,12 @@ export async function worktimeRoutes(app: FastifyInstance) {
         trackingStart: isoDate.nullable().optional(),
         overtimeCarry: z.number().min(-1000).max(1000).optional(),
         vacationCarry: z.number().min(-60).max(100).multipleOf(0.5).optional(),
+        personnelNumber: z.string().trim().max(20).transform((v) => v || null).nullable().optional(),
       })
       .parse(req.body);
     const [row] = await ctx.db.select().from(users).where(and(eq(users.id, id), eq(users.organizationId, admin.organizationId))).limit(1);
     if (!row) throw new HttpError(404, tr("Person nicht gefunden."));
-    const pick = (u: typeof row) => ({ workload: u.workload, vacationDays: u.vacationDays, trackingStart: u.trackingStart, overtimeCarry: u.overtimeCarry, vacationCarry: u.vacationCarry });
+    const pick = (u: typeof row) => ({ workload: u.workload, vacationDays: u.vacationDays, trackingStart: u.trackingStart, overtimeCarry: u.overtimeCarry, vacationCarry: u.vacationCarry, personnelNumber: u.personnelNumber });
     const next = { ...pick(row), ...body };
     await ctx.db.update(users).set(body).where(eq(users.id, id));
     await audit(ctx, admin, "work_model", id, "update", pick(row), next);

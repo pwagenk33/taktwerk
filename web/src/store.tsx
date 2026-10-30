@@ -16,7 +16,7 @@ export interface WorkSettingsPatch {
   timeModel?: TimeModel;
 }
 
-export type WorkModelPatch = Partial<Pick<Employee, "workload" | "vacationDays" | "trackingStart" | "overtimeCarry" | "vacationCarry">>;
+export type WorkModelPatch = Partial<Pick<Employee, "workload" | "vacationDays" | "trackingStart" | "overtimeCarry" | "vacationCarry" | "personnelNumber">>;
 
 // App state: the dataset from the API (or example data in demo mode) plus derived velocity and reports.
 

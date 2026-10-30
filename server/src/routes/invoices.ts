@@ -19,7 +19,7 @@ export async function invoiceRoutes(app: FastifyInstance) {
   };
   const summary = (i: typeof invoices.$inferSelect) => ({
     id: i.id, number: i.number, customerId: i.customerId, month: i.month, issueDate: i.issueDate, dueDate: i.dueDate,
-    status: i.status, net: i.net, vat: i.vat, vatRate: i.vatRate, gross: i.gross, positions: i.positions.length, sentAt: i.sentAt, paidAt: i.paidAt,
+    status: i.status, net: i.net, vat: i.vat, vatRate: i.vatRate, gross: i.gross, positions: i.positions.length, sentAt: i.sentAt, paidAt: i.paidAt, bexioId: i.bexioId,
   });
 
   app.get("/api/invoices", async (req) => {

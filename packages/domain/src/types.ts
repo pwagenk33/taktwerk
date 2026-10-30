@@ -22,6 +22,8 @@ export interface Employee {
   overtimeCarry?: number;
   /** Vacation days carried over into the year of `trackingStart`. */
   vacationCarry?: number;
+  /** Personnel number in the payroll system, used in the payroll export. */
+  personnelNumber?: string;
 }
 
 export interface Team {

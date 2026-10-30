@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `personnel_number` varchar(20);

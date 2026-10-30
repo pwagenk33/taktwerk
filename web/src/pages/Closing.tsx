@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { addMonths, fmt1, fmtCHF2, fmtDate, fmtMonthLong, isoWeekKey, monthOf, weekRange, workBalance } from "@taktwerk/domain";
-import type { WeekOverviewRow } from "../api";
+import { PAYROLL_ITEMS, addMonths, fmt1, fmtCHF2, fmtDate, fmtMonthLong, isoWeekKey, monthOf, payrollRows, payrollTable, toCsv, weekRange, workBalance, type PayrollCodes } from "@taktwerk/domain";
+import { api, type Settings as OrgSettings, type WeekOverviewRow } from "../api";
+import { Field, FormDialog } from "../ui/Dialog";
 import { useStore, type ClosingStatus } from "../store";
 import { Icon } from "../ui/components";
 import { signedH } from "./WorkTime";
@@ -329,6 +330,79 @@ export function Closing() {
           </div>
         </section>
       )}
+
+      {role === "admin" && <PayrollCard month={month} unapproved={counts.open + counts.submitted} />}
     </>
+  );
+}
+
+/** Payroll file for the selected month with the company's wage type numbers. */
+function PayrollCard({ month, unapproved }: { month: string; unapproved: number }) {
+  const { mode, data, notify } = useStore();
+  const [codes, setCodes] = useState<PayrollCodes>({});
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (mode === "api") api<OrgSettings>("/api/settings").then((s) => setCodes(s.payrollCodes ?? {})).catch(() => {});
+  }, [mode]);
+  const missing = data.employees.filter((e) => !e.personnelNumber).length;
+  const download = () => {
+    if (mode === "api") { window.open(`/api/export/payroll?month=${month}`, "_blank"); return; }
+    const rows = payrollRows(data, month, codes);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([toCsv(payrollTable(rows))], { type: "text/csv;charset=utf-8" }));
+    a.download = `lohn-${month}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    notify(tr("{0} Zeilen exportiert", rows.length));
+  };
+  return (
+    <section className="card card-pad" id="payroll" style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+      <h2 style={{ margin: 0 }}>{tr("Lohnexport · {0}", fmtMonthLong(month))}</h2>
+      <p className="explain" style={{ margin: 0 }}>{tr("Pro Person geleistete Stunden, Soll, Überzeit, Absenztage nach Art und Spesen zur Rückerstattung, mit euren Lohnarten. Die CSV-Datei lässt sich in gängige Lohnprogramme importieren. Sie ist keine Swissdec-Übermittlung.")}</p>
+      {unapproved > 0 && <p className="notice" style={{ margin: 0 }}>{trn(unapproved, "{0} Person hat diesen Monat noch nicht freigegeben. Die Zahlen können sich noch ändern.", "{0} Personen haben diesen Monat noch nicht freigegeben. Die Zahlen können sich noch ändern.")}</p>}
+      {missing > 0 && <p className="muted" style={{ margin: 0, fontSize: "0.82rem" }}>{trn(missing, "{0} Person hat noch keine Personalnummer (Absenzen → Team → Arbeitsmodell).", "{0} Personen haben noch keine Personalnummer (Absenzen → Team → Arbeitsmodell).")}</p>}
+      <div className="toolbar" style={{ gap: 8 }}>
+        <button id="payroll-csv" className="btn primary" onClick={download}>{tr("Lohnexport herunterladen")}</button>
+        <button id="payroll-codes" className="btn" onClick={() => setEditing(true)}>{tr("Lohnarten")}</button>
+      </div>
+      {editing && (
+        <PayrollCodesDialog
+          codes={codes}
+          onClose={() => setEditing(false)}
+          onSave={async (next) => {
+            if (mode === "api") await api<OrgSettings>("/api/settings", { method: "PUT", body: { payrollCodes: next } });
+            setCodes(next);
+            notify(tr("Lohnarten gespeichert"));
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function PayrollCodesDialog({ codes, onClose, onSave }: { codes: PayrollCodes; onClose: () => void; onSave: (c: PayrollCodes) => Promise<void> }) {
+  const [f, setF] = useState<Record<string, string>>(() => Object.fromEntries(PAYROLL_ITEMS.map((i) => [i.id, codes[i.id] ?? i.code])));
+  return (
+    <FormDialog
+      id="payroll-codes-dialog"
+      title={tr("Lohnarten")}
+      subtitle={tr("Die Nummern der Lohnarten in eurem Lohnprogramm. Vorgeschlagen sind neutrale Nummern, bitte an euer Lohnprogramm anpassen.")}
+      onClose={onClose}
+      onSubmit={async () => {
+        const e: Record<string, string> = {};
+        for (const i of PAYROLL_ITEMS) if ((f[i.id] ?? "").trim().length > 20) e[i.id] = tr("Höchstens 20 Zeichen.");
+        if (Object.keys(e).length) return e;
+        await onSave(Object.fromEntries(PAYROLL_ITEMS.map((i) => [i.id, (f[i.id] ?? "").trim()])) as PayrollCodes);
+        onClose();
+      }}
+    >
+      <div className="form-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        {PAYROLL_ITEMS.map((i) => (
+          <Field key={i.id} label={`${tr(i.label)} (${i.unit === "d" ? tr("Tage") : i.unit})`} name={i.id}>
+            <input id={`pc-${i.id}`} className="input num" value={f[i.id] ?? ""} onChange={(ev) => setF({ ...f, [i.id]: ev.target.value })} />
+          </Field>
+        ))}
+      </div>
+    </FormDialog>
   );
 }

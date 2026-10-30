@@ -118,6 +118,7 @@ export interface Settings {
   name: string;
   branding: Branding;
   ssoAutoProvisionDomains: string[];
+  payrollCodes?: Record<string, string>;
   reportDay?: number;
   weeklyHours?: number;
   holidays?: Holiday[];
@@ -169,6 +170,7 @@ export interface Invoice {
   positions: number;
   sentAt: string | null;
   paidAt: string | null;
+  bexioId?: string | null;
 }
 
 export interface UserRow {

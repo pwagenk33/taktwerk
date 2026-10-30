@@ -93,6 +93,8 @@ export interface OrgSettings {
   timeModel?: "simplified" | "full";
   /** New SaaS companies see the setup wizard until it is finished or skipped. */
   onboarding?: "open" | "done";
+  /** Wage type numbers of the payroll system per item of the payroll export. */
+  payrollCodes?: Partial<Record<string, string>>;
 }
 
 export const organizations = mysqlTable(
@@ -160,6 +162,7 @@ export const users = mysqlTable(
     trackingStart: date("tracking_start", { mode: "string" }),
     overtimeCarry: decimal("overtime_carry", { precision: 7, scale: 2, mode: "number" }).notNull().default(0),
     vacationCarry: decimal("vacation_carry", { precision: 4, scale: 1, mode: "number" }).notNull().default(0),
+    personnelNumber: varchar("personnel_number", { length: 20 }),
     lastLoginAt: datetime("last_login_at", { mode: "date" }),
     reminder: json<ReminderSettings>("reminder"),
     /** Internal cost per hour in CHF; null = organization default. */
@@ -365,6 +368,8 @@ export const invoices = mysqlTable(
     snapshot: json<{ sender: BillingSettings; recipient: PostalAddress; customerName: string; appName: string; primaryColor: string; currency?: "CHF" | "EUR" | "USD"; locale?: string }>("snapshot").notNull(),
     sentAt: datetime("sent_at", { mode: "date" }),
     paidAt: datetime("paid_at", { mode: "date" }),
+    /** Id of the invoice in bexio once it was transferred. */
+    bexioId: varchar("bexio_id", { length: 20 }),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("inv_number_uq").on(t.organizationId, t.number), index("inv_customer_idx").on(t.customerId)],
@@ -598,5 +603,20 @@ export const calendarConnections = mysqlTable("calendar_connections", {
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token"),
   expiresAt: datetime("expires_at", { mode: "date" }).notNull(),
+  createdAt: createdAt(),
+});
+
+/** Connection of a company to its bexio account (OAuth 2.0); invoices can be transferred there as drafts. */
+export const bexioConnections = mysqlTable("bexio_connections", {
+  organizationId: id("organization_id").primaryKey().references(() => organizations.id, { onDelete: "cascade" }),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token"),
+  expiresAt: datetime("expires_at", { mode: "date" }).notNull(),
+  /** bexio user the invoices and contacts are created for. */
+  bexioUserId: int("bexio_user_id").notNull(),
+  account: varchar("account", { length: 255 }),
+  /** bexio contact id per TrackInsight customer id, filled when an invoice is transferred. */
+  contacts: json<Record<string, number>>("contacts").notNull(),
+  connectedBy: id("connected_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 });
