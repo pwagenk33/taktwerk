@@ -6,14 +6,16 @@ import { HttpError, type AppContext } from "../app";
 import { customers, organizations, type Branding } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { loadDataset } from "../routes/data";
+import { tr } from "@taktwerk/domain";
+import { currentLocale, withLocale } from "../i18n";
 
-const STATUS_LABEL: Record<BudgetStatus, string> = { ok: "Im Plan", risk: "Knapp", over: "Überschreitung" };
+const STATUS_LABEL: Record<BudgetStatus, string> = { ok: tr("Im Plan"), risk: tr("Knapp"), over: tr("Überschreitung") };
 // Traffic-light colours stay independent of the brand colour (see KONZEPT §9).
 const STATUS_COLOR: Record<BudgetStatus, string> = { ok: "#1E7B4A", risk: "#B26A00", over: "#B3261E" };
 
 const swissDate = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
-const hours = (v: number) => v.toLocaleString("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const money2 = (v: number) => v.toLocaleString("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const hours = (v: number) => v.toLocaleString(`${currentLocale()}-CH`, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money2 = (v: number) => v.toLocaleString(`${currentLocale()}-CH`, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fileSafe = (s: string) => s.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
 
 interface EntryLine {
@@ -39,6 +41,8 @@ interface ExpenseLine {
 }
 
 export interface CustomerReport {
+  /** Language of the customer: texts, numbers and dates of PDF, Excel and mail. */
+  locale: string;
   orgName: string;
   branding: Branding;
   customerName: string;
@@ -54,7 +58,7 @@ export interface CustomerReport {
 export async function customerReport(ctx: AppContext, orgId: string, customerId: string, month: string): Promise<CustomerReport> {
   const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
   const [customer] = await ctx.db.select().from(customers).where(and(eq(customers.id, customerId), eq(customers.organizationId, orgId))).limit(1);
-  if (!org || !customer) throw new HttpError(404, "Kunde nicht gefunden.");
+  if (!org || !customer) throw new HttpError(404, tr("Kunde nicht gefunden."));
 
   // Reports are an organization-wide view; load the data with admin visibility.
   const data: Dataset = await loadDataset(ctx, { id: "", organizationId: orgId, name: "", username: "", email: "", role: "admin" });
@@ -87,6 +91,7 @@ export async function customerReport(ctx: AppContext, orgId: string, customerId:
     .map((x) => ({ date: x.date, person: person.get(x.employeeId) ?? "–", ...subInfo.get(x.subProjectId)!, category: x.category, reason: x.reason, amount: x.amount }));
 
   return {
+    locale: customer.locale,
     orgName: org.name,
     branding: org.settings.branding,
     customerName: customer.name,
@@ -125,7 +130,7 @@ export function renderPdf(r: CustomerReport): Promise<Buffer> {
     size: "A4",
     margins: { top: M, bottom: M + 20, left: M, right: M },
     bufferPages: true,
-    info: { Title: `Kundenreport ${r.customerName} ${fmtMonthLong(r.month)}`, Author: r.orgName, Creator: r.branding.appName },
+    info: { Title: tr("Kundenreport {0} {1}", r.customerName, fmtMonthLong(r.month)), Author: r.orgName, Creator: r.branding.appName },
   });
   const chunks: Buffer[] = [];
   doc.on("data", (c: Buffer) => chunks.push(c));
@@ -143,18 +148,18 @@ export function renderPdf(r: CustomerReport): Promise<Buffer> {
     doc.restore();
   }
   doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(18).text(r.branding.appName, M + (r.branding.showMotif ? 52 : 0), 22, { lineBreak: false });
-  doc.font("Helvetica").fontSize(10).text("Kundenreport", M, 27, { width: contentW, align: "right" });
+  doc.font("Helvetica").fontSize(10).text(tr("Kundenreport"), M, 27, { width: contentW, align: "right" });
 
   doc.fillColor(INK).font("Helvetica-Bold").fontSize(20).text(r.customerName, M, 88);
-  doc.font("Helvetica").fontSize(10).fillColor(MUTED).text(`Leistungsnachweis ${fmtMonthLong(r.month)} · Budget und Forecast per ${swissDate(r.today)} · ${r.orgName}`);
+  doc.font("Helvetica").fontSize(10).fillColor(MUTED).text(tr("Leistungsnachweis {0} · Budget und Forecast per {1} · {2}", fmtMonthLong(r.month), swissDate(r.today), r.orgName));
 
   // Summary tiles
   const tiles: [string, string, string?][] = [
-    ["Gesamtbudget", fmtCHF(r.totals.budget)],
-    ["Verbraucht", fmtCHF(r.totals.actualCost)],
-    ["Verbleibend", fmtCHF(r.totals.remainingBudget)],
-    ["Forecast", fmtCHF(r.totals.forecastCost)],
-    ["Abweichung", fmtCHF(r.totals.variance), r.totals.variance < 0 ? STATUS_COLOR.over : STATUS_COLOR.ok],
+    [tr("Gesamtbudget"), fmtCHF(r.totals.budget)],
+    [tr("Verbraucht"), fmtCHF(r.totals.actualCost)],
+    [tr("Verbleibend"), fmtCHF(r.totals.remainingBudget)],
+    [tr("Forecast"), fmtCHF(r.totals.forecastCost)],
+    [tr("Abweichung"), fmtCHF(r.totals.variance), r.totals.variance < 0 ? STATUS_COLOR.over : STATUS_COLOR.ok],
   ];
   const gap = 8;
   const tw = (contentW - gap * (tiles.length - 1)) / tiles.length;
@@ -212,16 +217,16 @@ export function renderPdf(r: CustomerReport): Promise<Buffer> {
   };
 
   // Budget and forecast per project and sub-project
-  heading("Budget und Forecast");
+  heading(tr("Budget und Forecast"));
   const w = contentW;
   const figCols: Col[] = [
-    { label: "Projekt / Subprojekt", width: w * 0.28 },
-    { label: "Budget", width: w * 0.12, align: "right" },
-    { label: "Verbraucht", width: w * 0.12, align: "right" },
-    { label: "Verbleibend", width: w * 0.12, align: "right" },
-    { label: "Forecast", width: w * 0.12, align: "right" },
-    { label: "Abweichung", width: w * 0.12, align: "right" },
-    { label: "Status", width: w * 0.12 },
+    { label: tr("Projekt / Subprojekt"), width: w * 0.28 },
+    { label: tr("Budget"), width: w * 0.12, align: "right" },
+    { label: tr("Verbraucht"), width: w * 0.12, align: "right" },
+    { label: tr("Verbleibend"), width: w * 0.12, align: "right" },
+    { label: tr("Forecast"), width: w * 0.12, align: "right" },
+    { label: tr("Abweichung"), width: w * 0.12, align: "right" },
+    { label: tr("Status"), width: w * 0.12 },
   ];
   const figRow = (name: string, f: Figures, bold: boolean, fill?: string) => ({
     cells: [name, fmtCHF(f.budget), fmtCHF(f.actualCost), fmtCHF(f.remainingBudget), fmtCHF(f.forecastCost), fmtCHF(f.variance), STATUS_LABEL[f.status]],
@@ -234,7 +239,7 @@ export function renderPdf(r: CustomerReport): Promise<Buffer> {
     r.projects.flatMap((p) => [figRow(p.project.name, p, true, "#F6F6F7"), ...p.subs.map((s) => figRow(`   ${s.subProject.name}`, s, false))]),
   );
   doc.font("Helvetica").fontSize(7.5).fillColor(MUTED).text(
-    "Forecast = verbrauchte Kosten + offene Story Points × aktuelle Team-Velocity (Stunden pro Story Point, gleitender Schnitt 3 Monate) × aktueller Stundensatz. Projektbudgets können eine Reserve über den Subprojekten enthalten.",
+    tr("Forecast = verbrauchte Kosten + offene Story Points × aktuelle Team-Velocity (Stunden pro Story Point, gleitender Schnitt 3 Monate) × aktueller Stundensatz. Projektbudgets können eine Reserve über den Subprojekten enthalten."),
     M,
     doc.y - 8,
     { width: contentW },
@@ -242,45 +247,45 @@ export function renderPdf(r: CustomerReport): Promise<Buffer> {
   doc.moveDown(1.2);
 
   // Services of the month
-  heading(`Leistungen ${fmtMonthLong(r.month)}`);
+  heading(tr("Leistungen {0}", fmtMonthLong(r.month)));
   if (r.entries.length === 0) {
-    doc.font("Helvetica").fontSize(9).fillColor(MUTED).text("Keine verrechenbaren Leistungen in diesem Monat.", M);
+    doc.font("Helvetica").fontSize(9).fillColor(MUTED).text(tr("Keine verrechenbaren Leistungen in diesem Monat."), M);
     doc.moveDown(1.2);
   } else {
     const totalH = r.entries.reduce((s, e) => s + e.hours, 0);
     const totalA = r.entries.reduce((s, e) => s + e.amount, 0);
     table(
       [
-        { label: "Datum", width: w * 0.1 },
-        { label: "Person", width: w * 0.14 },
-        { label: "Subprojekt", width: w * 0.18 },
-        { label: "Grund", width: w * 0.34 },
-        { label: "Std.", width: w * 0.09, align: "right" },
-        { label: "Betrag CHF", width: w * 0.15, align: "right" },
+        { label: tr("Datum"), width: w * 0.1 },
+        { label: tr("Person"), width: w * 0.14 },
+        { label: tr("Subprojekt"), width: w * 0.18 },
+        { label: tr("Grund"), width: w * 0.34 },
+        { label: tr("Std."), width: w * 0.09, align: "right" },
+        { label: tr("Betrag CHF"), width: w * 0.15, align: "right" },
       ],
       [
         ...r.entries.map((e) => ({ cells: [swissDate(e.date), e.person, e.subProject, e.issue && !e.reason.startsWith(e.issue) ? `${e.issue} · ${e.reason}` : e.reason, hours(e.hours), money2(e.amount)] })),
-        { cells: ["Total", "", "", "", hours(totalH), money2(totalA)], bold: true, fill: "#F6F6F7" },
+        { cells: [tr("Total"), "", "", "", hours(totalH), money2(totalA)], bold: true, fill: "#F6F6F7" },
       ],
     );
   }
 
-  heading(`Spesen ${fmtMonthLong(r.month)}`);
+  heading(tr("Spesen {0}", fmtMonthLong(r.month)));
   if (r.expenses.length === 0) {
-    doc.font("Helvetica").fontSize(9).fillColor(MUTED).text("Keine verrechenbaren Spesen in diesem Monat.", M);
+    doc.font("Helvetica").fontSize(9).fillColor(MUTED).text(tr("Keine verrechenbaren Spesen in diesem Monat."), M);
   } else {
     table(
       [
-        { label: "Datum", width: w * 0.1 },
-        { label: "Person", width: w * 0.14 },
-        { label: "Subprojekt", width: w * 0.18 },
-        { label: "Kategorie", width: w * 0.12 },
-        { label: "Grund", width: w * 0.31 },
-        { label: "Betrag CHF", width: w * 0.15, align: "right" },
+        { label: tr("Datum"), width: w * 0.1 },
+        { label: tr("Person"), width: w * 0.14 },
+        { label: tr("Subprojekt"), width: w * 0.18 },
+        { label: tr("Kategorie"), width: w * 0.12 },
+        { label: tr("Grund"), width: w * 0.31 },
+        { label: tr("Betrag CHF"), width: w * 0.15, align: "right" },
       ],
       [
         ...r.expenses.map((x) => ({ cells: [swissDate(x.date), x.person, x.subProject, x.category, x.reason, money2(x.amount)] })),
-        { cells: ["Total", "", "", "", "", money2(r.expenses.reduce((s, x) => s + x.amount, 0))], bold: true, fill: "#F6F6F7" },
+        { cells: [tr("Total"), "", "", "", "", money2(r.expenses.reduce((s, x) => s + x.amount, 0))], bold: true, fill: "#F6F6F7" },
       ],
     );
   }
@@ -293,7 +298,7 @@ export function renderPdf(r: CustomerReport): Promise<Buffer> {
     doc.moveTo(M, A4.h - M - 6).lineTo(A4.w - M, A4.h - M - 6).lineWidth(1.5).stroke(brand);
     doc.font("Helvetica").fontSize(7.5).fillColor(MUTED);
     doc.text(`${r.orgName} · ${r.customerName} · ${fmtMonthLong(r.month)}`, M, A4.h - M, { width: contentW / 2, lineBreak: false });
-    doc.text(`Seite ${i + 1} von ${range.count}`, M + contentW / 2, A4.h - M, { width: contentW / 2, align: "right", lineBreak: false });
+    doc.text(tr("Seite {0} von {1}", i + 1, range.count), M + contentW / 2, A4.h - M, { width: contentW / 2, align: "right", lineBreak: false });
   }
   doc.end();
   return done;
@@ -312,14 +317,14 @@ export async function renderXlsx(r: CustomerReport): Promise<Buffer> {
     row.eachCell((c) => (c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: brandArgb } }));
   };
 
-  const ov = wb.addWorksheet("Übersicht", { views: [{ state: "frozen", ySplit: 6 }] });
+  const ov = wb.addWorksheet(tr("Übersicht"), { views: [{ state: "frozen", ySplit: 6 }] });
   ov.columns = [{ width: 36 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 10 }, { width: 10 }, { width: 16 }];
-  ov.addRow([`Kundenreport ${r.customerName}`]).font = { bold: true, size: 14 };
-  ov.addRow([`Leistungsnachweis ${fmtMonthLong(r.month)}`]);
-  ov.addRow([`Budget und Forecast per ${swissDate(r.today)}`]);
+  ov.addRow([tr("Kundenreport {0}", r.customerName)]).font = { bold: true, size: 14 };
+  ov.addRow([tr("Leistungsnachweis {0}", fmtMonthLong(r.month))]);
+  ov.addRow([tr("Budget und Forecast per {0}", swissDate(r.today))]);
   ov.addRow([r.orgName]);
   ov.addRow([]);
-  styleHeader(ov.addRow(["Projekt / Subprojekt", "Budget", "Verbraucht", "Verbleibend", "Forecast", "Abweichung", "SP offen", "SP erledigt", "Status"]));
+  styleHeader(ov.addRow([tr("Projekt / Subprojekt"), tr("Budget"), tr("Verbraucht"), tr("Verbleibend"), tr("Forecast"), tr("Abweichung"), tr("SP offen"), tr("SP erledigt"), tr("Status")]));
   const r2 = (v: number) => Math.round(v * 100) / 100;
   const fig = (name: string, f: Figures) => [name, r2(f.budget), r2(f.actualCost), r2(f.remainingBudget), r2(f.forecastCost), r2(f.variance), f.spOpen, f.spDone, STATUS_LABEL[f.status]];
   for (const p of r.projects) {
@@ -327,48 +332,48 @@ export async function renderXlsx(r: CustomerReport): Promise<Buffer> {
     for (const s of p.subs) ov.addRow(fig(`   ${s.subProject.name}`, s));
   }
   const tt = r.totals;
-  const t = ov.addRow(["Total", r2(tt.budget), r2(tt.actualCost), r2(tt.remainingBudget), r2(tt.forecastCost), r2(tt.variance), null, null, STATUS_LABEL[tt.status]]);
+  const t = ov.addRow([tr("Total"), r2(tt.budget), r2(tt.actualCost), r2(tt.remainingBudget), r2(tt.forecastCost), r2(tt.variance), null, null, STATUS_LABEL[tt.status]]);
   t.font = { bold: true };
   t.border = { top: { style: "thin" } };
   for (const c of [2, 3, 4, 5, 6]) ov.getColumn(c).numFmt = chf;
 
-  const le = wb.addWorksheet("Leistungen", { views: [{ state: "frozen", ySplit: 1 }] });
+  const le = wb.addWorksheet(tr("Leistungen"), { views: [{ state: "frozen", ySplit: 1 }] });
   le.columns = [
-    { header: "Datum", key: "date", width: 12 },
-    { header: "Person", key: "person", width: 20 },
-    { header: "Projekt", key: "project", width: 24 },
-    { header: "Subprojekt", key: "subProject", width: 24 },
+    { header: tr("Datum"), key: "date", width: 12 },
+    { header: tr("Person"), key: "person", width: 20 },
+    { header: tr("Projekt"), key: "project", width: 24 },
+    { header: tr("Subprojekt"), key: "subProject", width: 24 },
     { header: "JIRA-Issue", key: "issue", width: 12 },
-    { header: "Grund", key: "reason", width: 48 },
-    { header: "Stunden", key: "hours", width: 10, style: { numFmt: "0.00" } },
-    { header: "Satz", key: "rate", width: 12, style: { numFmt: chf } },
-    { header: "Betrag", key: "amount", width: 14, style: { numFmt: chf } },
+    { header: tr("Grund"), key: "reason", width: 48 },
+    { header: tr("Stunden"), key: "hours", width: 10, style: { numFmt: "0.00" } },
+    { header: tr("Satz"), key: "rate", width: 12, style: { numFmt: chf } },
+    { header: tr("Betrag"), key: "amount", width: 14, style: { numFmt: chf } },
   ];
   styleHeader(le.getRow(1));
   for (const e of r.entries) le.addRow({ ...e, date: new Date(`${e.date}T00:00:00Z`) });
   le.getColumn("date").numFmt = "dd.mm.yyyy";
   if (r.entries.length) {
     const last = r.entries.length + 1;
-    const tr = le.addRow({ date: "Total", hours: { formula: `SUM(G2:G${last})` }, amount: { formula: `SUM(I2:I${last})` } });
-    tr.font = { bold: true };
+    const totalRow = le.addRow({ date: tr("Total"), hours: { formula: `SUM(G2:G${last})` }, amount: { formula: `SUM(I2:I${last})` } });
+    totalRow.font = { bold: true };
   }
 
-  const sp = wb.addWorksheet("Spesen", { views: [{ state: "frozen", ySplit: 1 }] });
+  const sp = wb.addWorksheet(tr("Spesen"), { views: [{ state: "frozen", ySplit: 1 }] });
   sp.columns = [
-    { header: "Datum", key: "date", width: 12 },
-    { header: "Person", key: "person", width: 20 },
-    { header: "Projekt", key: "project", width: 24 },
-    { header: "Subprojekt", key: "subProject", width: 24 },
-    { header: "Kategorie", key: "category", width: 14 },
-    { header: "Grund", key: "reason", width: 48 },
-    { header: "Betrag", key: "amount", width: 14, style: { numFmt: chf } },
+    { header: tr("Datum"), key: "date", width: 12 },
+    { header: tr("Person"), key: "person", width: 20 },
+    { header: tr("Projekt"), key: "project", width: 24 },
+    { header: tr("Subprojekt"), key: "subProject", width: 24 },
+    { header: tr("Kategorie"), key: "category", width: 14 },
+    { header: tr("Grund"), key: "reason", width: 48 },
+    { header: tr("Betrag"), key: "amount", width: 14, style: { numFmt: chf } },
   ];
   styleHeader(sp.getRow(1));
   for (const x of r.expenses) sp.addRow({ ...x, date: new Date(`${x.date}T00:00:00Z`) });
   sp.getColumn("date").numFmt = "dd.mm.yyyy";
   if (r.expenses.length) {
-    const tr = sp.addRow({ date: "Total", amount: { formula: `SUM(G2:G${r.expenses.length + 1})` } });
-    tr.font = { bold: true };
+    const totalRow = sp.addRow({ date: tr("Total"), amount: { formula: `SUM(G2:G${r.expenses.length + 1})` } });
+    totalRow.font = { bold: true };
   }
 
   return Buffer.from(await wb.xlsx.writeBuffer());
@@ -381,32 +386,38 @@ const CONTENT_TYPE = {
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 } as const;
 
-const filename = (r: CustomerReport, ext: string) => `Report-${fileSafe(r.customerName)}-${r.month}.${ext}`;
+const filename = (r: CustomerReport, ext: string) => tr("Report-{0}-{1}.{2}", fileSafe(r.customerName), r.month, ext);
 
 export async function reportFile(ctx: AppContext, orgId: string, customerId: string, month: string, format: "pdf" | "xlsx") {
   const r = await customerReport(ctx, orgId, customerId, month);
-  const data = format === "pdf" ? await renderPdf(r) : await renderXlsx(r);
-  return { contentType: CONTENT_TYPE[format], filename: filename(r, format), data };
+  return withLocale(r.locale, async () => {
+    const data = format === "pdf" ? await renderPdf(r) : await renderXlsx(r);
+    return { contentType: CONTENT_TYPE[format], filename: filename(r, format), data };
+  });
 }
 
 /** Mails PDF and Excel to the customer's report recipients. Returns the addresses (empty: nothing sent). */
 export async function sendCustomerReport(ctx: AppContext, orgId: string, customerId: string, month: string): Promise<string[]> {
   const [customer] = await ctx.db.select().from(customers).where(and(eq(customers.id, customerId), eq(customers.organizationId, orgId))).limit(1);
-  if (!customer) throw new HttpError(404, "Kunde nicht gefunden.");
+  if (!customer) throw new HttpError(404, tr("Kunde nicht gefunden."));
   const recipients = customer.reportRecipients;
   if (recipients.length === 0) return [];
+  return withLocale(customer.locale, () => mailCustomerReport(ctx, orgId, customerId, month, recipients));
+}
+
+async function mailCustomerReport(ctx: AppContext, orgId: string, customerId: string, month: string, recipients: string[]): Promise<string[]> {
   const r = await customerReport(ctx, orgId, customerId, month);
   const [pdf, xlsx] = await Promise.all([renderPdf(r), renderXlsx(r)]);
   const hoursTotal = r.entries.reduce((s, e) => s + e.hours, 0);
   const mail = actionMail(r.branding, {
     to: recipients.join(", "),
-    subject: `${r.orgName}: Report ${fmtMonthLong(r.month)} – ${r.customerName}`,
-    greeting: "Guten Tag",
+    subject: tr("{0}: Report {1} – {2}", r.orgName, fmtMonthLong(r.month), r.customerName),
+    greeting: tr("Guten Tag"),
     lines: [
-      `Im Anhang finden Sie den Report für ${fmtMonthLong(r.month)} als PDF und Excel.`,
-      `Leistungen im ${fmtMonthLong(r.month)}: ${hours(hoursTotal)} Stunden. Budget gesamt ${fmtCHF(r.totals.budget)}, verbraucht ${fmtCHF(r.totals.actualCost)}, Forecast ${fmtCHF(r.totals.forecastCost)}.`,
+      tr("Im Anhang finden Sie den Report für {0} als PDF und Excel.", fmtMonthLong(r.month)),
+      tr("Leistungen im {0}: {1} Stunden. Budget gesamt {2}, verbraucht {3}, Forecast {4}.", fmtMonthLong(r.month), hours(hoursTotal), fmtCHF(r.totals.budget), fmtCHF(r.totals.actualCost), fmtCHF(r.totals.forecastCost)),
     ],
-    footer: `Bei Fragen antworten Sie einfach auf diese E-Mail. Freundliche Grüsse, ${r.orgName}`,
+    footer: tr("Bei Fragen antworten Sie einfach auf diese E-Mail. Freundliche Grüsse, {0}", r.orgName),
   });
   await ctx.mailer.send({
     ...mail,

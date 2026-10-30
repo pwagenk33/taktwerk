@@ -1,4 +1,5 @@
-/** Posts chat messages to Microsoft Teams and Slack incoming webhooks. */
+
+import { tr } from "@taktwerk/domain";/** Posts chat messages to Microsoft Teams and Slack incoming webhooks. */
 export interface ChatMessage {
   title: string;
   text: string;
@@ -46,13 +47,13 @@ export function webhookProblem(channel: "teams" | "slack", url: string): string 
   try {
     u = new URL(url);
   } catch {
-    return "Die Webhook-URL ist ungültig.";
+    return tr("Die Webhook-URL ist ungültig.");
   }
-  if (u.protocol !== "https:") return "Die Webhook-URL muss mit https:// beginnen.";
+  if (u.protocol !== "https:") return tr("Die Webhook-URL muss mit https:// beginnen.");
   const host = u.hostname.toLowerCase();
-  if (channel === "slack" && host !== "hooks.slack.com") return "Slack-Webhooks beginnen mit https://hooks.slack.com/…";
+  if (channel === "slack" && host !== "hooks.slack.com") return tr("Slack-Webhooks beginnen mit https://hooks.slack.com/…");
   if (channel === "teams" && !/(\.|^)(webhook\.office\.com|logic\.azure\.com|powerplatform\.com)$/.test(host)) {
-    return "Teams-Webhooks liegen auf webhook.office.com oder logic.azure.com (Workflows).";
+    return tr("Teams-Webhooks liegen auf webhook.office.com oder logic.azure.com (Workflows).");
   }
   return null;
 }
@@ -70,7 +71,7 @@ export function createWebhookSender(live: boolean, log: (msg: string) => void = 
       }
       const body = channel === "teams" ? teamsPayload(msg) : slackPayload(msg);
       const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(10_000) });
-      if (!res.ok) throw new Error(`${channel === "teams" ? "Teams" : "Slack"} hat die Nachricht abgelehnt (HTTP ${res.status}).`);
+      if (!res.ok) throw new Error(tr("{0} hat die Nachricht abgelehnt (HTTP {1}).", channel === "teams" ? "Teams" : "Slack", res.status));
     },
   };
 }

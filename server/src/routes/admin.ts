@@ -11,8 +11,9 @@ import { actionMail } from "../mail/mailer";
 import { createPasswordToken, passwordLink } from "./auth";
 import { fetchFxRates } from "../fx";
 import { digestMail } from "../reports/digest";
+import { tr } from "@taktwerk/domain";
 
-const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Farbe als Hex-Wert, z. B. #D52B1E");
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, tr("Farbe als Hex-Wert, z. B. #D52B1E"));
 
 export const postalAddress = z.object({
   name: z.string().trim().min(1).max(70),
@@ -26,14 +27,14 @@ const iban = z
   .string()
   .trim()
   .transform((v) => v.toUpperCase().replace(/\s+/g, ""))
-  .pipe(z.string().regex(/^(CH|LI)\d{2}[0-9A-Z]{17}$/, "Ungültige IBAN (CH/LI, 21 Zeichen)"));
+  .pipe(z.string().regex(/^(CH|LI)\d{2}[0-9A-Z]{17}$/, tr("Ungültige IBAN (CH/LI, 21 Zeichen)")));
 
 export async function adminRoutes(app: FastifyInstance) {
   const ctx = app.ctx;
 
   const orgOf = async (id: string) => {
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, id)).limit(1);
-    if (!org) throw new HttpError(404, "Organisation nicht gefunden.");
+    if (!org) throw new HttpError(404, tr("Organisation nicht gefunden."));
     return org;
   };
 
@@ -44,7 +45,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const address = postalAddress.parse(req.body);
     const res = await ctx.db.update(customers).set({ billingAddress: address }).where(and(eq(customers.id, id), eq(customers.organizationId, user.organizationId)));
-    if (res[0].affectedRows === 0) throw new HttpError(404, "Kunde nicht gefunden.");
+    if (res[0].affectedRows === 0) throw new HttpError(404, tr("Kunde nicht gefunden."));
     return address;
   });
 
@@ -52,7 +53,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const user = requireRole(req, "admin", "consultant");
     const { id } = req.params as { id: string };
     const [c] = await ctx.db.select().from(customers).where(and(eq(customers.id, id), eq(customers.organizationId, user.organizationId))).limit(1);
-    if (!c) throw new HttpError(404, "Kunde nicht gefunden.");
+    if (!c) throw new HttpError(404, tr("Kunde nicht gefunden."));
     return c.billingAddress ?? { name: c.name, street: "", zip: "", city: "", country: "CH" };
   });
 
@@ -68,11 +69,11 @@ export async function adminRoutes(app: FastifyInstance) {
       .object({
         name: z.string().trim().min(1).max(200).optional(),
         branding: z.object({ appName: z.string().trim().min(1).max(60), primaryColor: hexColor, showMotif: z.boolean() }).optional(),
-        ssoAutoProvisionDomains: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/, "Ungültige Domain")).max(20).optional(),
+        ssoAutoProvisionDomains: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/, tr("Ungültige Domain"))).max(20).optional(),
         reportDay: z.number().int().min(1).max(28).optional(),
         weeklyHours: z.number().min(1).max(60).optional(),
         kmRate: z.number().min(0).max(5).optional(),
-        vatRate: z.number().refine((v) => (VAT_RATES as readonly number[]).includes(v), "Ungültiger MwSt-Satz").optional(),
+        vatRate: z.number().refine((v) => (VAT_RATES as readonly number[]).includes(v), tr("Ungültiger MwSt-Satz")).optional(),
         hoursReminder: z.boolean().optional(),
         closingReminder: z.boolean().optional(),
         timeModel: z.enum(["simplified", "full"]).optional(),
@@ -104,7 +105,7 @@ export async function adminRoutes(app: FastifyInstance) {
           })
           .optional(),
         holidays: z
-          .array(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT"), name: z.string().trim().min(1).max(80), fraction: z.union([z.literal(0.5), z.literal(1)]) }))
+          .array(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, tr("Datum im Format JJJJ-MM-TT")), name: z.string().trim().min(1).max(80), fraction: z.union([z.literal(0.5), z.literal(1)]) }))
           .max(300)
           .optional(),
       })
@@ -137,7 +138,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const org = await orgOf(user.organizationId);
     const r = org.settings.scheduledReports?.find((x) => x.id === id);
-    if (!r) throw new HttpError(404, "Bericht nicht gefunden.");
+    if (!r) throw new HttpError(404, tr("Bericht nicht gefunden."));
     const { mail } = await digestMail(ctx, org.id, org.settings, r, todayZurich());
     await ctx.mailer.send({ ...mail, to: user.email });
     return { ok: true, to: user.email };
@@ -159,12 +160,12 @@ export async function adminRoutes(app: FastifyInstance) {
     await ctx.mailer.send(
       actionMail(org.settings.branding, {
         to: user.email,
-        subject: `${org.settings.branding.appName}: Test-E-Mail`,
-        greeting: `Hallo ${user.name}`,
-        lines: ["Der E-Mail-Versand über SMTP funktioniert."],
-        action: "App öffnen",
+        subject: tr("{0}: Test-E-Mail", org.settings.branding.appName),
+        greeting: tr("Hallo {0}", user.name),
+        lines: [tr("Der E-Mail-Versand über SMTP funktioniert.")],
+        action: tr("App öffnen"),
         url: new URL(ctx.config.APP_URL).origin,
-        footer: "Diese E-Mail wurde aus den Einstellungen ausgelöst.",
+        footer: tr("Diese E-Mail wurde aus den Einstellungen ausgelöst."),
       }),
     );
     return { ok: true, smtp: Boolean(ctx.config.SMTP_HOST) };
@@ -185,7 +186,7 @@ export async function adminRoutes(app: FastifyInstance) {
       .object({
         name: z.string().trim().min(1).max(160),
         email: z.string().trim().toLowerCase().email(),
-        username: z.string().trim().min(3).max(80).regex(/^[a-zA-Z0-9._@-]+$/, "Benutzername: Buchstaben, Ziffern, . _ - @"),
+        username: z.string().trim().min(3).max(80).regex(/^[a-zA-Z0-9._@-]+$/, tr("Benutzername: Buchstaben, Ziffern, . _ - @")),
         role: z.enum(["admin", "consultant", "employee", "auditor"]),
         teamId: z.string().optional(),
       })
@@ -195,7 +196,7 @@ export async function adminRoutes(app: FastifyInstance) {
       .from(users)
       .where(or(eq(users.username, body.username), sql`lower(${users.email}) = ${body.email}`))
       .limit(1);
-    if (clash) throw new HttpError(409, "Benutzername oder E-Mail ist bereits vergeben.");
+    if (clash) throw new HttpError(409, tr("Benutzername oder E-Mail ist bereits vergeben."));
     if (body.role === "auditor") requireFeature(admin, "auditor");
     const id = randomUUID();
     await ctx.db.insert(users).values({ id, organizationId: admin.organizationId, ...body, teamId: body.teamId || null, trackingStart: todayZurich() });
@@ -205,15 +206,15 @@ export async function adminRoutes(app: FastifyInstance) {
     await ctx.mailer.send(
       actionMail(org.settings.branding, {
         to: body.email,
-        subject: `Einladung zu ${org.settings.branding.appName}`,
-        greeting: `Hallo ${body.name}`,
+        subject: tr("Einladung zu {0}", org.settings.branding.appName),
+        greeting: tr("Hallo {0}", body.name),
         lines: [
-          `${admin.name} hat dich zu ${org.settings.branding.appName} von ${org.name} eingeladen. Dein Benutzername ist «${body.username}».`,
-          "Setze über den Link ein Passwort. Alternativ kannst du dich mit deinem Microsoft- oder Google-Konto anmelden, wenn es diese E-Mail-Adresse verwendet.",
+          tr("{0} hat dich zu {1} von {2} eingeladen. Dein Benutzername ist «{3}».", admin.name, org.settings.branding.appName, org.name, body.username),
+          tr("Setze über den Link ein Passwort. Alternativ kannst du dich mit deinem Microsoft- oder Google-Konto anmelden, wenn es diese E-Mail-Adresse verwendet."),
         ],
-        action: "Passwort festlegen",
+        action: tr("Passwort festlegen"),
         url: passwordLink(ctx, token, org),
-        footer: "Der Link ist sieben Tage gültig.",
+        footer: tr("Der Link ist sieben Tage gültig."),
       }),
     );
     return reply.status(201).send({ id });
@@ -226,7 +227,7 @@ export async function adminRoutes(app: FastifyInstance) {
       .object({ name: z.string().trim().min(1).max(160).optional(), role: z.enum(["admin", "consultant", "employee", "auditor"]).optional(), active: z.boolean().optional(), teamId: z.string().nullable().optional(), costRate: z.number().min(0).max(1000).nullable().optional() })
       .parse(req.body);
     const [target] = await ctx.db.select().from(users).where(and(eq(users.id, id), eq(users.organizationId, admin.organizationId))).limit(1);
-    if (!target) throw new HttpError(404, "Benutzer nicht gefunden.");
+    if (!target) throw new HttpError(404, tr("Benutzer nicht gefunden."));
     if (body.role === "auditor" && target.role !== "auditor") requireFeature(admin, "auditor");
     // Billed people change when someone is (de)activated or moves between a free role (auditor) and a regular one.
     const free = (r: string) => r === "auditor" || r === "customer";
@@ -239,7 +240,7 @@ export async function adminRoutes(app: FastifyInstance) {
         .from(users)
         .where(and(eq(users.organizationId, admin.organizationId), eq(users.role, "admin"), eq(users.active, true), ne(users.id, id)))
         .limit(1);
-      if (!other) throw new HttpError(400, "Es muss mindestens ein aktiver Admin bleiben.");
+      if (!other) throw new HttpError(400, tr("Es muss mindestens ein aktiver Admin bleiben."));
     }
     await ctx.db.update(users).set(body).where(eq(users.id, id));
     if (willCount !== counted) await syncSeats(ctx, admin.organizationId);
@@ -258,7 +259,7 @@ export async function adminRoutes(app: FastifyInstance) {
   const teamLead = async (orgId: string, leadUserId: string | null | undefined) => {
     if (!leadUserId) return null;
     const [u] = await ctx.db.select({ id: users.id, role: users.role }).from(users).where(and(eq(users.id, leadUserId), eq(users.organizationId, orgId), eq(users.active, true))).limit(1);
-    if (!u || u.role === "customer" || u.role === "auditor") throw new HttpError(404, "Person für die Teamleitung nicht gefunden.");
+    if (!u || u.role === "customer" || u.role === "auditor") throw new HttpError(404, tr("Person für die Teamleitung nicht gefunden."));
     return u.id;
   };
 
@@ -275,7 +276,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const body = z.object({ name: z.string().trim().min(1).max(120).optional(), leadUserId: z.string().nullable().optional() }).parse(req.body);
     const [t] = await ctx.db.select().from(teams).where(and(eq(teams.id, id), eq(teams.organizationId, admin.organizationId))).limit(1);
-    if (!t) throw new HttpError(404, "Team nicht gefunden.");
+    if (!t) throw new HttpError(404, tr("Team nicht gefunden."));
     const next = { name: body.name ?? t.name, leadUserId: body.leadUserId === undefined ? t.leadUserId : await teamLead(admin.organizationId, body.leadUserId) };
     await ctx.db.update(teams).set(next).where(eq(teams.id, id));
     return { id, ...next };
@@ -286,7 +287,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const admin = requireRole(req, "admin");
     const { id } = req.params as { id: string };
     const [t] = await ctx.db.select().from(teams).where(and(eq(teams.id, id), eq(teams.organizationId, admin.organizationId))).limit(1);
-    if (!t) throw new HttpError(404, "Team nicht gefunden.");
+    if (!t) throw new HttpError(404, tr("Team nicht gefunden."));
     await ctx.db.update(users).set({ teamId: null }).where(eq(users.teamId, id));
     await ctx.db.delete(teams).where(eq(teams.id, id));
     return { ok: true };

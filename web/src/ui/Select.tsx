@@ -1,5 +1,6 @@
 import * as RS from "@radix-ui/react-select";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { tr } from "../i18n";
 
 // Radix reserves the empty string for «nothing selected», so an empty option value travels under a sentinel.
 const NONE = "__none__";
@@ -23,7 +24,7 @@ const text = (o: SelectOption) => (typeof o.label === "string" || typeof o.label
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 /** Searchable dropdown for long lists: a trigger that looks like Select, a popover with a filter field. */
-function Combobox({ id, value, onChange, options, placeholder = "Bitte wählen", disabled, small, ariaLabel, className }: SelectProps) {
+function Combobox({ id, value, onChange, options, placeholder = tr("Bitte wählen"), disabled, small, ariaLabel, className }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -102,7 +103,7 @@ function Combobox({ id, value, onChange, options, placeholder = "Bitte wählen",
         <div id={`${id ?? "cb"}-pop`} className={`select-menu combo ${pos.up ? "up" : ""}`} style={{ position: "fixed", left: pos.left, width: pos.width, ...(pos.up ? { bottom: window.innerHeight - pos.top } : { top: pos.top }) }}>
           <div className="combo-search">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5" /></svg>
-            <input ref={input} value={q} onChange={(ev) => setQ(ev.target.value)} onKeyDown={onKey} placeholder={`${options.length} Einträge durchsuchen …`} aria-label="Suchen" autoComplete="off" />
+            <input ref={input} value={q} onChange={(ev) => setQ(ev.target.value)} onKeyDown={onKey} placeholder={tr("{0} Einträge durchsuchen …", options.length)} aria-label={tr("Suchen")} autoComplete="off" />
           </div>
           <ul className="select-viewport combo-list" role="listbox" aria-activedescendant={`${id ?? "cb"}-opt-${cursor}`}>
             {shown.map((o, i) => (
@@ -121,8 +122,8 @@ function Combobox({ id, value, onChange, options, placeholder = "Bitte wählen",
                 {o.value === value && <span className="select-check"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg></span>}
               </li>
             ))}
-            {shown.length === 0 && <li className="combo-empty">Kein Treffer für «{q}».</li>}
-            {shown.length === 200 && <li className="combo-empty">Weiter eingrenzen, um mehr zu sehen.</li>}
+            {shown.length === 0 && <li className="combo-empty">{tr("Kein Treffer für «{0}».", q)}</li>}
+            {shown.length === 200 && <li className="combo-empty">{tr("Weiter eingrenzen, um mehr zu sehen.")}</li>}
           </ul>
         </div>
       )}
@@ -156,7 +157,7 @@ function PlainSelect({
   value,
   onChange,
   options,
-  placeholder = "Bitte wählen",
+  placeholder = tr("Bitte wählen"),
   disabled,
   small,
   ariaLabel,

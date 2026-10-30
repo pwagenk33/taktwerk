@@ -1,3 +1,5 @@
+import { tr } from "./i18n";
+
 /**
  * Work-time recording models under Swiss labour law and the «come/go» presence model.
  *
@@ -10,13 +12,13 @@ export type TimeModel = "simplified" | "full";
 export const TIME_MODELS: { id: TimeModel; label: string; hint: string }[] = [
   {
     id: "simplified",
-    label: "Vereinfacht: nur Stunden pro Tag (Art. 73b ArGV 1)",
-    hint: "Die Buchungen gelten als Arbeitszeiterfassung. Zulässig für Mitarbeitende mit grosser Autonomie bei der Arbeitszeit, mit schriftlicher Vereinbarung (Betrieb oder Einzelperson). Nacht- und Sonntagsarbeit ist trotzdem mit Beginn und Ende zu erfassen.",
+    label: tr("Vereinfacht: nur Stunden pro Tag (Art. 73b ArGV 1)"),
+    hint: tr("Die Buchungen gelten als Arbeitszeiterfassung. Zulässig für Mitarbeitende mit grosser Autonomie bei der Arbeitszeit, mit schriftlicher Vereinbarung (Betrieb oder Einzelperson). Nacht- und Sonntagsarbeit ist trotzdem mit Beginn und Ende zu erfassen."),
   },
   {
     id: "full",
-    label: "Vollständig: Kommen/Gehen mit Pausen (Art. 73 ArGV 1)",
-    hint: "Jede Person stempelt Kommen, Pause und Gehen. Die App prüft die gesetzlichen Pausen (15 min ab 5½ h, 30 min ab 7 h, 60 min ab 9 h), die tägliche Ruhezeit von 11 Stunden und den Zeitrahmen von 14 Stunden.",
+    label: tr("Vollständig: Kommen/Gehen mit Pausen (Art. 73 ArGV 1)"),
+    hint: tr("Jede Person stempelt Kommen, Pause und Gehen. Die App prüft die gesetzlichen Pausen (15 min ab 5½ h, 30 min ab 7 h, 60 min ab 9 h), die tägliche Ruhezeit von 11 Stunden und den Zeitrahmen von 14 Stunden."),
   },
 ];
 
@@ -103,17 +105,17 @@ export function presenceIssues(day: DayPresence, previousDayLastEnd?: string): s
   const issues: string[] = [];
   if (day.periods.length === 0) return issues;
   const needed = requiredBreak(day.work);
-  if (needed > day.breaks) issues.push(`Pause zu kurz: ${day.breaks} min statt mindestens ${needed} min bei ${(day.work / 60).toFixed(1)} h Arbeit (Art. 15 ArG).`);
+  if (needed > day.breaks) issues.push(tr("Pause zu kurz: {0} min statt mindestens {1} min bei {2} h Arbeit (Art. 15 ArG).", day.breaks, needed, (day.work / 60).toFixed(1)));
   const first = day.first ? toMinutes(day.first) : null;
   const lastEnd = day.periods.at(-1)?.end;
   const last = lastEnd ? toMinutes(lastEnd) : null;
-  if (first !== null && last !== null && last - first > 14 * 60) issues.push("Zeitrahmen über 14 Stunden (Art. 10 ArG).");
-  if (last !== null && last > 23 * 60) issues.push("Arbeit nach 23:00 gilt als Nachtarbeit und braucht eine Bewilligung (Art. 16 ArG).");
-  if (first !== null && first < 6 * 60) issues.push("Arbeit vor 06:00 gilt als Nachtarbeit und braucht eine Bewilligung (Art. 16 ArG).");
-  if (day.work > 12.5 * 60) issues.push("Mehr als 12½ Stunden Arbeit an einem Tag.");
+  if (first !== null && last !== null && last - first > 14 * 60) issues.push(tr("Zeitrahmen über 14 Stunden (Art. 10 ArG)."));
+  if (last !== null && last > 23 * 60) issues.push(tr("Arbeit nach 23:00 gilt als Nachtarbeit und braucht eine Bewilligung (Art. 16 ArG)."));
+  if (first !== null && first < 6 * 60) issues.push(tr("Arbeit vor 06:00 gilt als Nachtarbeit und braucht eine Bewilligung (Art. 16 ArG)."));
+  if (day.work > 12.5 * 60) issues.push(tr("Mehr als 12½ Stunden Arbeit an einem Tag."));
   if (previousDayLastEnd && first !== null) {
     const rest = 24 * 60 - toMinutes(previousDayLastEnd) + first;
-    if (rest < 11 * 60) issues.push(`Ruhezeit nur ${(rest / 60).toFixed(1)} h statt 11 h seit dem Vortag (Art. 15a ArG).`);
+    if (rest < 11 * 60) issues.push(tr("Ruhezeit nur {0} h statt 11 h seit dem Vortag (Art. 15a ArG).", (rest / 60).toFixed(1)));
   }
   return issues;
 }
@@ -121,7 +123,7 @@ export function presenceIssues(day: DayPresence, previousDayLastEnd?: string): s
 /** Applies a stamp at `now` and returns the periods of the day afterwards (pure; ids are made by the caller). */
 export function applyStamp(periods: WorkPeriod[], action: StampAction, employeeId: string, date: string, now: string, newId: () => string): WorkPeriod[] {
   const day = dayPresence(periods, date, now);
-  if (!stampOptions(day.state).includes(action)) throw new Error("Dieser Schritt passt nicht zum aktuellen Zustand.");
+  if (!stampOptions(day.state).includes(action)) throw new Error(tr("Dieser Schritt passt nicht zum aktuellen Zustand."));
   const close = (list: WorkPeriod[]) => list.map((p) => (p.id === day.open?.id ? { ...p, end: now } : p));
   const add = (list: WorkPeriod[], kind: PeriodKind) => [...list, { id: newId(), employeeId, date, kind, start: now }];
   switch (action) {

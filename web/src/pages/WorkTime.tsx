@@ -21,11 +21,12 @@ import { useStore } from "../store";
 import { Icon } from "../ui/components";
 import { Select } from "../ui/Select";
 import { Field, FieldRow, FormDialog } from "../ui/Dialog";
+import { tr, trn } from "../i18n";
 
 const STATUS: Record<Absence["status"], { label: string; cls: string }> = {
-  requested: { label: "Beantragt", cls: "risk" },
-  approved: { label: "Bewilligt", cls: "ok" },
-  rejected: { label: "Abgelehnt", cls: "neutral" },
+  requested: { label: tr("Beantragt"), cls: "risk" },
+  approved: { label: tr("Bewilligt"), cls: "ok" },
+  rejected: { label: tr("Abgelehnt"), cls: "neutral" },
 };
 
 /** Absence type → CSS class for calendar cells and legend. */
@@ -40,9 +41,9 @@ export const TYPE_CLASS: Record<AbsenceType, string> = {
 };
 
 export const signedH = (v: number) => `${v > 0.005 ? "+" : v < -0.005 ? "−" : ""}${fmt1(Math.abs(v))} h`;
-const days = (n: number) => `${fmt1(n).replace(/[.,]0$/, "")} ${n === 1 ? "Tag" : "Tage"}`;
+const days = (n: number) => trn(n, "{1} Tag", "{1} Tage", fmt1(n).replace(/[.,]0$/, ""));
 const rangeLabel = (a: Pick<Absence, "startDate" | "endDate" | "halfDay">) =>
-  `${a.startDate === a.endDate ? fmtDate(a.startDate) : `${fmtDate(a.startDate)} – ${fmtDate(a.endDate)}`}${a.halfDay ? " · halbe Tage" : ""}`;
+  `${a.startDate === a.endDate ? fmtDate(a.startDate) : `${fmtDate(a.startDate)} – ${fmtDate(a.endDate)}`}${a.halfDay ? tr(" · halbe Tage") : ""}`;
 
 function useRun() {
   const { notify } = useStore();
@@ -80,24 +81,24 @@ export function WorkTiles({ employee }: { employee: Employee }) {
   return (
     <div className="tiles">
       <div className="card tile">
-        <span className="label">Überzeit-Saldo</span>
+        <span className="label">{tr("Überzeit-Saldo")}</span>
         <span className={`value num ${balance.balance < 0 ? "neg" : ""}`}>{signedH(balance.balance)}</span>
-        <span className="delta">seit {fmtDate(balance.from)}{balance.carry ? `, inkl. Übertrag ${signedH(balance.carry)}` : ""}</span>
+        <span className="delta">{tr("seit {0}", fmtDate(balance.from))}{balance.carry ? tr(", inkl. Übertrag {0}", signedH(balance.carry)) : ""}</span>
       </div>
       <div className="card tile">
-        <span className="label">Ferien {vac.year} übrig</span>
+        <span className="label">{tr("Ferien {0} übrig", vac.year)}</span>
         <span className="value num">{days(vac.remaining)}</span>
-        <span className="delta">{fmt1(vac.taken)} bezogen · {fmt1(vac.planned)} geplant{vac.requested ? ` · ${fmt1(vac.requested)} beantragt` : ""}</span>
+        <span className="delta">{fmt1(vac.taken)}{" "}{tr("bezogen · {0} geplant", fmt1(vac.planned))}{vac.requested ? tr(" · {0} beantragt", fmt1(vac.requested)) : ""}</span>
       </div>
       <div className="card tile">
         <span className="label">{fmtMonthLong(monthOf(data.today))}</span>
-        <span className="value num">{fmt1(month?.worked ?? 0)} / {fmt1((month?.target ?? 0) - (month?.absence ?? 0))} h</span>
-        <span className="delta">Ist / Soll bis heute · {signedH(month?.balance ?? 0)}</span>
+        <span className="value num">{fmt1(month?.worked ?? 0)}{" "}{tr("/ {0} h", fmt1((month?.target ?? 0) - (month?.absence ?? 0)))}</span>
+        <span className="delta">{tr("Ist / Soll bis heute ·")}{" "}{signedH(month?.balance ?? 0)}</span>
       </div>
       <div className="card tile">
-        <span className="label">Diese Woche</span>
-        <span className="value num">{fmt1(weekWorked)} / {fmt1(weekDue)} h</span>
-        <span className="delta">Pensum {workloadOf(employee)} % · {fmt1((workModelHours(data) * workloadOf(employee)) / 100)} h pro Woche</span>
+        <span className="label">{tr("Diese Woche")}</span>
+        <span className="value num">{fmt1(weekWorked)}{" "}{tr("/ {0} h", fmt1(weekDue))}</span>
+        <span className="delta">{tr("Pensum {0} % · {1} h pro Woche", workloadOf(employee), fmt1((workModelHours(data) * workloadOf(employee)) / 100))}</span>
       </div>
     </div>
   );
@@ -118,38 +119,38 @@ function AbsenceDialog({ onClose }: { onClose: () => void }) {
   const needsApproval = !lead && NEEDS_APPROVAL.includes(type);
 
   const submit = async (): Promise<Record<string, string> | void> => {
-    if (!startDate) return { from: "Ab wann?" };
-    if (!endDate || endDate < startDate) return { to: "Das Ende liegt vor dem Beginn." };
-    if (count === 0) return { to: "Im Zeitraum liegt kein Arbeitstag." };
+    if (!startDate) return { from: tr("Ab wann?") };
+    if (!endDate || endDate < startDate) return { to: tr("Das Ende liegt vor dem Beginn.") };
+    if (count === 0) return { to: tr("Im Zeitraum liegt kein Arbeitstag.") };
     const status = await addAbsence({ employeeId, type, startDate, endDate, halfDay, note: note.trim() || undefined });
-    notify(status === "requested" ? `${type} beantragt` : `${type} erfasst`);
+    notify(status === "requested" ? tr("{0} beantragt", tr(type)) : tr("{0} erfasst", tr(type)));
     onClose();
   };
 
   return (
     <FormDialog
       id="absence-dialog"
-      title={needsApproval ? "Absenz beantragen" : "Absenz erfassen"}
-      subtitle={needsApproval ? "Ferien und Kompensation gehen zur Bewilligung an die Teamleitung. Du siehst den Stand unter «Meine Absenzen»." : "Wird sofort eingetragen und im Soll berücksichtigt."}
-      submitLabel={needsApproval ? "Beantragen" : "Erfassen"}
+      title={needsApproval ? tr("Absenz beantragen") : tr("Absenz erfassen")}
+      subtitle={needsApproval ? tr("Ferien und Kompensation gehen zur Bewilligung an die Teamleitung. Du siehst den Stand unter «Meine Absenzen».") : tr("Wird sofort eingetragen und im Soll berücksichtigt.")}
+      submitLabel={needsApproval ? tr("Beantragen") : tr("Erfassen")}
       onClose={onClose}
       onSubmit={submit}
     >
       {lead && (
-        <Field label="Person" required><Select id="a-person" value={employeeId} onChange={setEmployeeId} options={data.employees.map((e) => ({ value: e.id, label: e.name }))} /></Field>
+        <Field label={tr("Person")} required><Select id="a-person" value={employeeId} onChange={setEmployeeId} options={data.employees.map((e) => ({ value: e.id, label: e.name }))} /></Field>
       )}
-      <Field label="Art" required hint={type === "Kompensation" ? "Wird vom Überzeit-Saldo abgezogen." : type === "Krankheit" ? "Ab dem 3. Tag braucht es meist ein Arztzeugnis." : undefined}>
-        <Select id="a-type" value={type} onChange={(v) => setType(v as AbsenceType)} options={ABSENCE_TYPES.map((t) => ({ value: t, label: t }))} />
+      <Field label={tr("Art")} required hint={type === "Kompensation" ? tr("Wird vom Überzeit-Saldo abgezogen.") : type === "Krankheit" ? tr("Ab dem 3. Tag braucht es meist ein Arztzeugnis.") : undefined}>
+        <Select id="a-type" value={type} onChange={(v) => setType(v as AbsenceType)} options={ABSENCE_TYPES.map((t) => ({ value: t, label: tr(t) }))} />
       </Field>
       <FieldRow>
-        <Field label="Von" name="from" required><input id="a-from" type="date" className="input" value={startDate} onChange={(e) => { setStart(e.target.value); if (e.target.value > endDate) setEnd(e.target.value); }} /></Field>
-        <Field label="Bis" name="to" required hint={count > 0 ? `${days(count)} Arbeitszeit` : "Kein Arbeitstag im Zeitraum"}><input id="a-to" type="date" className="input" value={endDate} min={startDate} onChange={(e) => setEnd(e.target.value)} /></Field>
+        <Field label={tr("Von")} name="from" required><input id="a-from" type="date" className="input" value={startDate} onChange={(e) => { setStart(e.target.value); if (e.target.value > endDate) setEnd(e.target.value); }} /></Field>
+        <Field label={tr("Bis")} name="to" required hint={count > 0 ? tr("{0} Arbeitszeit", days(count)) : tr("Kein Arbeitstag im Zeitraum")}><input id="a-to" type="date" className="input" value={endDate} min={startDate} onChange={(e) => setEnd(e.target.value)} /></Field>
       </FieldRow>
       <label className="check-field">
         <input id="a-half" type="checkbox" checked={halfDay} onChange={(e) => setHalfDay(e.target.checked)} />
-        <span><strong>Halbe Tage</strong><br /><span className="muted">Jeder Tag im Zeitraum zählt als halber Tag.</span></span>
+        <span><strong>{tr("Halbe Tage")}</strong><br /><span className="muted">{tr("Jeder Tag im Zeitraum zählt als halber Tag.")}</span></span>
       </label>
-      <Field label="Bemerkung"><input id="a-note" className="input" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder={type === "Krankheit" ? "Arztzeugnis ab dem 3. Tag nachreichen" : "z. B. Sommerferien"} /></Field>
+      <Field label={tr("Bemerkung")}><input id="a-note" className="input" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder={type === "Krankheit" ? tr("Arztzeugnis ab dem 3. Tag nachreichen") : tr("z. B. Sommerferien")} /></Field>
     </FormDialog>
   );
 }
@@ -166,29 +167,29 @@ function MyAbsences({ employee }: { employee: Employee }) {
 
   return (
     <section className="card" style={{ display: "flex", flexDirection: "column" }}>
-      <div className="card-head" style={{ paddingBottom: 8 }}><h2>Meine Absenzen {year}</h2></div>
-      {rows.length === 0 && <p className="card-pad muted">Noch keine Absenzen in diesem Jahr.</p>}
+      <div className="card-head" style={{ paddingBottom: 8 }}><h2>{tr("Meine Absenzen")}{" "}{year}</h2></div>
+      {rows.length === 0 && <p className="card-pad muted">{tr("Noch keine Absenzen in diesem Jahr.")}</p>}
       <ul className="abs-list">
         {rows.map((a) => (
           <li key={a.id}>
             <span className={`abs-dot ${TYPE_CLASS[a.type]}`} aria-hidden />
             <div className="what">
-              <div><strong>{a.type}</strong> · {rangeLabel(a)}</div>
+              <div><strong>{tr(a.type)}</strong> · {rangeLabel(a)}</div>
               <div className="meta">{days(absenceDays(data, a))}{a.note ? ` · ${a.note}` : ""}</div>
             </div>
             <span className={`pill ${STATUS[a.status].cls}`}>{STATUS[a.status].label}</span>
             <div className="entry-actions">
               {confirm === a.id ? (
                 <>
-                  <button className="btn small primary" onClick={() => run(() => deleteAbsence(a.id), a.status === "requested" ? "Antrag zurückgezogen" : "Absenz gelöscht").then(() => setConfirm(null))}>
-                    {a.status === "requested" ? "Zurückziehen" : "Löschen"}
+                  <button className="btn small primary" onClick={() => run(() => deleteAbsence(a.id), a.status === "requested" ? tr("Antrag zurückgezogen") : tr("Absenz gelöscht")).then(() => setConfirm(null))}>
+                    {a.status === "requested" ? tr("Zurückziehen") : tr("Löschen")}
                   </button>
-                  <button className="btn small ghost" onClick={() => setConfirm(null)}>Nein</button>
+                  <button className="btn small ghost" onClick={() => setConfirm(null)}>{tr("Nein")}</button>
                 </>
               ) : canDelete(a) ? (
-                <button className="icon-btn" title={a.status === "requested" ? "Antrag zurückziehen" : "Löschen"} aria-label="Löschen" onClick={() => setConfirm(a.id)}><Icon.trash /></button>
+                <button className="icon-btn" title={a.status === "requested" ? tr("Antrag zurückziehen") : tr("Löschen")} aria-label={tr("Löschen")} onClick={() => setConfirm(a.id)}><Icon.trash /></button>
               ) : (
-                <span className="lock" title={a.status === "approved" && !scope.lead ? "Bewilligt. Für Änderungen bitte an die Teamleitung wenden." : "Monat abgeschlossen"}><Icon.lock /></span>
+                <span className="lock" title={a.status === "approved" && !scope.lead ? tr("Bewilligt. Für Änderungen bitte an die Teamleitung wenden.") : tr("Monat abgeschlossen")}><Icon.lock /></span>
               )}
             </div>
           </li>
@@ -206,8 +207,8 @@ function Requests() {
   const name = (id: string) => data.employees.find((e) => e.id === id)?.name ?? "–";
   return (
     <section className="card">
-      <div className="card-head" style={{ paddingBottom: 8 }}><h2>Offene Anträge</h2><span className="pill neutral">{pending.length}</span></div>
-      {pending.length === 0 && <p className="card-pad muted">Keine offenen Anträge.</p>}
+      <div className="card-head" style={{ paddingBottom: 8 }}><h2>{tr("Offene Anträge")}</h2><span className="pill neutral">{pending.length}</span></div>
+      {pending.length === 0 && <p className="card-pad muted">{tr("Keine offenen Anträge.")}</p>}
       <ul className="abs-list">
         {pending.map((a) => {
           const vac = a.type === "Ferien" ? vacationSummary(data, a.employeeId, Number(a.startDate.slice(0, 4))) : null;
@@ -215,16 +216,16 @@ function Requests() {
             <li key={a.id}>
               <span className={`abs-dot ${TYPE_CLASS[a.type]}`} aria-hidden />
               <div className="what">
-                <div><strong>{name(a.employeeId)}</strong> · {a.type} · {rangeLabel(a)}</div>
+                <div><strong>{name(a.employeeId)}</strong> · {tr(a.type)} · {rangeLabel(a)}</div>
                 <div className="meta">
                   {days(absenceDays(data, a))}
-                  {vac ? ` · danach ${days(vac.remaining - absenceDays(data, a))} Ferien übrig` : ""}
+                  {vac ? tr(" · danach {0} Ferien übrig", days(vac.remaining - absenceDays(data, a))) : ""}
                   {a.note ? ` · ${a.note}` : ""}
                 </div>
               </div>
               <div className="closing-actions">
-                <button className="btn small primary" onClick={() => run(() => decideAbsence(a.id, true), `${name(a.employeeId)}: ${a.type} bewilligt`)}>Bewilligen</button>
-                <button className="btn small ghost" onClick={() => run(() => decideAbsence(a.id, false), `${name(a.employeeId)}: ${a.type} abgelehnt`)}>Ablehnen</button>
+                <button className="btn small primary" onClick={() => run(() => decideAbsence(a.id, true), tr("{0}: {1} bewilligt", name(a.employeeId), tr(a.type)))}>{tr("Bewilligen")}</button>
+                <button className="btn small ghost" onClick={() => run(() => decideAbsence(a.id, false), tr("{0}: {1} abgelehnt", name(a.employeeId), tr(a.type)))}>{tr("Ablehnen")}</button>
               </div>
             </li>
           );
@@ -248,25 +249,25 @@ function WorkModelDialog({ employee, onClose }: { employee: Employee; onClose: (
   const n = (v: string) => (v.trim() === "" ? NaN : Number(v));
   const submit = async () => {
     const e: Record<string, string> = {};
-    if (!(n(f.workload) >= 1 && n(f.workload) <= 100)) e.workload = "Zwischen 1 und 100 %.";
-    if (!(n(f.vacationDays) >= 0 && n(f.vacationDays) <= 60)) e.vacationDays = "Zwischen 0 und 60 Tagen.";
-    if (Number.isNaN(n(f.overtimeCarry))) e.overtimeCarry = "Eine Zahl, auch negativ.";
-    if (Number.isNaN(n(f.vacationCarry))) e.vacationCarry = "Eine Zahl, auch negativ.";
+    if (!(n(f.workload) >= 1 && n(f.workload) <= 100)) e.workload = tr("Zwischen 1 und 100 %.");
+    if (!(n(f.vacationDays) >= 0 && n(f.vacationDays) <= 60)) e.vacationDays = tr("Zwischen 0 und 60 Tagen.");
+    if (Number.isNaN(n(f.overtimeCarry))) e.overtimeCarry = tr("Eine Zahl, auch negativ.");
+    if (Number.isNaN(n(f.vacationCarry))) e.vacationCarry = tr("Eine Zahl, auch negativ.");
     if (Object.keys(e).length) return e;
     await updateWorkModel(employee.id, { workload: n(f.workload), vacationDays: n(f.vacationDays), trackingStart: f.trackingStart || undefined, overtimeCarry: n(f.overtimeCarry), vacationCarry: n(f.vacationCarry) });
-    notify(`Arbeitsmodell von ${employee.name} gespeichert`);
+    notify(tr("Arbeitsmodell von {0} gespeichert", employee.name));
     onClose();
   };
   return (
-    <FormDialog id="workmodel-dialog" title={`Arbeitsmodell von ${employee.name}`} subtitle="Pensum und Ferienanspruch bestimmen Soll und Saldo. Überträge gelten für Stände vor dem Start der Erfassung." onClose={onClose} onSubmit={submit}>
+    <FormDialog id="workmodel-dialog" title={tr("Arbeitsmodell von {0}", employee.name)} subtitle={tr("Pensum und Ferienanspruch bestimmen Soll und Saldo. Überträge gelten für Stände vor dem Start der Erfassung.")} onClose={onClose} onSubmit={submit}>
       <FieldRow>
-        <Field label="Pensum (%)" name="workload" required><input id="wm-load" className="input num" inputMode="numeric" value={f.workload} onChange={set("workload")} /></Field>
-        <Field label="Ferientage pro Jahr" name="vacationDays" required hint="Bei 100 % Pensum; wird anteilig gerechnet."><input id="wm-vac" className="input num" inputMode="decimal" value={f.vacationDays} onChange={set("vacationDays")} /></Field>
+        <Field label={tr("Pensum (%)")} name="workload" required><input id="wm-load" className="input num" inputMode="numeric" value={f.workload} onChange={set("workload")} /></Field>
+        <Field label={tr("Ferientage pro Jahr")} name="vacationDays" required hint={tr("Bei 100 % Pensum; wird anteilig gerechnet.")}><input id="wm-vac" className="input num" inputMode="decimal" value={f.vacationDays} onChange={set("vacationDays")} /></Field>
       </FieldRow>
-      <Field label="Erfassung ab" hint="Leer heisst ab Eintritt. Davor zählt kein Soll."><input id="wm-start" className="input" type="date" value={f.trackingStart} onChange={set("trackingStart")} /></Field>
+      <Field label={tr("Erfassung ab")} hint={tr("Leer heisst ab Eintritt. Davor zählt kein Soll.")}><input id="wm-start" className="input" type="date" value={f.trackingStart} onChange={set("trackingStart")} /></Field>
       <FieldRow>
-        <Field label="Übertrag Überzeit (h)" name="overtimeCarry" required><input id="wm-ot" className="input num" inputMode="decimal" value={f.overtimeCarry} onChange={set("overtimeCarry")} /></Field>
-        <Field label="Übertrag Ferien (Tage)" name="vacationCarry" required><input id="wm-vc" className="input num" inputMode="decimal" value={f.vacationCarry} onChange={set("vacationCarry")} /></Field>
+        <Field label={tr("Übertrag Überzeit (h)")} name="overtimeCarry" required><input id="wm-ot" className="input num" inputMode="decimal" value={f.overtimeCarry} onChange={set("overtimeCarry")} /></Field>
+        <Field label={tr("Übertrag Ferien (Tage)")} name="vacationCarry" required><input id="wm-vc" className="input num" inputMode="decimal" value={f.vacationCarry} onChange={set("vacationCarry")} /></Field>
       </FieldRow>
     </FormDialog>
   );
@@ -277,11 +278,11 @@ function TeamTable() {
   const [editing, setEditing] = useState<string | null>(null);
   return (
     <section className="card">
-      <div className="card-head" style={{ paddingBottom: 8 }}><h2>Team</h2></div>
+      <div className="card-head" style={{ paddingBottom: 8 }}><h2>{tr("Team")}</h2></div>
       <div className="table-wrap">
         <table className="data">
           <thead>
-            <tr><th>Person</th><th className="r">Pensum</th><th className="r">Überzeit-Saldo</th><th className="r">Ferien übrig</th><th className="r">Beantragt</th>{role === "admin" && <th className="r">Arbeitsmodell</th>}</tr>
+            <tr><th>{tr("Person")}</th><th className="r">{tr("Pensum")}</th><th className="r">{tr("Überzeit-Saldo")}</th><th className="r">{tr("Ferien übrig")}</th><th className="r">{tr("Beantragt")}</th>{role === "admin" && <th className="r">{tr("Arbeitsmodell")}</th>}</tr>
           </thead>
           <tbody>
             {data.employees.map((e) => {
@@ -296,7 +297,7 @@ function TeamTable() {
                     <td className="r num">{days(v.remaining)}</td>
                     <td className="r num">{v.requested ? days(v.requested) : "–"}</td>
                     {role === "admin" && (
-                      <td className="r"><button className="btn small ghost" onClick={() => setEditing(e.id)}>Bearbeiten</button></td>
+                      <td className="r"><button className="btn small ghost" onClick={() => setEditing(e.id)}>{tr("Bearbeiten")}</button></td>
                     )}
                   </tr>
                   {editing === e.id && <WorkModelDialog employee={e} onClose={() => setEditing(null)} />}
@@ -326,11 +327,11 @@ function TeamCalendar() {
   return (
     <section className="card">
       <div className="card-head" style={{ paddingBottom: 8, flexWrap: "wrap", gap: 8 }}>
-        <h2>Abwesenheiten · nächste 4 Wochen</h2>
+        <h2>{tr("Abwesenheiten · nächste 4 Wochen")}</h2>
         <div className="abs-legend">
-          {ABSENCE_TYPES.filter((t) => used.has(t)).map((t) => <span key={t}><span className={`abs-dot ${TYPE_CLASS[t]}`} />{t}</span>)}
-          <span><span className="abs-dot abs-req" />beantragt</span>
-          <span><span className="abs-dot abs-holiday" />Feiertag</span>
+          {ABSENCE_TYPES.filter((t) => used.has(t)).map((t) => <span key={t}><span className={`abs-dot ${TYPE_CLASS[t]}`} />{tr(t)}</span>)}
+          <span><span className="abs-dot abs-req" />{tr("beantragt")}</span>
+          <span><span className="abs-dot abs-holiday" />{tr("Feiertag")}</span>
         </div>
       </div>
       <div className="table-wrap">
@@ -340,7 +341,7 @@ function TeamCalendar() {
               <th />
               {dates.map((d) => (
                 <th key={d} className={d === data.today ? "today" : ""} title={holidays.get(d)?.name}>
-                  <span>{["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][new Date(`${d}T00:00:00Z`).getUTCDay()]}</span>
+                  <span>{[tr("So"), tr("Mo"), tr("Di"), tr("Mi"), tr("Do"), tr("Fr"), tr("Sa")][new Date(`${d}T00:00:00Z`).getUTCDay()]}</span>
                   {d.slice(8, 10)}.{d.slice(5, 7)}
                 </th>
               ))}
@@ -354,7 +355,7 @@ function TeamCalendar() {
                   const h = holidays.get(d);
                   const a = visible.find((x) => x.employeeId === e.id && x.startDate <= d && x.endDate >= d);
                   const cls = [a ? TYPE_CLASS[a.type] : "", a?.status === "requested" ? "abs-req" : "", a?.halfDay ? "half" : "", h && !a ? "abs-holiday" : ""].join(" ").trim();
-                  const title = [h?.name, a ? `${a.type}${a.status === "requested" ? " (beantragt)" : ""}${a.halfDay ? ", halber Tag" : ""}` : ""].filter(Boolean).join(" · ");
+                  const title = [h?.name, a ? `${tr(a.type)}${a.status === "requested" ? tr(" (beantragt)") : ""}${a.halfDay ? tr(", halber Tag") : ""}` : ""].filter(Boolean).join(" · ");
                   return <td key={d} className={cls} title={title || undefined} />;
                 })}
               </tr>
@@ -375,10 +376,10 @@ export function WorkTime() {
     <>
       <div className="page-head">
         <div>
-          <h1>Ferien & Absenzen</h1>
-          <p className="sub">Ferien beantragen, Krankheit und andere Absenzen erfassen. Überzeit-Saldo, Soll und Ist stehen im Kalender der Zeiterfassung und im Monatsabschluss.</p>
+          <h1>{tr("Ferien & Absenzen")}</h1>
+          <p className="sub">{tr("Ferien beantragen, Krankheit und andere Absenzen erfassen. Überzeit-Saldo, Soll und Ist stehen im Kalender der Zeiterfassung und im Monatsabschluss.")}</p>
         </div>
-        {!scope.readOnly && <button id="a-add" className="btn primary" onClick={() => setAdding(true)}>+ Absenz</button>}
+        {!scope.readOnly && <button id="a-add" className="btn primary" onClick={() => setAdding(true)}>{tr("+ Absenz")}</button>}
       </div>
       {adding && <AbsenceDialog onClose={() => setAdding(false)} />}
       {me && <MyAbsences employee={me} />}

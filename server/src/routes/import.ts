@@ -8,6 +8,7 @@ import { HttpError, requireRole, type AppContext } from "../app";
 import { customerRates, customers, expenses, importBatches, monthClosings, projects, subProjects, timeEntries, users } from "../db/schema";
 import { bookingChanged } from "./data";
 import { audit } from "./billing";
+import { tr } from "@taktwerk/domain";
 
 const MAX_ROWS = 50_000;
 const key = (s: string) => s.trim().toLowerCase();
@@ -77,7 +78,7 @@ export async function importRoutes(app: FastifyInstance) {
     try {
       return { rows: await xlsxRows(Buffer.from(data, "base64")) };
     } catch {
-      throw new HttpError(400, "Die Excel-Datei lässt sich nicht lesen. Bitte als .xlsx speichern oder als CSV exportieren.");
+      throw new HttpError(400, tr("Die Excel-Datei lässt sich nicht lesen. Bitte als .xlsx speichern oder als CSV exportieren."));
     }
   });
 
@@ -108,14 +109,14 @@ export async function importRoutes(app: FastifyInstance) {
   app.post("/api/onboarding/sample", async (req, reply) => {
     const user = requireRole(req, "admin");
     const [open] = await ctx.db.select({ id: importBatches.id }).from(importBatches).where(and(eq(importBatches.organizationId, user.organizationId), eq(importBatches.source, "sample"), isNull(importBatches.undoneAt))).limit(1);
-    if (open) throw new HttpError(409, "Die Beispieldaten sind schon geladen.");
+    if (open) throw new HttpError(409, tr("Die Beispieldaten sind schon geladen."));
     const today = new Date().toISOString().slice(0, 10);
-    const result = await runImport(ctx, user.organizationId, user.id, { source: "sample", fileName: "Beispieldaten", rows: sampleRows(today, user.name), people: { [key(user.name)]: user.id }, rate: 160 });
+    const result = await runImport(ctx, user.organizationId, user.id, { source: "sample", fileName: tr("Beispieldaten"), rows: sampleRows(today, user.name), people: { [key(user.name)]: user.id }, rate: 160 });
     // Budgets make the forecast and the warnings visible right away.
     const [batch] = await ctx.db.select().from(importBatches).where(eq(importBatches.id, result.id)).limit(1);
     for (const id of batch!.created.projects) {
       const [p] = await ctx.db.select({ name: projects.name }).from(projects).where(eq(projects.id, id)).limit(1);
-      const budget = SAMPLE_BUDGETS[p?.name ?? ""];
+      const budget = Object.entries(SAMPLE_BUDGETS).find(([name]) => tr(name) === p?.name)?.[1];
       if (budget) await ctx.db.update(projects).set({ budget }).where(eq(projects.id, id));
     }
     return reply.status(201).send(result);
@@ -132,8 +133,8 @@ export async function importRoutes(app: FastifyInstance) {
     const user = requireRole(req, "admin");
     const { id } = req.params as { id: string };
     const [batch] = await ctx.db.select().from(importBatches).where(and(eq(importBatches.id, id), eq(importBatches.organizationId, user.organizationId))).limit(1);
-    if (!batch) throw new HttpError(404, "Import nicht gefunden.");
-    if (batch.undoneAt) throw new HttpError(409, "Dieser Import wurde schon rückgängig gemacht.");
+    if (!batch) throw new HttpError(404, tr("Import nicht gefunden."));
+    if (batch.undoneAt) throw new HttpError(409, tr("Dieser Import wurde schon rückgängig gemacht."));
     const result = await undoImport(ctx, user.organizationId, batch);
     await audit(ctx, user, "import", id, "delete", null, result);
     return result;
@@ -150,7 +151,7 @@ export async function runImport(
   const ids = [...new Set(Object.values(body.people))];
   const staff = ids.length ? await ctx.db.select({ id: users.id, role: users.role }).from(users).where(and(eq(users.organizationId, orgId), inArray(users.id, ids))) : [];
   const allowed = new Set(staff.filter((u) => u.role !== "customer").map((u) => u.id));
-  for (const uid of ids) if (!allowed.has(uid)) throw new HttpError(400, "Eine zugeordnete Person gehört nicht zu dieser Firma.");
+  for (const uid of ids) if (!allowed.has(uid)) throw new HttpError(400, tr("Eine zugeordnete Person gehört nicht zu dieser Firma."));
 
   const closed = new Set(
     ids.length
@@ -218,7 +219,7 @@ export async function runImport(
       importBatchId: batchId,
     });
   }
-  if (entries.length === 0) throw new HttpError(400, skippedClosed ? "Alle Zeilen fallen in abgeschlossene Monate." : "Keiner Zeile ist eine Person zugeordnet.");
+  if (entries.length === 0) throw new HttpError(400, skippedClosed ? tr("Alle Zeilen fallen in abgeschlossene Monate.") : tr("Keiner Zeile ist eine Person zugeordnet."));
 
   const hours = Math.round(entries.reduce((s, e) => s + Number(e.hours), 0) * 100) / 100;
   await ctx.db.insert(importBatches).values({ id: batchId, organizationId: orgId, source: body.source, fileName: body.fileName, entries: entries.length, hours, created, createdBy: actorId });
@@ -264,9 +265,9 @@ const SAMPLE_BUDGETS: Record<string, number> = { "Buchungsstrecke Relaunch": 480
 /** Six weeks of plausible bookings up to `today` for one person, spread over three sample customers. */
 export function sampleRows(today: string, person: string): ImportRow[] {
   const plan: [string, string, string[], string[]][] = [
-    ["Beispiel: Alpenblick Hotels AG", "Buchungsstrecke Relaunch", ["Konzept", "Umsetzung"], ["Workshop mit dem Kunden", "Wireframes Buchung", "Zahlungsschritt umgesetzt", "Tests Buchungsstrecke"]],
-    ["Beispiel: Velo Zürich GmbH", "Online-Shop", ["Design", "Entwicklung"], ["Startseite gestaltet", "Warenkorb gebaut", "Produktfilter", "Abstimmung mit Marketing"]],
-    ["Beispiel: Treuhand Muster AG", "IT-Support 2026", ["Support"], ["Drucker eingerichtet", "Update der Arbeitsplätze", "Backup geprüft"]],
+    [tr("Beispiel: Alpenblick Hotels AG"), tr("Buchungsstrecke Relaunch"), [tr("Konzept"), tr("Umsetzung")], [tr("Workshop mit dem Kunden"), tr("Wireframes Buchung"), tr("Zahlungsschritt umgesetzt"), tr("Tests Buchungsstrecke")]],
+    [tr("Beispiel: Velo Zürich GmbH"), "Online-Shop", [tr("Design"), tr("Entwicklung")], [tr("Startseite gestaltet"), tr("Warenkorb gebaut"), tr("Produktfilter"), tr("Abstimmung mit Marketing")]],
+    [tr("Beispiel: Treuhand Muster AG"), tr("IT-Support 2026"), [tr("Support")], [tr("Drucker eingerichtet"), tr("Update der Arbeitsplätze"), tr("Backup geprüft")]],
   ];
   const rows: ImportRow[] = [];
   const end = new Date(`${today}T12:00:00Z`);

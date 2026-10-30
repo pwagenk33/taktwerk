@@ -5,6 +5,7 @@ import { and, count, eq, notInArray } from "drizzle-orm";
 import { HttpError, type AppContext, type SessionUser } from "./app";
 import { organizations, users } from "./db/schema";
 import { stripe } from "./stripe";
+import { tr } from "@taktwerk/domain";
 
 type OrgRow = typeof organizations.$inferSelect;
 
@@ -32,9 +33,9 @@ export async function subscriptionFor(ctx: AppContext, orgId: string): Promise<S
 export const LOCKED_WRITE_PREFIXES = ["/api/auth/", "/api/me/", "/api/subscription", "/api/billing/", "/api/dashboard"];
 
 export function lockedMessage(sub: Subscription) {
-  if (sub.status === "trialing" || sub.status === "expired") return "Die Testphase ist abgelaufen. Unter Einstellungen → Abo wählst du ein Paket, danach geht es sofort weiter. Deine Daten bleiben erhalten.";
-  if (sub.status === "past_due") return "Die letzte Zahlung ist offen. Unter Einstellungen → Abo kannst du die Zahlungsdaten aktualisieren.";
-  return "Das Abo ist beendet. Unter Einstellungen → Abo kannst du es wieder aufnehmen; deine Daten bleiben erhalten.";
+  if (sub.status === "trialing" || sub.status === "expired") return tr("Die Testphase ist abgelaufen. Unter Einstellungen → Abo wählst du ein Paket, danach geht es sofort weiter. Deine Daten bleiben erhalten.");
+  if (sub.status === "past_due") return tr("Die letzte Zahlung ist offen. Unter Einstellungen → Abo kannst du die Zahlungsdaten aktualisieren.");
+  return tr("Das Abo ist beendet. Unter Einstellungen → Abo kannst du es wieder aufnehmen; deine Daten bleiben erhalten.");
 }
 
 export function assertWritable(sub: Subscription | null | undefined) {
@@ -46,7 +47,7 @@ export function requireFeature(user: SessionUser, feature: Feature) {
   const sub = user.subscription;
   if (!sub || hasFeature(sub, feature)) return;
   const from = PLANS.find((p) => p.features.includes(feature))!;
-  throw new HttpError(402, `${FEATURE_LABEL[feature]} ist im Paket ${planById(sub.plan).name} nicht enthalten, erst ab ${from.name}. Wechseln unter Einstellungen → Abo.`);
+  throw new HttpError(402, tr("{0} ist im Paket {1} nicht enthalten, erst ab {2}. Wechseln unter Einstellungen → Abo.", FEATURE_LABEL[feature], planById(sub.plan).name, from.name));
 }
 
 /** Active people that count against the package (portal and auditor accounts are free). */

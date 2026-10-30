@@ -2,6 +2,7 @@
 import { eq } from "drizzle-orm";
 import type { AppContext } from "./app";
 import { organizations } from "./db/schema";
+import { tr } from "@taktwerk/domain";
 
 export const FX_URL = "https://api.frankfurter.app/latest?from=CHF&to=EUR,USD";
 
@@ -10,11 +11,11 @@ export type Fetcher = (url: string) => Promise<{ ok: boolean; status: number; js
 /** Fetches 1 CHF in EUR/USD and inverts to CHF per unit, rounded to 4 places. */
 export async function fetchFxRates(fetcher: Fetcher = (u) => fetch(u, { signal: AbortSignal.timeout(10_000) })): Promise<{ rates: { EUR: number; USD: number }; asOf: string; source: string }> {
   const res = await fetcher(FX_URL);
-  if (!res.ok) throw new Error(`Kursdienst antwortet mit HTTP ${res.status}.`);
+  if (!res.ok) throw new Error(tr("Kursdienst antwortet mit HTTP {0}.", res.status));
   const body = (await res.json()) as { date?: string; rates?: { EUR?: number; USD?: number } };
   const eur = body.rates?.EUR;
   const usd = body.rates?.USD;
-  if (!eur || !usd || !body.date) throw new Error("Kursdienst lieferte keine Kurse.");
+  if (!eur || !usd || !body.date) throw new Error(tr("Kursdienst lieferte keine Kurse."));
   const inv = (x: number) => Math.round((1 / x) * 10000) / 10000;
   return { rates: { EUR: inv(eur), USD: inv(usd) }, asOf: body.date, source: "EZB via frankfurter.app" };
 }

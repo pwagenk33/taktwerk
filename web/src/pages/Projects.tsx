@@ -4,15 +4,16 @@ import { CustomerDialog, PortalInviteDialog, ProjectDialog, SubProjectDialog } f
 import { useStore } from "../store";
 import type { PortalAccount } from "../api";
 import { BurnUpChart, Icon, Money, StatusPill } from "../ui/components";
+import { tr, trn } from "../i18n";
 
 /** Who leads the project, shown under the project head. Changed in the project's edit popup. */
 function ProjectLead({ project }: { project: Project }) {
   const { data } = useStore();
   const lead = data.employees.find((e) => e.id === project.leadUserId);
-  return lead ? <p className="muted" style={{ fontSize: "0.82rem", margin: "6px 0 0" }}>Projektleitung {lead.name}</p> : null;
+  return lead ? <p className="muted" style={{ fontSize: "0.82rem", margin: "6px 0 0" }}>{tr("Projektleitung")}{" "}{lead.name}</p> : null;
 }
 
-const kindLabel = (k: ProjectKind | undefined) => PROJECT_KINDS.find((x) => x.id === (k ?? "tm"))!.label;
+const kindLabel = (k: ProjectKind | undefined) => tr(PROJECT_KINDS.find((x) => x.id === (k ?? "tm"))!.label);
 
 /** Name, budget and Jira key of a project or sub-project; «Bearbeiten» opens the popup for leads. */
 function ItemHead({ item, kind, currency = "CHF" }: { item: Project | SubProject; kind: "project" | "sub"; currency?: Currency }) {
@@ -25,10 +26,10 @@ function ItemHead({ item, kind, currency = "CHF" }: { item: Project | SubProject
     <div className="tree-row" style={{ gap: 10, flexWrap: "wrap" }}>
       <div>
         {kind === "project" ? <h2 style={{ margin: 0 }}>{item.name}</h2> : <strong>{item.name}</strong>} {jiraKey && <span className="pill neutral mono">{jiraKey}</span>}
-        {project && <span className="pill neutral" style={{ marginLeft: 6 }}>{kindLabel(project.kind)}{project.kind === "retainer" && project.retainerHours ? ` · ${fmtNum(project.retainerHours)} h/Monat` : ""}</span>}
-        <div className="muted num" style={{ fontSize: "0.82rem" }}>{project?.kind === "fixed" ? "Fixpreis" : "Budget"} {fmtMoney(item.budget, currency)}</div>
+        {project && <span className="pill neutral" style={{ marginLeft: 6 }}>{kindLabel(project.kind)}{project.kind === "retainer" && project.retainerHours ? tr(" · {0} h/Monat", fmtNum(project.retainerHours)) : ""}</span>}
+        <div className="muted num" style={{ fontSize: "0.82rem" }}>{project?.kind === "fixed" ? tr("Fixpreis") : tr("Budget")} {fmtMoney(item.budget, currency)}</div>
       </div>
-      {scope.leadsProject(projectId) && !scope.readOnly && <button className="btn small" onClick={(e) => { e.stopPropagation(); setEdit(true); }}>Bearbeiten</button>}
+      {scope.leadsProject(projectId) && !scope.readOnly && <button className="btn small" onClick={(e) => { e.stopPropagation(); setEdit(true); }}>{tr("Bearbeiten")}</button>}
       {edit && (project
         ? <ProjectDialog project={project} customerId={project.customerId} onClose={() => setEdit(false)} />
         : <SubProjectDialog sub={item as SubProject} projectId={projectId} onClose={() => setEdit(false)} />)}
@@ -47,7 +48,7 @@ function ScenarioCard({ report, currency }: { report: ProjectReport; currency: C
   const m = (v: number) => fmtMoney(v, currency);
   const band = useMemo(() => scenarioBand(data, report, factor), [data, report, factor]);
   const current = factor?.current ?? 0;
-  const mine = useMemo(() => scenario(data, report, factor, { factor: f ?? current, rateFactor: rate / 100, spDelta: sp, budgetDelta: budget, capacityFactor: cap / 100 }, "Dein Szenario"), [data, report, factor, f, current, rate, sp, budget, cap]);
+  const mine = useMemo(() => scenario(data, report, factor, { factor: f ?? current, rateFactor: rate / 100, spDelta: sp, budgetDelta: budget, capacityFactor: cap / 100 }, tr("Dein Szenario")), [data, report, factor, f, current, rate, sp, budget, cap]);
   if (!factor || report.spOpen === 0) return null;
   const lo = Math.max(0.5, Math.floor(factor.low * 0.6 * 2) / 2);
   const hi = Math.ceil(factor.high * 1.4 * 2) / 2;
@@ -58,24 +59,24 @@ function ScenarioCard({ report, currency }: { report: ProjectReport; currency: C
     <section className="card" style={{ marginTop: 16 }}>
       <div className="card-head" style={{ paddingBottom: 8, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h2>Forecast-Szenarien</h2>
-          <span className="muted" style={{ fontSize: "0.8rem" }}>Velocity-Band aus den letzten {factor ? "Monaten" : ""} und ein Was-wäre-wenn für Nachträge</span>
+          <h2>{tr("Forecast-Szenarien")}</h2>
+          <span className="muted" style={{ fontSize: "0.8rem" }}>{tr("Velocity-Band aus den letzten")}{" "}{factor ? tr("Monaten") : ""}{" "}{tr("und ein Was-wäre-wenn für Nachträge")}</span>
         </div>
-        {changed && <button className="btn small ghost" onClick={reset}>Zurücksetzen</button>}
+        {changed && <button className="btn small ghost" onClick={reset}>{tr("Zurücksetzen")}</button>}
       </div>
       <div className="table-wrap">
         <table className="data">
-          <thead><tr><th>Szenario</th><th className="r">h/SP</th><th className="r">Restaufwand</th><th className="r">Forecast</th><th className="r">Budget</th><th className="r">Abweichung</th><th>Fertig ca.</th><th>Status</th></tr></thead>
+          <thead><tr><th>{tr("Szenario")}</th><th className="r">{tr("h/SP")}</th><th className="r">{tr("Restaufwand")}</th><th className="r">{tr("Forecast")}</th><th className="r">{tr("Budget")}</th><th className="r">{tr("Abweichung")}</th><th>{tr("Fertig ca.")}</th><th>{tr("Status")}</th></tr></thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.label} className={r.label === "Dein Szenario" ? "group" : ""}>
-                <td>{r.label}</td>
+              <tr key={r.label} className={r.label === tr("Dein Szenario") ? "group" : ""}>
+                <td>{tr(r.label)}</td>
                 <td className="r num">{fmt1(r.factor)}</td>
-                <td className="r num">{fmtNum(r.remainingHours)} h</td>
+                <td className="r num">{fmtNum(r.remainingHours)}{" "}{tr("h")}</td>
                 <td className="r num">{m(r.forecastCost)}</td>
                 <td className="r num">{m(r.budget)}</td>
                 <td className="r"><Money v={r.variance} signed currency={currency} /></td>
-                <td>{r.completionMonth ? fmtMonth(r.completionMonth) : "offen"}</td>
+                <td>{r.completionMonth ? fmtMonth(r.completionMonth) : tr("offen")}</td>
                 <td><StatusPill status={r.status} /></td>
               </tr>
             ))}
@@ -83,11 +84,11 @@ function ScenarioCard({ report, currency }: { report: ProjectReport; currency: C
         </table>
       </div>
       <div className="scenario-knobs">
-        <label className="knob"><span>Velocity <strong className="num">{fmt1(f ?? current)} h/SP</strong></span><input id="sc-factor" type="range" min={lo} max={hi} step={0.1} value={f ?? current} onChange={(e) => setF(Number(e.target.value))} /><small>Band {fmt1(factor.low)} – {fmt1(factor.high)}</small></label>
-        <label className="knob"><span>Stundensatz <strong className="num">{rate} %</strong></span><input id="sc-rate" type="range" min={70} max={130} step={5} value={rate} onChange={(e) => setRate(Number(e.target.value))} /><small>{m(rateOn(report.customer, data.today) * rate / 100)}/h für den Rest</small></label>
-        <label className="knob"><span>Umfang <strong className="num">{sp >= 0 ? "+" : ""}{sp} SP</strong></span><input id="sc-scope" type="range" min={-Math.min(50, report.spOpen)} max={100} step={5} value={sp} onChange={(e) => setSp(Number(e.target.value))} /><small>{fmtNum(report.spOpen + sp)} SP offen</small></label>
-        <label className="knob"><span>Budget <strong className="num">{budget >= 0 ? "+" : ""}{m(budget)}</strong></span><input id="sc-budget" type="range" min={-Math.round(report.budget / 2 / 1000) * 1000} max={Math.max(10000, Math.round(report.budget / 2 / 1000) * 1000)} step={1000} value={budget} onChange={(e) => setBudget(Number(e.target.value))} /><small>Nachtrag oder Kürzung</small></label>
-        <label className="knob"><span>Team <strong className="num">{cap} %</strong></span><input id="sc-cap" type="range" min={50} max={200} step={10} value={cap} onChange={(e) => setCap(Number(e.target.value))} /><small>Kapazität für den Fertigstellungstermin</small></label>
+        <label className="knob"><span>{tr("Velocity")}{" "}<strong className="num">{fmt1(f ?? current)}{" "}{tr("h/SP")}</strong></span><input id="sc-factor" type="range" min={lo} max={hi} step={0.1} value={f ?? current} onChange={(e) => setF(Number(e.target.value))} /><small>{tr("Band {0} –", fmt1(factor.low))}{" "}{fmt1(factor.high)}</small></label>
+        <label className="knob"><span>{tr("Stundensatz")}{" "}<strong className="num">{rate} %</strong></span><input id="sc-rate" type="range" min={70} max={130} step={5} value={rate} onChange={(e) => setRate(Number(e.target.value))} /><small>{m(rateOn(report.customer, data.today) * rate / 100)}{tr("/h für den Rest")}</small></label>
+        <label className="knob"><span>{tr("Umfang")}{" "}<strong className="num">{sp >= 0 ? "+" : ""}{sp}{" "}{tr("SP")}</strong></span><input id="sc-scope" type="range" min={-Math.min(50, report.spOpen)} max={100} step={5} value={sp} onChange={(e) => setSp(Number(e.target.value))} /><small>{fmtNum(report.spOpen + sp)}{" "}{tr("SP offen")}</small></label>
+        <label className="knob"><span>{tr("Budget")}{" "}<strong className="num">{budget >= 0 ? "+" : ""}{m(budget)}</strong></span><input id="sc-budget" type="range" min={-Math.round(report.budget / 2 / 1000) * 1000} max={Math.max(10000, Math.round(report.budget / 2 / 1000) * 1000)} step={1000} value={budget} onChange={(e) => setBudget(Number(e.target.value))} /><small>{tr("Nachtrag oder Kürzung")}</small></label>
+        <label className="knob"><span>{tr("Team")}{" "}<strong className="num">{cap} %</strong></span><input id="sc-cap" type="range" min={50} max={200} step={10} value={cap} onChange={(e) => setCap(Number(e.target.value))} /><small>{tr("Kapazität für den Fertigstellungstermin")}</small></label>
       </div>
     </section>
   );
@@ -112,39 +113,39 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
     <>
       <div className="page-head">
         <div>
-          <button className="btn small ghost back-btn" onClick={onBack}><Icon.back />{customer?.name ?? "Kunden"}</button>
+          <button className="btn small ghost back-btn" onClick={onBack}><Icon.back />{customer?.name ?? tr("Kunden")}</button>
           <h1 style={{ marginTop: 8 }}>{project.name}</h1>
-          <p className="sub">{customer?.name} · {m(customer ? rateOn(customer, data.today) : 0)}/h · {kindLabel(project.kind)}</p>
+          <p className="sub">{customer?.name}{" "}{tr("· {0}/h ·", m(customer ? rateOn(customer, data.today) : 0))}{" "}{kindLabel(project.kind)}</p>
         </div>
         {r && <StatusPill status={r.status} />}
       </div>
       <section className="card card-pad" style={{ marginBottom: 16 }}>
         <ItemHead item={project} kind="project" currency={cur} />
-        <p className="muted num" style={{ fontSize: "0.82rem", margin: "8px 0 0" }}>Auf Subprojekte verteilt {m(allocated)} · Reserve <Money v={project.budget - allocated} signed={project.budget - allocated < 0} currency={cur} /></p>
+        <p className="muted num" style={{ fontSize: "0.82rem", margin: "8px 0 0" }}>{tr("Auf Subprojekte verteilt {0} · Reserve", m(allocated))}{" "}<Money v={project.budget - allocated} signed={project.budget - allocated < 0} currency={cur} /></p>
         <ProjectLead project={project} />
       </section>
       {r?.retainer && (
         <div className="tiles">
-          <div className="card tile"><span className="label">Kontingent {fmtMonth(r.retainer.month)}</span><span className="value num">{fmt1(r.retainer.used)} / {fmtNum(r.retainer.hoursPerMonth)} h</span><span className="delta num">{fmt1((r.retainer.used / Math.max(1, r.retainer.hoursPerMonth)) * 100)} % genutzt</span></div>
-          <div className="card tile"><span className="label">Schnitt letzte 3 Monate</span><span className="value num">{fmt1(r.retainer.avg3)} h</span><span className="delta">{r.retainer.avg3 > r.retainer.hoursPerMonth ? "über dem Kontingent" : "innerhalb des Kontingents"}</span></div>
-          <div className="card tile"><span className="label">Monatsbetrag</span><span className="value num">{m(r.retainer.hoursPerMonth * (customer ? rateOn(customer, data.today) : 0))}</span><span className="delta">{fmtNum(r.retainer.hoursPerMonth)} h × {m(customer ? rateOn(customer, data.today) : 0)}</span></div>
-          <div className="card tile"><span className="label">Offen</span><span className="value num">{fmtNum(r.spOpen)} SP</span><span className="delta">{fmtNum(r.remainingHours)} h Restaufwand</span></div>
+          <div className="card tile"><span className="label">{tr("Kontingent")}{" "}{fmtMonth(r.retainer.month)}</span><span className="value num">{fmt1(r.retainer.used)}{" "}{tr("/ {0} h", fmtNum(r.retainer.hoursPerMonth))}</span><span className="delta num">{fmt1((r.retainer.used / Math.max(1, r.retainer.hoursPerMonth)) * 100)}{" "}{tr("% genutzt")}</span></div>
+          <div className="card tile"><span className="label">{tr("Schnitt letzte 3 Monate")}</span><span className="value num">{fmt1(r.retainer.avg3)}{" "}{tr("h")}</span><span className="delta">{r.retainer.avg3 > r.retainer.hoursPerMonth ? tr("über dem Kontingent") : tr("innerhalb des Kontingents")}</span></div>
+          <div className="card tile"><span className="label">{tr("Monatsbetrag")}</span><span className="value num">{m(r.retainer.hoursPerMonth * (customer ? rateOn(customer, data.today) : 0))}</span><span className="delta">{fmtNum(r.retainer.hoursPerMonth)}{" "}{tr("h ×")}{" "}{m(customer ? rateOn(customer, data.today) : 0)}</span></div>
+          <div className="card tile"><span className="label">{tr("Offen")}</span><span className="value num">{fmtNum(r.spOpen)}{" "}{tr("SP")}</span><span className="delta">{fmtNum(r.remainingHours)}{" "}{tr("h Restaufwand")}</span></div>
         </div>
       )}
       {r && !r.retainer && (
         <div className="tiles">
-          <div className="card tile"><span className="label">{r.kind === "fixed" ? "Fixpreis" : "Budget"}</span><span className="value num">{m(r.budget)}</span></div>
-          <div className="card tile"><span className="label">{r.kind === "fixed" ? "Aufwand zum Kundensatz" : "Verbraucht"}</span><span className="value num">{m(r.actualCost)}</span><span className="delta num">{fmt1((r.actualCost / Math.max(1, r.budget)) * 100)} % {r.kind === "fixed" ? "des Fixpreises" : "des Budgets"}</span></div>
-          <div className="card tile"><span className="label">Forecast</span><span className="value num">{m(r.forecastCost)}</span><span className="delta">Abweichung <Money v={r.variance} signed currency={cur} /></span></div>
-          <div className="card tile"><span className="label">Offen</span><span className="value num">{fmtNum(r.spOpen)} SP</span><span className="delta">{fmtNum(r.remainingHours)} h Restaufwand · fertig ca. {r.completionMonth ? fmtMonth(r.completionMonth) : "offen"}</span></div>
+          <div className="card tile"><span className="label">{r.kind === "fixed" ? tr("Fixpreis") : tr("Budget")}</span><span className="value num">{m(r.budget)}</span></div>
+          <div className="card tile"><span className="label">{r.kind === "fixed" ? tr("Aufwand zum Kundensatz") : tr("Verbraucht")}</span><span className="value num">{m(r.actualCost)}</span><span className="delta num">{fmt1((r.actualCost / Math.max(1, r.budget)) * 100)} % {r.kind === "fixed" ? tr("des Fixpreises") : tr("des Budgets")}</span></div>
+          <div className="card tile"><span className="label">{tr("Forecast")}</span><span className="value num">{m(r.forecastCost)}</span><span className="delta">{tr("Abweichung")}{" "}<Money v={r.variance} signed currency={cur} /></span></div>
+          <div className="card tile"><span className="label">{tr("Offen")}</span><span className="value num">{fmtNum(r.spOpen)}{" "}{tr("SP")}</span><span className="delta">{fmtNum(r.remainingHours)}{" "}{tr("h Restaufwand · fertig ca.")}{" "}{r.completionMonth ? fmtMonth(r.completionMonth) : tr("offen")}</span></div>
         </div>
       )}
       <section className="card">
-        <div className="card-head" style={{ paddingBottom: 8 }}><h2>Subprojekte</h2><span className="muted" style={{ fontSize: "0.8rem" }}>Zeile anklicken für die JIRA-Tickets</span></div>
+        <div className="card-head" style={{ paddingBottom: 8 }}><h2>{tr("Subprojekte")}</h2><span className="muted" style={{ fontSize: "0.8rem" }}>{tr("Zeile anklicken für die JIRA-Tickets")}</span></div>
         <div className="table-wrap">
           <table className="data">
             <thead>
-              <tr><th>Subprojekt</th><th className="r">Budget</th><th className="r">Verbraucht</th><th className="r">Verbleibend</th><th className="r">Offene SP</th><th className="r">Forecast</th><th>Status</th></tr>
+              <tr><th>{tr("Subprojekt")}</th><th className="r">{tr("Budget")}</th><th className="r">{tr("Verbraucht")}</th><th className="r">{tr("Verbleibend")}</th><th className="r">{tr("Offene SP")}</th><th className="r">{tr("Forecast")}</th><th>{tr("Status")}</th></tr>
             </thead>
             <tbody>
               {subs.map((s) => {
@@ -169,17 +170,17 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
                             <ItemHead item={s} kind="sub" currency={cur} />
                           </div>
                           {issues.length === 0 ? (
-                            <p className="muted" style={{ margin: 0 }}>Keine JIRA-Tickets verknüpft{s.jiraEpicKey ? "" : " (kein Epic hinterlegt)"}.</p>
+                            <p className="muted" style={{ margin: 0 }}>{tr("Keine JIRA-Tickets verknüpft")}{s.jiraEpicKey ? "" : tr(" (kein Epic hinterlegt)")}.</p>
                           ) : (
                             <table className="data" style={{ fontSize: "0.84rem" }}>
-                              <thead><tr><th>Ticket</th><th>Titel</th><th className="r">SP</th><th>Status</th><th className="r">Gebucht</th><th>Erledigt</th></tr></thead>
+                              <thead><tr><th>{tr("Ticket")}</th><th>{tr("Titel")}</th><th className="r">{tr("SP")}</th><th>{tr("Status")}</th><th className="r">{tr("Gebucht")}</th><th>{tr("Erledigt")}</th></tr></thead>
                               <tbody>
                                 {[...issues].sort((a, b) => (a.status === b.status ? a.key.localeCompare(b.key) : a.status === "Done" ? 1 : b.status === "Done" ? -1 : a.status === "In Progress" ? -1 : 1)).map((i) => (
                                   <tr key={i.key}>
                                     <td className="mono">{i.key}</td>
                                     <td>{i.summary}</td>
                                     <td className="r num">{i.storyPoints}</td>
-                                    <td><span className={`pill ${i.status === "Done" ? "ok" : i.status === "In Progress" ? "risk" : "neutral"}`}>{i.status === "Done" ? "Erledigt" : i.status === "In Progress" ? "In Arbeit" : "Offen"}</span></td>
+                                    <td><span className={`pill ${i.status === "Done" ? "ok" : i.status === "In Progress" ? "risk" : "neutral"}`}>{i.status === "Done" ? tr("Erledigt") : i.status === "In Progress" ? tr("In Arbeit") : tr("Offen")}</span></td>
                                     <td className="r num">{hoursByIssue.get(i.key) ? `${fmt1(hoursByIssue.get(i.key)!)} h` : "–"}</td>
                                     <td className="num">{i.resolvedAt ? i.resolvedAt.split("-").reverse().join(".") : ""}</td>
                                   </tr>
@@ -200,7 +201,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
       {r && !r.retainer && <ScenarioCard report={r} currency={cur} />}
       {r && (
         <section className="card" style={{ display: "flex", flexDirection: "column", minHeight: 320, marginTop: 16 }}>
-          <div className="card-head"><h2>Burn-up</h2></div>
+          <div className="card-head"><h2>{tr("Burn-up")}</h2></div>
           <BurnUpChart report={r} />
         </section>
       )}
@@ -256,24 +257,24 @@ function CustomerList({ onOpen }: { onOpen: (id: string) => void }) {
     <>
       <div className="page-head">
         <div>
-          <h1>Kunden & Projekte</h1>
-          <p className="sub">{rows.length} Kunden · {data.projects.length} Projekte{attention > 0 ? ` · ${attention} mit knappem oder überschrittenem Budget` : ""}</p>
+          <h1>{tr("Kunden & Projekte")}</h1>
+          <p className="sub">{rows.length}{" "}{tr("Kunden · {0} Projekte", data.projects.length)}{attention > 0 ? tr(" · {0} mit knappem oder überschrittenem Budget", attention) : ""}</p>
         </div>
-        <button className="btn primary" onClick={() => setDraft({ kind: "customer" })}>+ Kunde</button>
+        <button className="btn primary" onClick={() => setDraft({ kind: "customer" })}>{tr("+ Kunde")}</button>
       </div>
       {draft && <NewItemDialog key={JSON.stringify(draft)} draft={draft} onClose={() => setDraft(null)} />}
       <section className="card">
         <div className="card-head" style={{ paddingBottom: 10, flexWrap: "wrap" }}>
           <div className="search">
             <span className="pick-icon"><Icon.search /></span>
-            <input id="cust-search" className="input" placeholder="Kunde, Projekt oder JIRA-Schlüssel suchen …" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
+            <input id="cust-search" className="input" placeholder={tr("Kunde, Projekt oder JIRA-Schlüssel suchen …")} value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
           </div>
-          <span className="muted" style={{ fontSize: "0.82rem" }}>{needle ? `${hits.length} von ${rows.length} Kunden` : "Zeile anklicken für Projekte und Budgets"}</span>
+          <span className="muted" style={{ fontSize: "0.82rem" }}>{needle ? tr("{0} von {1} Kunden", hits.length, rows.length) : tr("Zeile anklicken für Projekte und Budgets")}</span>
         </div>
         <div className="table-wrap">
           <table className="data">
             <thead>
-              <tr><th>Kunde</th><th className="r">Stundensatz</th><th className="r">Budget</th><th className="r">Verbraucht</th><th>Auslastung</th><th className="r">Forecast</th><th>Status</th></tr>
+              <tr><th>{tr("Kunde")}</th><th className="r">{tr("Stundensatz")}</th><th className="r">{tr("Budget")}</th><th className="r">{tr("Verbraucht")}</th><th>{tr("Auslastung")}</th><th className="r">{tr("Forecast")}</th><th>{tr("Status")}</th></tr>
             </thead>
             <tbody>
               {shown.map(({ c, projects, budget, actual, forecast, status }) => {
@@ -282,24 +283,24 @@ function CustomerList({ onOpen }: { onOpen: (id: string) => void }) {
                   <tr key={c.id} className="clickable cust" onClick={() => onOpen(c.id)}>
                     <td>
                       <div className="cust-name">{c.name}</div>
-                      <div className="cust-sub">{projects.length === 0 ? "Noch kein Projekt" : projects.length === 1 ? projects[0].name : `${projects.length} Projekte · ${projects.map((p) => p.name).slice(0, 3).join(", ")}${projects.length > 3 ? " …" : ""}`}</div>
+                      <div className="cust-sub">{projects.length === 0 ? tr("Noch kein Projekt") : projects.length === 1 ? projects[0].name : tr("{0} Projekte · {1}{2}", projects.length, projects.map((p) => p.name).slice(0, 3).join(", "), projects.length > 3 ? " …" : "")}</div>
                     </td>
-                    <td className="r num">{fmtCHF(rateOn(c, data.today))}/h</td>
+                    <td className="r num">{fmtCHF(rateOn(c, data.today))}{tr("/h")}</td>
                     <td className="r num">{budget > 0 ? fmtCHF(budget) : "–"}</td>
                     <td className="r num">{projects.length ? fmtCHF(actual) : "–"}</td>
-                    <td>{budget > 0 && <div className={`bar ${status}`} title={`${fmt1(share * 100)} % des Budgets verbraucht`}><span style={{ width: `${share * 100}%` }} /></div>}</td>
+                    <td>{budget > 0 && <div className={`bar ${status}`} title={tr("{0} % des Budgets verbraucht", fmt1(share * 100))}><span style={{ width: `${share * 100}%` }} /></div>}</td>
                     <td className="r num">{projects.length ? fmtCHF(forecast) : "–"}</td>
                     <td>{projects.length > 0 && budget > 0 && <StatusPill status={status} />}</td>
                   </tr>
                 );
               })}
-              {shown.length === 0 && <tr><td colSpan={7} className="muted">Kein Kunde passt zu «{q}».</td></tr>}
+              {shown.length === 0 && <tr><td colSpan={7} className="muted">{tr("Kein Kunde passt zu «{0}».", q)}</td></tr>}
             </tbody>
           </table>
         </div>
         {hits.length > limit && (
           <div className="card-pad" style={{ paddingTop: 10, textAlign: "center" }}>
-            <button className="btn small" onClick={() => setLimit(limit + PAGE)}>Weitere {Math.min(PAGE, hits.length - limit)} Kunden anzeigen</button>
+            <button className="btn small" onClick={() => setLimit(limit + PAGE)}>{tr("Weitere {0} Kunden anzeigen", Math.min(PAGE, hits.length - limit))}</button>
           </div>
         )}
       </section>
@@ -328,30 +329,30 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
     <>
       <div className="page-head">
         <div>
-          <button className="btn small ghost back-btn" onClick={onBack}><Icon.back />Alle Kunden</button>
+          <button className="btn small ghost back-btn" onClick={onBack}><Icon.back />{tr("Alle Kunden")}</button>
           <h1 style={{ marginTop: 8 }}>{customer.name}</h1>
           <p className="sub">
-            {m(rateOn(customer, data.today))}/h
-            {history.length > 1 && ` · seit ${history.at(-1)!.validFrom.split("-").reverse().join(".")}, vorher ${m(history.at(-2)!.hourlyRate)}/h`}
-            {" · "}{projects.length} {projects.length === 1 ? "Projekt" : "Projekte"}
+            {m(rateOn(customer, data.today))}{tr("/h")}
+            {history.length > 1 && tr(" · seit {0}, vorher {1}/h", history.at(-1)!.validFrom.split("-").reverse().join("."), m(history.at(-2)!.hourlyRate))}
+            {" · "}{trn(projects.length, "{0} Projekt", "{0} Projekte")}
             {cur !== "CHF" && data.fx?.rates[cur] && ` · 1 ${cur} = ${fmt1(data.fx.rates[cur]! * 100) === "100.0" ? "1.00" : data.fx.rates[cur]!.toFixed(4)} CHF`}
           </p>
         </div>
         <div className="toolbar">
-          {scope.lead && !scope.readOnly && <button className="btn" id="c-edit" onClick={() => setEditing(true)}>Bearbeiten</button>}
-          <button className="btn primary" onClick={() => setDraft({ kind: "project", customerId: customer.id })}>+ Projekt</button>
+          {scope.lead && !scope.readOnly && <button className="btn" id="c-edit" onClick={() => setEditing(true)}>{tr("Bearbeiten")}</button>}
+          <button className="btn primary" onClick={() => setDraft({ kind: "project", customerId: customer.id })}>{tr("+ Projekt")}</button>
         </div>
       </div>
       {draft && <NewItemDialog key={JSON.stringify(draft)} draft={draft} onClose={() => setDraft(null)} />}
       {editing && <CustomerDialog customer={customer} onClose={() => setEditing(false)} />}
       <div className="tiles">
-        <div className="card tile"><span className="label">Budget</span><span className="value num">{m(budget)}</span></div>
-        <div className="card tile"><span className="label">Verbraucht</span><span className="value num">{m(actual)}</span><span className="delta num">{budget > 0 ? `${fmt1((actual / budget) * 100)} % des Budgets` : `${fmt1(hours)} h gebucht`}</span></div>
-        <div className="card tile"><span className="label">Forecast</span><span className="value num">{m(forecast)}</span><span className="delta">Abweichung <Money v={budget - forecast} signed currency={cur} /></span></div>
-        <div className="card tile"><span className="label">Gebucht</span><span className="value num">{fmt1(hours)} h</span><span className="delta">über alle Projekte</span></div>
+        <div className="card tile"><span className="label">{tr("Budget")}</span><span className="value num">{m(budget)}</span></div>
+        <div className="card tile"><span className="label">{tr("Verbraucht")}</span><span className="value num">{m(actual)}</span><span className="delta num">{budget > 0 ? tr("{0} % des Budgets", fmt1((actual / budget) * 100)) : tr("{0} h gebucht", fmt1(hours))}</span></div>
+        <div className="card tile"><span className="label">{tr("Forecast")}</span><span className="value num">{m(forecast)}</span><span className="delta">{tr("Abweichung")}{" "}<Money v={budget - forecast} signed currency={cur} /></span></div>
+        <div className="card tile"><span className="label">{tr("Gebucht")}</span><span className="value num">{fmt1(hours)}{" "}{tr("h")}</span><span className="delta">{tr("über alle Projekte")}</span></div>
       </div>
       <section className="card">
-        {projects.length === 0 && <p className="muted card-pad">Noch kein Projekt. Mit «+ Projekt» anlegen.</p>}
+        {projects.length === 0 && <p className="muted card-pad">{tr("Noch kein Projekt. Mit «+ Projekt» anlegen.")}</p>}
         {projects.map((p) => {
           const r = projReport.get(p.id);
           const subs = data.subProjects.filter((s) => s.projectId === p.id);
@@ -363,15 +364,15 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
                   <button className="link-btn" onClick={() => onOpenProject(p.id)}><h2 style={{ margin: 0, color: "inherit" }}>{p.name}</h2></button> {p.jiraProjectKey && <span className="pill neutral mono">{p.jiraProjectKey}</span>} {(p.kind ?? "tm") !== "tm" && <span className="pill neutral">{kindLabel(p.kind)}</span>}
                   <div className="muted num" style={{ fontSize: "0.8rem" }}>
                     {r?.retainer
-                      ? `Kontingent ${fmtNum(r.retainer.hoursPerMonth)} h/Monat · ${fmtMonth(r.retainer.month)} ${fmt1(r.retainer.used)} h genutzt · Schnitt ${fmt1(r.retainer.avg3)} h`
-                      : `${p.kind === "fixed" ? "Fixpreis" : "Budget"} ${m(p.budget)} · davon verteilt ${m(allocated)} · Reserve ${m(p.budget - allocated)}`}
-                    {r && !r.retainer && ` · verbraucht ${m(r.actualCost)} · Forecast ${m(r.forecastCost)}`}
+                      ? tr("Kontingent {0} h/Monat · {1} {2} h genutzt · Schnitt {3} h", fmtNum(r.retainer.hoursPerMonth), fmtMonth(r.retainer.month), fmt1(r.retainer.used), fmt1(r.retainer.avg3))
+                      : tr("{0} {1} · davon verteilt {2} · Reserve {3}", p.kind === "fixed" ? "Fixpreis" : "Budget", m(p.budget), m(allocated), m(p.budget - allocated))}
+                    {r && !r.retainer && tr(" · verbraucht {0} · Forecast {1}", m(r.actualCost), m(r.forecastCost))}
                   </div>
                 </div>
                 <div className="toolbar">
                   {r && <StatusPill status={r.status} />}
-                  <button className="btn small ghost" onClick={() => setDraft({ kind: "sub", projectId: p.id })}>+ Subprojekt</button>
-                  <button className="btn small" onClick={() => onOpenProject(p.id)}>Öffnen</button>
+                  <button className="btn small ghost" onClick={() => setDraft({ kind: "sub", projectId: p.id })}>{tr("+ Subprojekt")}</button>
+                  <button className="btn small" onClick={() => onOpenProject(p.id)}>{tr("Öffnen")}</button>
                 </div>
               </div>
               <div className="tree-project">
@@ -381,12 +382,12 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
                     <div className="tree-sub clickable" key={s.id} onClick={() => onOpenProject(p.id)}>
                       <span>{s.name} {s.jiraEpicKey && <span className="mono muted">{s.jiraEpicKey}</span>}</span>
                       <span className="num">
-                        {m(s.budget)}{sr ? ` · ${m(sr.actualCost)} verbraucht · ${sr.spOpen} SP offen` : ""}
+                        {m(s.budget)}{sr ? tr(" · {0} verbraucht · {1} SP offen", m(sr.actualCost), sr.spOpen) : ""}
                       </span>
                     </div>
                   );
                 })}
-                {subs.length === 0 && <span className="muted" style={{ fontSize: "0.85rem" }}>Noch kein Subprojekt.</span>}
+                {subs.length === 0 && <span className="muted" style={{ fontSize: "0.85rem" }}>{tr("Noch kein Subprojekt.")}</span>}
               </div>
             </div>
           );
@@ -406,28 +407,28 @@ function PortalAccess({ customer }: { customer: Customer }) {
   const reload = () => portalAccounts(customerId).then(setAccounts).catch(() => setAccounts([]));
   useEffect(() => { void reload(); }, [customerId]); // eslint-disable-line react-hooks/exhaustive-deps
   const revoke = async (a: PortalAccount) => {
-    if (!confirm(`Zugang von ${a.name} zum Kundenportal entziehen?`)) return;
+    if (!confirm(tr("Zugang von {0} zum Kundenportal entziehen?", a.name))) return;
     await revokePortal(customerId, a.id);
-    notify("Zugang entzogen");
+    notify(tr("Zugang entzogen"));
     await reload();
   };
   return (
     <section className="card" style={{ marginTop: 16 }} id="portal-access">
       <div className="card-head">
-        <h2><Icon.users /> Kundenportal</h2>
-        <button className="btn small" id="portal-invite" onClick={() => setOpen(true)}>+ Zugang</button>
+        <h2><Icon.users />{" "}{tr("Kundenportal")}</h2>
+        <button className="btn small" id="portal-invite" onClick={() => setOpen(true)}>{tr("+ Zugang")}</button>
       </div>
       <div className="card-pad" style={{ paddingTop: 10 }}>
         {open && <PortalInviteDialog customer={customer} onClose={() => setOpen(false)} onInvited={() => void reload()} />}
-        {accounts === null && <p className="muted">Lade …</p>}
-        {accounts?.length === 0 && !open && <p className="muted" style={{ margin: 0 }}>Noch niemand hat Zugang zum Portal. Mit «+ Zugang» eine Kontaktperson einladen.</p>}
+        {accounts === null && <p className="muted">{tr("Lade …")}</p>}
+        {accounts?.length === 0 && !open && <p className="muted" style={{ margin: 0 }}>{tr("Noch niemand hat Zugang zum Portal. Mit «+ Zugang» eine Kontaktperson einladen.")}</p>}
         {accounts && accounts.length > 0 && (
           <ul className="portal-list">
             {accounts.map((a) => (
               <li key={a.id}>
                 <span className="who small">{a.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("")}</span>
-                <span><strong>{a.name}</strong><br /><span className="muted" style={{ fontSize: "0.8rem" }}>{a.email}{a.hasPassword ? (a.lastLoginAt ? ` · zuletzt ${fmtDate(a.lastLoginAt.slice(0, 10))}` : " · noch nie angemeldet") : " · Einladung offen"}</span></span>
-                <button className="btn small ghost" onClick={() => void revoke(a)} title="Zugang entziehen" aria-label="Zugang entziehen"><Icon.trash /></button>
+                <span><strong>{a.name}</strong><br /><span className="muted" style={{ fontSize: "0.8rem" }}>{a.email}{a.hasPassword ? (a.lastLoginAt ? tr(" · zuletzt {0}", fmtDate(a.lastLoginAt.slice(0, 10))) : tr(" · noch nie angemeldet")) : tr(" · Einladung offen")}</span></span>
+                <button className="btn small ghost" onClick={() => void revoke(a)} title={tr("Zugang entziehen")} aria-label={tr("Zugang entziehen")}><Icon.trash /></button>
               </li>
             ))}
           </ul>

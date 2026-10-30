@@ -1,4 +1,5 @@
 // Passkeys in the browser: converts the server's JSON options for navigator.credentials and the result back to JSON.
+import { tr } from "./i18n";
 const toBuf = (b64url: string) => Uint8Array.from(atob(b64url.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
 const toB64 = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
@@ -13,7 +14,7 @@ export async function createPasskey(options: Record<string, unknown>) {
     excludeCredentials: ((options.excludeCredentials as { id: string; transports?: string[] }[] | undefined) ?? []).map((c) => ({ ...c, id: toBuf(c.id), type: "public-key" })),
   } as unknown as PublicKeyCredentialCreationOptions;
   const cred = (await navigator.credentials.create({ publicKey: pk })) as PublicKeyCredential | null;
-  if (!cred) throw new Error("Es wurde kein Passkey erstellt.");
+  if (!cred) throw new Error(tr("Es wurde kein Passkey erstellt."));
   const r = cred.response as AuthenticatorAttestationResponse;
   return {
     id: cred.id,
@@ -33,7 +34,7 @@ export async function usePasskey(options: Record<string, unknown>) {
     allowCredentials: ((options.allowCredentials as { id: string; transports?: string[] }[] | undefined) ?? []).map((c) => ({ ...c, id: toBuf(c.id), type: "public-key" })),
   } as unknown as PublicKeyCredentialRequestOptions;
   const cred = (await navigator.credentials.get({ publicKey: pk })) as PublicKeyCredential | null;
-  if (!cred) throw new Error("Kein Passkey gewählt.");
+  if (!cred) throw new Error(tr("Kein Passkey gewählt."));
   const r = cred.response as AuthenticatorAssertionResponse;
   return {
     id: cred.id,

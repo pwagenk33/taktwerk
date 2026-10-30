@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, type SubscriptionInfo } from "../api";
 import { loadLocal, saveLocal, useStore } from "../store";
 import { Icon } from "../ui/components";
+import { tr, trn } from "../i18n";
 
 /** Plain check mark (Icon.check is the calendar-check used for closings). */
 export const Tick = () => (
@@ -36,7 +37,7 @@ export function useSubscription(): Subscription | null {
 }
 
 const dateOf = (iso?: string | null) => (iso ? fmtDate(iso.slice(0, 10)) : "–");
-const STATUS_LABEL: Record<Subscription["status"], string> = { trialing: "Testphase", active: "Aktiv", past_due: "Zahlung offen", canceled: "Beendet", expired: "Testphase abgelaufen" };
+const STATUS_LABEL: Record<Subscription["status"], string> = { trialing: tr("Testphase"), active: tr("Aktiv"), past_due: tr("Zahlung offen"), canceled: tr("Beendet"), expired: tr("Testphase abgelaufen") };
 export const statusPill = (s: Subscription["status"]) => (s === "active" ? "ok" : s === "trialing" ? "neutral" : s === "past_due" ? "risk" : "over");
 export { STATUS_LABEL };
 
@@ -48,12 +49,12 @@ export function SubscriptionBanner() {
   const { role } = useStore();
   if (!sub) return null;
   const admin = role === "admin";
-  const cta = admin ? <a href="#einstellungen/abo" className="banner-cta">Paket wählen</a> : <span className="banner-cta muted">Bitte die Admin-Person informieren.</span>;
+  const cta = admin ? <a href="#einstellungen/abo" className="banner-cta">{tr("Paket wählen")}</a> : <span className="banner-cta muted">{tr("Bitte die Admin-Person informieren.")}</span>;
   if (!canWrite(sub)) {
     return (
       <div className="sub-banner crit" role="status" id="sub-banner">
         <Icon.lock />
-        <span><strong>Nur lesen.</strong> {sub.status === "past_due" ? "Die letzte Zahlung ist offen." : sub.status === "canceled" ? "Das Abo ist beendet." : "Die Testphase ist abgelaufen."} Alle Daten bleiben erhalten und lassen sich exportieren.</span>
+        <span><strong>{tr("Nur lesen.")}</strong> {sub.status === "past_due" ? tr("Die letzte Zahlung ist offen.") : sub.status === "canceled" ? tr("Das Abo ist beendet.") : tr("Die Testphase ist abgelaufen.")}{" "}{tr("Alle Daten bleiben erhalten und lassen sich exportieren.")}</span>
         {cta}
       </div>
     );
@@ -61,8 +62,8 @@ export function SubscriptionBanner() {
   if (sub.status === "past_due")
     return (
       <div className="sub-banner warn" role="status" id="sub-banner">
-        <span><strong>Zahlung offen.</strong> Bitte die Zahlungsdaten prüfen, sonst ist die Firma nach einer Woche nur noch lesbar.</span>
-        {admin ? <a href="#einstellungen/abo" className="banner-cta">Zahlungsdaten</a> : cta}
+        <span><strong>{tr("Zahlung offen.")}</strong>{" "}{tr("Bitte die Zahlungsdaten prüfen, sonst ist die Firma nach einer Woche nur noch lesbar.")}</span>
+        {admin ? <a href="#einstellungen/abo" className="banner-cta">{tr("Zahlungsdaten")}</a> : cta}
       </div>
     );
   const left = trialDaysLeft(sub);
@@ -70,8 +71,7 @@ export function SubscriptionBanner() {
   return (
     <div className="sub-banner" role="status" id="sub-banner">
       <span>
-        <strong>Testphase {planById(sub.plan).name}:</strong> {left > 1 ? `noch ${left} Tage` : left === 1 ? "endet morgen" : left === 0 ? "endet heute" : "abgelaufen, eine Woche Schonfrist"}.
-        {" "}Mit einem Paket geht es ohne Unterbruch weiter.
+        <strong>{tr("Testphase {0}:", planById(sub.plan).name)}</strong> {left > 1 ? tr("noch {0} Tage", left) : left === 1 ? tr("endet morgen") : left === 0 ? tr("endet heute") : tr("abgelaufen, eine Woche Schonfrist")}{tr(".  Mit einem Paket geht es ohne Unterbruch weiter.")}
       </span>
       {cta}
     </div>
@@ -87,9 +87,9 @@ export function FeatureGate({ feature, children }: { feature: Feature; children:
   return (
     <section className="card upgrade" id="upgrade-hint">
       <div className="upgrade-icon"><Icon.lock /></div>
-      <h2>{FEATURE_LABEL[feature]} gehört zum Paket {from.name}</h2>
-      <p className="muted">Deine Firma nutzt {planById(sub!.plan).name}. Mit {from.name} ({fmtCHF(from.perUser)} pro Person und Monat) ist {FEATURE_LABEL[feature]} sofort freigeschaltet; die Daten sind schon da.</p>
-      {role === "admin" ? <a className="btn primary" href="#einstellungen/abo">Pakete ansehen</a> : <p className="muted">Die Admin-Person deiner Firma kann das Paket wechseln.</p>}
+      <h2>{tr(FEATURE_LABEL[feature])}{" "}{tr("gehört zum Paket")}{" "}{from.name}</h2>
+      <p className="muted">{tr("Deine Firma nutzt {0}. Mit {1} ({2} pro Person und Monat) ist {3} sofort freigeschaltet; die Daten sind schon da.", planById(sub!.plan).name, from.name, fmtCHF(from.perUser), tr(FEATURE_LABEL[feature]))}</p>
+      {role === "admin" ? <a className="btn primary" href="#einstellungen/abo">{tr("Pakete ansehen")}</a> : <p className="muted">{tr("Die Admin-Person deiner Firma kann das Paket wechseln.")}</p>}
     </section>
   );
 }
@@ -115,12 +115,12 @@ export function SubscriptionTab({ onSetup }: { onSetup: () => void }) {
     if (mode === "api") api<SubscriptionInfo>("/api/subscription").then(apply).catch((e: Error) => setError(e.message));
     else if (current) apply({ subscription: current, canceledAt: loadLocal<string | null>("rt.subCanceled", null), seats: demoSeats, payment: "invoice", cardOnFile: false, plans: PLANS });
     const q = new URLSearchParams(location.search).get("abo");
-    if (q === "ok") notify("Danke! Das Abo ist aktiv, sobald die Zahlung bestätigt ist.");
+    if (q === "ok") notify(tr("Danke! Das Abo ist aktiv, sobald die Zahlung bestätigt ist."));
     if (q) history.replaceState(null, "", location.pathname + location.hash);
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!current && mode === "api" && !info) return <p className="muted">{error || "Lade …"}</p>;
-  if (!info) return <p className="muted">{error || "Lade …"}</p>;
+  if (!current && mode === "api" && !info) return <p className="muted">{error || tr("Lade …")}</p>;
+  if (!info) return <p className="muted">{error || tr("Lade …")}</p>;
   const sub = info.subscription;
   const plan = planById(sub.plan);
   const left = trialDaysLeft(sub);
@@ -145,7 +145,7 @@ export function SubscriptionTab({ onSetup }: { onSetup: () => void }) {
         else end.setMonth(end.getMonth() + 1);
         apply({ ...info, canceledAt: null, subscription: { plan: id, interval, status: "active", billing: "invoice", currentPeriodEnd: end.toISOString(), trialEndsAt: null } });
         saveLocal("rt.subCanceled", null);
-        notify(`Paket ${planById(id).name} gewählt. Die Rechnung kommt per E-Mail.`);
+        notify(tr("Paket {0} gewählt. Die Rechnung kommt per E-Mail.", planById(id).name));
         return;
       }
       const res = await api<SubscriptionInfo & { url?: string; done?: boolean }>("/api/subscription/checkout", { body: { plan: id, interval } });
@@ -154,22 +154,22 @@ export function SubscriptionTab({ onSetup }: { onSetup: () => void }) {
         return;
       }
       apply(res);
-      notify(info.payment === "invoice" ? `Paket ${planById(id).name} ist aktiv. Die Rechnung kommt per E-Mail.` : `Gewechselt zu ${planById(id).name}.`);
+      notify(info.payment === "invoice" ? tr("Paket {0} ist aktiv. Die Rechnung kommt per E-Mail.", planById(id).name) : tr("Gewechselt zu {0}.", planById(id).name));
     });
   const portal = () => run("portal", async () => { location.href = (await api<{ url: string }>("/api/subscription/portal", { body: {} })).url; });
   const cancel = () => {
-    if (!confirm(`Abo kündigen? Es läuft bis ${dateOf(sub.currentPeriodEnd)} weiter, danach sind die Daten nur noch lesbar.`)) return;
+    if (!confirm(tr("Abo kündigen? Es läuft bis {0} weiter, danach sind die Daten nur noch lesbar.", dateOf(sub.currentPeriodEnd)))) return;
     void run("cancel", async () => {
       if (mode === "demo") { const at = new Date().toISOString(); saveLocal("rt.subCanceled", at); setInfo({ ...info, canceledAt: at }); }
       else apply(await api<SubscriptionInfo>("/api/subscription/cancel", { body: {} }));
-      notify("Abo gekündigt");
+      notify(tr("Abo gekündigt"));
     });
   };
   const resume = () =>
     run("resume", async () => {
       if (mode === "demo") { saveLocal("rt.subCanceled", null); setInfo({ ...info, canceledAt: null }); }
       else apply(await api<SubscriptionInfo>("/api/subscription/resume", { body: {} }));
-      notify("Kündigung zurückgenommen");
+      notify(tr("Kündigung zurückgenommen"));
     });
 
   return (
@@ -177,57 +177,57 @@ export function SubscriptionTab({ onSetup }: { onSetup: () => void }) {
       <section className="card sub-status">
         <div className="sub-status-main">
           <div>
-            <div className="eyebrow">Dein Paket</div>
+            <div className="eyebrow">{tr("Dein Paket")}</div>
             <div className="sub-plan-row">
               <h2 className="sub-plan">{plan.name}</h2>
               <span className={`pill ${statusPill(sub.status)}`}>{STATUS_LABEL[sub.status]}</span>
             </div>
             <p className="muted" style={{ margin: "2px 0 0" }}>
-              {sub.status === "trialing" && left !== null && (left >= 0 ? `Kostenlos bis ${dateOf(sub.trialEndsAt)}, noch ${left} ${left === 1 ? "Tag" : "Tage"}.` : `Testphase seit ${dateOf(sub.trialEndsAt)} vorbei.`)}
-              {paying && `${fmtCHF(priceOf(plan, sub.interval, info.seats))} ${sub.interval === "year" ? "pro Jahr" : "pro Monat"}, zzgl. MWST · ${info.canceledAt ? "endet" : "nächste Periode ab"} ${dateOf(sub.currentPeriodEnd)} · ${sub.billing === "stripe" ? "Karte" : "Rechnung"}`}
-              {(sub.status === "canceled" || sub.status === "expired") && "Die Daten sind lesbar und exportierbar. Mit einem Paket geht es sofort weiter."}
+              {sub.status === "trialing" && left !== null && (left >= 0 ? trn(left, "Kostenlos bis {1}, noch {0} Tag.", "Kostenlos bis {1}, noch {0} Tage.", dateOf(sub.trialEndsAt)) : tr("Testphase seit {0} vorbei.", dateOf(sub.trialEndsAt)))}
+              {paying && `${fmtCHF(priceOf(plan, sub.interval, info.seats))} ${sub.interval === "year" ? tr("pro Jahr") : tr("pro Monat")}${tr(", zzgl. MWST")} · ${info.canceledAt ? tr("endet am") : tr("nächste Periode ab")} ${dateOf(sub.currentPeriodEnd)} · ${sub.billing === "stripe" ? tr("Karte") : tr("Rechnung")}`}
+              {(sub.status === "canceled" || sub.status === "expired") && tr("Die Daten sind lesbar und exportierbar. Mit einem Paket geht es sofort weiter.")}
             </p>
           </div>
-          <div className="seats" aria-label={`${info.seats} aktive Personen`}>
-            <div className="seats-num"><strong className="num">{info.seats}</strong><span className="muted"> {info.seats === 1 ? "Person" : "Personen"} aktiv</span></div>
-            <div className="muted seats-note">Verrechnet werden mindestens {MIN_SEATS}. Kundenportal und Treuhand zählen nicht.</div>
+          <div className="seats" aria-label={tr("{0} aktive Personen", info.seats)}>
+            <div className="seats-num"><strong className="num">{info.seats}</strong><span className="muted"> {trn(info.seats, "Person aktiv", "Personen aktiv")}</span></div>
+            <div className="muted seats-note">{tr("Verrechnet werden mindestens {0}. Kundenportal und Treuhand zählen nicht.", MIN_SEATS)}</div>
           </div>
         </div>
         {(info.cardOnFile || paying) && (
           <div className="sub-actions">
-            {info.cardOnFile && <button className="btn small" disabled={!!busy} onClick={() => void portal()}><Icon.key />Zahlungsdaten und Quittungen</button>}
-            {paying && !info.canceledAt && <button id="sub-cancel" className="btn small ghost" disabled={!!busy} onClick={cancel}>Abo kündigen</button>}
-            {paying && info.canceledAt && <button id="sub-resume" className="btn small" disabled={!!busy} onClick={() => void resume()}>Kündigung zurücknehmen</button>}
+            {info.cardOnFile && <button className="btn small" disabled={!!busy} onClick={() => void portal()}><Icon.key />{tr("Zahlungsdaten und Quittungen")}</button>}
+            {paying && !info.canceledAt && <button id="sub-cancel" className="btn small ghost" disabled={!!busy} onClick={cancel}>{tr("Abo kündigen")}</button>}
+            {paying && info.canceledAt && <button id="sub-resume" className="btn small" disabled={!!busy} onClick={() => void resume()}>{tr("Kündigung zurücknehmen")}</button>}
           </div>
         )}
       </section>
 
       <div className="plans-head">
-        <h2>Preis pro Person</h2>
-        <div className="seg" role="radiogroup" aria-label="Zahlungsweise">
-          <button role="radio" id="iv-month" aria-checked={interval === "month"} className={interval === "month" ? "on" : ""} onClick={() => setBilling("month")}>Monatlich</button>
-          <button role="radio" id="iv-year" aria-checked={interval === "year"} className={interval === "year" ? "on" : ""} onClick={() => setBilling("year")}>Jährlich <span className="save-tag">2 Monate gratis</span></button>
+        <h2>{tr("Preis pro Person")}</h2>
+        <div className="seg" role="radiogroup" aria-label={tr("Zahlungsweise")}>
+          <button role="radio" id="iv-month" aria-checked={interval === "month"} className={interval === "month" ? "on" : ""} onClick={() => setBilling("month")}>{tr("Monatlich")}</button>
+          <button role="radio" id="iv-year" aria-checked={interval === "year"} className={interval === "year" ? "on" : ""} onClick={() => setBilling("year")}>{tr("Jährlich")}{" "}<span className="save-tag">{tr("2 Monate gratis")}</span></button>
         </div>
       </div>
       <div className="plans" id="plans">
         {PLANS.map((p) => {
           const isCurrent = p.id === sub.plan && paying && sub.interval === interval;
-          const label = isCurrent ? "Dein Paket" : paying ? (p.perUser > plan.perUser ? `Auf ${p.name} wechseln` : `Zu ${p.name} wechseln`) : `${p.name} wählen`;
+          const label = isCurrent ? tr("Dein Paket") : paying ? (p.perUser > plan.perUser ? tr("Auf {0} wechseln", p.name) : tr("Zu {0} wechseln", p.name)) : tr("{0} wählen", p.name);
           return (
             <article key={p.id} className={`card plan ${p.id === "team" ? "featured" : ""} ${p.id === sub.plan ? "mine" : ""}`} id={`plan-${p.id}`}>
-              {p.id === "team" && <span className="plan-flag">Beliebt</span>}
+              {p.id === "team" && <span className="plan-flag">{tr("Beliebt")}</span>}
               <h3>{p.name}</h3>
-              <div className="plan-users">{p.tagline}</div>
+              <div className="plan-users">{tr(p.tagline)}</div>
               <div className="plan-price">
                 <span className="num">{interval === "year" ? fmtCHF2((p.perUser * 10) / 12) : fmtCHF(p.perUser)}</span>
-                <span className="muted">pro Person und Monat</span>
+                <span className="muted">{tr("pro Person und Monat")}</span>
               </div>
-              <div className="muted plan-billing">Für {Math.max(MIN_SEATS, info.seats)} Personen {fmtCHF(priceOf(p, interval, info.seats))} {interval === "year" ? "jährlich" : "monatlich"}, zzgl. MWST</div>
+              <div className="muted plan-billing">{tr("Für {0} Personen", Math.max(MIN_SEATS, info.seats))}{" "}{fmtCHF(priceOf(p, interval, info.seats))} {interval === "year" ? tr("jährlich") : "monatlich"}{tr(", zzgl. MWST")}</div>
               <ul className="plan-list">
-                {p.highlights.map((h) => <li key={h}><Tick />{h}</li>)}
+                {p.highlights.map((h) => <li key={h}><Tick />{tr(h)}</li>)}
               </ul>
               <button className={`btn block ${isCurrent ? "" : p.id === "team" ? "primary" : ""}`} disabled={isCurrent || !!busy} onClick={() => void choose(p.id)}>
-                {busy === p.id ? "Einen Moment …" : label}
+                {busy === p.id ? tr("Einen Moment …") : label}
               </button>
             </article>
           );
@@ -236,17 +236,17 @@ export function SubscriptionTab({ onSetup }: { onSetup: () => void }) {
       {error && <p className="error" role="alert">{error}</p>}
       <p className="muted plans-foot">
         {info.payment === "stripe"
-          ? "Bezahlung per Karte über Stripe. Wechsel und neue Personen gelten sofort und werden anteilig verrechnet."
-          : "Bezahlung auf Rechnung, zahlbar innert 30 Tagen. Das Paket ist sofort aktiv."}
-        {" "}Neue Firmen testen {TRIAL_DAYS} Tage kostenlos. Ab 100 Personen machen wir ein Angebot.
+          ? tr("Bezahlung per Karte über Stripe. Wechsel und neue Personen gelten sofort und werden anteilig verrechnet.")
+          : tr("Bezahlung auf Rechnung, zahlbar innert 30 Tagen. Das Paket ist sofort aktiv.")}
+        {" "}{tr("Neue Firmen testen {0} Tage kostenlos. Ab 100 Personen machen wir ein Angebot.", TRIAL_DAYS)}
       </p>
 
       <section className="card card-pad setup-teaser">
         <div>
-          <h2>Erste Schritte</h2>
-          <p className="muted" style={{ margin: "2px 0 0" }}>Der Einrichtungsassistent führt in fünf Schritten durch Firma, Arbeitszeit, ersten Kunden und Team.</p>
+          <h2>{tr("Erste Schritte")}</h2>
+          <p className="muted" style={{ margin: "2px 0 0" }}>{tr("Der Einrichtungsassistent führt in fünf Schritten durch Firma, Arbeitszeit, ersten Kunden und Team.")}</p>
         </div>
-        <button id="open-setup" className="btn" onClick={onSetup}>Assistent öffnen</button>
+        <button id="open-setup" className="btn" onClick={onSetup}>{tr("Assistent öffnen")}</button>
       </section>
 
       <OwnDomain sub={sub} />
@@ -266,7 +266,7 @@ function OwnDomain({ sub }: { sub: Subscription }) {
     try {
       if (mode === "demo") setDns(domain ? { type: "CNAME", name: domain, value: "beispiel.trackinsight.ch" } : null);
       else setDns((await api<{ dns: typeof dns }>("/api/org/domain", { method: "PUT", body: { domain: domain.trim().toLowerCase() || null } })).dns);
-      notify(domain ? "Domain gespeichert" : "Domain entfernt");
+      notify(domain ? tr("Domain gespeichert") : tr("Domain entfernt"));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -274,21 +274,21 @@ function OwnDomain({ sub }: { sub: Subscription }) {
   return (
     <section className="card card-pad" id="own-domain">
       <div className="card-head" style={{ padding: 0, marginBottom: 6 }}>
-        <h2>Eigene Adresse</h2>
-        {!allowed && <span className="pill neutral">ab Business</span>}
+        <h2>{tr("Eigene Adresse")}</h2>
+        {!allowed && <span className="pill neutral">{tr("ab Business")}</span>}
       </div>
       <p className="muted" style={{ marginTop: 0 }}>
-        Deine Firma ist unter {location.host || "firma.trackinsight.ch"} erreichbar. Mit Business läuft sie auch unter einer eigenen Domain wie zeit.firma.ch, mit eurem Design schon auf der Anmeldeseite.
+        {tr("Deine Firma ist unter")}{" "}{location.host || "firma.trackinsight.ch"}{" "}{tr("erreichbar. Mit Business läuft sie auch unter einer eigenen Domain wie zeit.firma.ch, mit eurem Design schon auf der Anmeldeseite.")}
       </p>
       {allowed && (
         <div className="toolbar" style={{ gap: 8 }}>
-          <input id="own-domain-input" className="input" placeholder="zeit.firma.ch" value={domain} onChange={(e) => setDomain(e.target.value)} style={{ maxWidth: 260 }} />
-          <button className="btn" onClick={() => void save()}>Speichern</button>
+          <input id="own-domain-input" className="input" placeholder={tr("zeit.firma.ch")} value={domain} onChange={(e) => setDomain(e.target.value)} style={{ maxWidth: 260 }} />
+          <button className="btn" onClick={() => void save()}>{tr("Speichern")}</button>
         </div>
       )}
       {dns && (
         <p className="notice" style={{ marginBottom: 0 }}>
-          Beim Domain-Anbieter eintragen: <span className="mono">{dns.name}</span> als <strong>{dns.type}</strong> auf <span className="mono">{dns.value}</span>. Das Zertifikat entsteht beim ersten Aufruf automatisch.
+          {tr("Beim Domain-Anbieter eintragen:")}{" "}<span className="mono">{dns.name}</span>{" "}{tr("als")}{" "}<strong>{dns.type}</strong>{" "}{tr("auf")}{" "}<span className="mono">{dns.value}</span>{tr(". Das Zertifikat entsteht beim ersten Aufruf automatisch.")}
         </p>
       )}
       {error && <p className="error">{error}</p>}

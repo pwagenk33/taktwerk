@@ -2,6 +2,7 @@
  * Receipt OCR in the browser with tesseract.js, loaded on first use so the app bundle stays small.
  * Recognition runs in a web worker on the phone or PC; the photo never leaves the device.
  */
+import { tr } from "./i18n";
 const VERSION = "6.0.1";
 /** Served by the own server (web/public/ocr, filled by scripts/copy-ocr.mjs); the file-based demo falls back to the CDN. */
 const LOCAL = typeof location !== "undefined" && location.protocol.startsWith("http");
@@ -29,8 +30,8 @@ function loadScript(): Promise<TesseractLike> {
       const s = document.createElement("script");
       s.src = `${CDN}/tesseract.min.js`;
       s.async = true;
-      s.onload = () => (window.Tesseract ? resolve(window.Tesseract) : reject(new Error("Texterkennung konnte nicht geladen werden.")));
-      s.onerror = () => { loading = null; reject(new Error("Texterkennung konnte nicht geladen werden. Bist du online?")); };
+      s.onload = () => (window.Tesseract ? resolve(window.Tesseract) : reject(new Error(tr("Texterkennung konnte nicht geladen werden."))));
+      s.onerror = () => { loading = null; reject(new Error(tr("Texterkennung konnte nicht geladen werden. Bist du online?"))); };
       document.head.appendChild(s);
     });
   }
@@ -48,7 +49,7 @@ async function shrink(file: File): Promise<Blob> {
     c.width = Math.round(bmp.width * scale);
     c.height = Math.round(bmp.height * scale);
     c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
-    return await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("Bild konnte nicht verkleinert werden."))), "image/jpeg", 0.9));
+    return await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error(tr("Bild konnte nicht verkleinert werden.")))), "image/jpeg", 0.9));
   } catch {
     return file;
   }
@@ -56,8 +57,8 @@ async function shrink(file: File): Promise<Blob> {
 
 /** Reads the text of a receipt photo. `onProgress` gets 0–1 while loading and recognising. */
 export async function recognizeReceipt(file: File, onProgress: (p: number, step: string) => void): Promise<{ text: string; confidence: number }> {
-  if (file.type === "application/pdf") throw new Error("PDF-Belege kann die Texterkennung nicht lesen, bitte ein Foto verwenden.");
-  onProgress(0.05, "Texterkennung laden");
+  if (file.type === "application/pdf") throw new Error(tr("PDF-Belege kann die Texterkennung nicht lesen, bitte ein Foto verwenden."));
+  onProgress(0.05, tr("Texterkennung laden"));
   const T = await loadScript();
   const image = await shrink(file);
   const worker = await T.createWorker("deu+eng", 1, {
@@ -65,8 +66,8 @@ export async function recognizeReceipt(file: File, onProgress: (p: number, step:
     corePath: CORE,
     langPath: LANGS,
     logger: (m: { status: string; progress: number }) => {
-      if (m.status === "recognizing text") onProgress(0.3 + m.progress * 0.7, "Beleg lesen");
-      else if (m.status.includes("loading")) onProgress(0.15, "Sprachdaten laden");
+      if (m.status === "recognizing text") onProgress(0.3 + m.progress * 0.7, tr("Beleg lesen"));
+      else if (m.status.includes("loading")) onProgress(0.15, tr("Sprachdaten laden"));
     },
   });
   try {

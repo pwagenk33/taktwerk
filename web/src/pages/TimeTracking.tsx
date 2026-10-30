@@ -8,6 +8,7 @@ import { Icon } from "../ui/components";
 import { TYPE_CLASS, WorkTiles, signedH } from "./WorkTime";
 import { Select } from "../ui/Select";
 import { Field, FieldRow, FormDialog } from "../ui/Dialog";
+import { intlLocale, tr, trn } from "../i18n";
 
 const CATEGORIES = EXPENSE_CATEGORIES as readonly ExpenseCategory[];
 
@@ -56,7 +57,7 @@ function isoWeek(date: string) {
   const start = Date.UTC(d.getUTCFullYear(), 0, 1);
   return Math.ceil(((d.getTime() - start) / 86400000 + 1) / 7);
 }
-const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const WEEKDAYS = [tr("Mo"), tr("Di"), tr("Mi"), tr("Do"), tr("Fr"), tr("Sa"), tr("So")];
 
 /** Cascading customer → project → sub-project selection, shared by time and expense forms. */
 function useTarget() {
@@ -87,16 +88,16 @@ function useTarget() {
   const fields = (prefix: string) => (
     <>
       <label className="field">
-        <span>Kunde</span>
+        <span>{tr("Kunde")}</span>
         <Select id={`${prefix}-customer`} value={customerId} onChange={setCustomerId} options={data.customers.map((c) => ({ value: c.id, label: c.name }))} />
       </label>
       <label className="field">
-        <span>Projekt</span>
-        <Select id={`${prefix}-project`} value={projectId} onChange={setProjectId} options={projects.map((p) => ({ value: p.id, label: p.name }))} placeholder="Kein Projekt" />
+        <span>{tr("Projekt")}</span>
+        <Select id={`${prefix}-project`} value={projectId} onChange={setProjectId} options={projects.map((p) => ({ value: p.id, label: p.name }))} placeholder={tr("Kein Projekt")} />
       </label>
       <label className="field">
-        <span>Subprojekt</span>
-        <Select id={`${prefix}-sub`} value={subProjectId} onChange={setSubProjectId} options={subs.map((s) => ({ value: s.id, label: s.name }))} placeholder="Kein Subprojekt" />
+        <span>{tr("Subprojekt")}</span>
+        <Select id={`${prefix}-sub`} value={subProjectId} onChange={setSubProjectId} options={subs.map((s) => ({ value: s.id, label: s.name }))} placeholder={tr("Kein Subprojekt")} />
       </label>
     </>
   );
@@ -175,7 +176,7 @@ function QuickPicks({ userId, onPick, fav }: { userId: string; onPick: (f: Favor
       <input
         id="pick-search"
         className="input pick-input"
-        placeholder="Schnellwahl: Favoriten und letzte Buchungen durchsuchen …"
+        placeholder={tr("Schnellwahl: Favoriten und letzte Buchungen durchsuchen …")}
         value={q}
         autoComplete="off"
         role="combobox"
@@ -191,7 +192,7 @@ function QuickPicks({ userId, onPick, fav }: { userId: string; onPick: (f: Favor
       />
       {open && (
         <div className="pick-list" id="pick-list" role="listbox">
-          {rows.length === 0 && <div className="pick-empty">Keine Treffer</div>}
+          {rows.length === 0 && <div className="pick-empty">{tr("Keine Treffer")}</div>}
           {rows.map((r, i) => (
             <div
               key={`${r.f.subProjectId}|${r.f.reason}|${r.f.jiraIssueKey ?? ""}`}
@@ -205,8 +206,8 @@ function QuickPicks({ userId, onPick, fav }: { userId: string; onPick: (f: Favor
               <button
                 type="button"
                 className={`star ${r.star ? "on" : ""}`}
-                aria-label={r.star ? "Favorit entfernen" : "Als Favorit merken"}
-                title={r.star ? "Favorit entfernen" : "Als Favorit merken"}
+                aria-label={r.star ? tr("Favorit entfernen") : tr("Als Favorit merken")}
+                title={r.star ? tr("Favorit entfernen") : tr("Als Favorit merken")}
                 onClick={(ev) => {
                   ev.stopPropagation();
                   fav.toggle(r.f);
@@ -265,9 +266,9 @@ function TimeForm() {
     : null;
 
   const save = async (h: number) => {
-    if (!reason.trim()) return setError("Bitte einen Grund angeben, er erscheint im Kundenreport.");
-    if (!target.subProjectId) return setError("Bitte ein Subprojekt wählen.");
-    if (!(h > 0 && h <= 24)) return setError("Dauer muss zwischen 0 und 24 Stunden liegen.");
+    if (!reason.trim()) return setError(tr("Bitte einen Grund angeben, er erscheint im Kundenreport."));
+    if (!target.subProjectId) return setError(tr("Bitte ein Subprojekt wählen."));
+    if (!(h > 0 && h <= 24)) return setError(tr("Dauer muss zwischen 0 und 24 Stunden liegen."));
     const issue = data.issues.find((i) => i.key === issueKey);
     try {
       await addTimeEntry({
@@ -285,56 +286,56 @@ function TimeForm() {
     }
     setError("");
     setReason("");
-    notify(`${fmt1(h)} h gebucht`);
+    notify(tr("{0} h gebucht", fmt1(h)));
   };
 
   return (
     <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div className="tree-row">
-        <h2>Zeit erfassen</h2>
+        <h2>{tr("Zeit erfassen")}</h2>
         <div className="seg" role="tablist">
-          <button className={mode === "manual" ? "on" : ""} onClick={() => setMode("manual")}>Manuell</button>
-          <button className={mode === "timer" ? "on" : ""} onClick={() => setMode("timer")}>Stoppuhr</button>
+          <button className={mode === "manual" ? "on" : ""} onClick={() => setMode("manual")}>{tr("Manuell")}</button>
+          <button className={mode === "timer" ? "on" : ""} onClick={() => setMode("timer")}>{tr("Stoppuhr")}</button>
         </div>
       </div>
       <QuickPicks userId={currentUserId} onPick={pick} fav={fav} />
       <div className="form-grid">
         {target.fields("t")}
         <label className="field">
-          <span>JIRA-Issue (optional)</span>
-          <Select id="t-issue" value={issueKey} onChange={setIssueKey} options={[{ value: "", label: "Ohne Issue (z. B. Meeting)" }, ...openIssues.map((i) => ({ value: i.key, label: `${i.key} · ${i.summary} · ${i.storyPoints} SP` }))]} />
+          <span>{tr("JIRA-Issue (optional)")}</span>
+          <Select id="t-issue" value={issueKey} onChange={setIssueKey} options={[{ value: "", label: tr("Ohne Issue (z. B. Meeting)") }, ...openIssues.map((i) => ({ value: i.key, label: `${i.key} · ${i.summary} · ${i.storyPoints} SP` }))]} />
         </label>
       </div>
       <label className="field">
         <span className="tree-row" style={{ display: "flex" }}>
-          Grund / Tätigkeit
-          <button type="button" id="t-fav" className={`star ${current && fav.isFavorite(current) ? "on" : ""}`} disabled={!current} title="Diese Kombination als Favorit merken" onClick={() => current && fav.toggle(current)}>
-            ★ <span style={{ fontSize: "0.75rem" }}>{current && fav.isFavorite(current) ? "Favorit" : "Als Favorit merken"}</span>
+          {tr("Grund / Tätigkeit")}
+          <button type="button" id="t-fav" className={`star ${current && fav.isFavorite(current) ? "on" : ""}`} disabled={!current} title={tr("Diese Kombination als Favorit merken")} onClick={() => current && fav.toggle(current)}>
+            ★ <span style={{ fontSize: "0.75rem" }}>{current && fav.isFavorite(current) ? tr("Favorit") : tr("Als Favorit merken")}</span>
           </button>
         </span>
-        <textarea id="t-reason" className="input" placeholder="z. B. Abnahme-Workshop mit Fachbereich vorbereitet" value={reason} onChange={(e) => setReason(e.target.value)} />
+        <textarea id="t-reason" className="input" placeholder={tr("z. B. Abnahme-Workshop mit Fachbereich vorbereitet")} value={reason} onChange={(e) => setReason(e.target.value)} />
       </label>
       {mode === "manual" ? (
         <div className="form-grid" style={{ alignItems: "end" }}>
-          <label className="field"><span>Datum</span><input id="t-date" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-          <label className="field"><span>Dauer (h)</span><input id="t-hours" type="number" step="0.25" min="0" className="input num" value={hours} onChange={(e) => setHours(e.target.value)} /></label>
-          <label className="check"><input id="t-billable" type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />Verrechenbar · {fmtCHF(rate)}/h</label>
-          <button className="btn primary" onClick={() => save(Number(hours))}>Buchen</button>
+          <label className="field"><span>{tr("Datum")}</span><input id="t-date" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+          <label className="field"><span>{tr("Dauer (h)")}</span><input id="t-hours" type="number" step="0.25" min="0" className="input num" value={hours} onChange={(e) => setHours(e.target.value)} /></label>
+          <label className="check"><input id="t-billable" type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />{tr("Verrechenbar · {0}/h", fmtCHF(rate))}</label>
+          <button className="btn primary" onClick={() => save(Number(hours))}>{tr("Buchen")}</button>
         </div>
       ) : (
         <div className="timer">
           <div>
             <div className={`timer-clock ${startedAt ? "running" : ""}`}>{fmtClock(elapsed)}</div>
-            <label className="check"><input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />Verrechenbar · {fmtCHF(rate)}/h</label>
+            <label className="check"><input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />{tr("Verrechenbar · {0}/h", fmtCHF(rate))}</label>
           </div>
           {startedAt ? (
-            <button className="btn primary" onClick={() => { save(Math.max(0.25, Math.ceil(elapsed / 900) / 4)); setStartedAt(null); }}>Stoppen & buchen</button>
+            <button className="btn primary" onClick={() => { save(Math.max(0.25, Math.ceil(elapsed / 900) / 4)); setStartedAt(null); }}>{tr("Stoppen & buchen")}</button>
           ) : (
-            <button className="btn primary" onClick={() => { setStartedAt(Date.now()); setNow(Date.now()); }}>Start</button>
+            <button className="btn primary" onClick={() => { setStartedAt(Date.now()); setNow(Date.now()); }}>{tr("Start")}</button>
           )}
         </div>
       )}
-      {mode === "timer" && <p className="muted" style={{ fontSize: "0.8rem" }}>Die Stoppuhr rundet auf die nächste Viertelstunde auf.</p>}
+      {mode === "timer" && <p className="muted" style={{ fontSize: "0.8rem" }}>{tr("Die Stoppuhr rundet auf die nächste Viertelstunde auf.")}</p>}
       {error && <p className="error">{error}</p>}
     </section>
   );
@@ -363,18 +364,18 @@ function ExpenseForm({ compact = false, initialDate, onDone }: { compact?: boole
 
   /** Reads a receipt photo and fills amount, date, VAT, category and reason; every value stays editable. */
   const readReceipt = async (f: File) => {
-    setScan({ progress: 0, step: "Texterkennung laden" });
+    setScan({ progress: 0, step: tr("Texterkennung laden") });
     setScanned([]);
     try {
       const { text } = await recognizeReceipt(f, (progress, step) => setScan({ progress, step }));
       const g = parseReceipt(text, data.today);
       const found: string[] = [];
-      if (g.amount !== undefined) { setAmount(g.amount.toFixed(2)); found.push(`Betrag ${fmtCHF2(g.amount)}`); }
-      if (g.date) { setDate(g.date); found.push(`Datum ${g.date.split("-").reverse().join(".")}`); }
-      if (g.vatRate !== undefined) { setVatRate(g.vatRate); found.push(`MwSt ${fmt1(g.vatRate)} %`); }
+      if (g.amount !== undefined) { setAmount(g.amount.toFixed(2)); found.push(tr("Betrag {0}", fmtCHF2(g.amount))); }
+      if (g.date) { setDate(g.date); found.push(tr("Datum {0}", g.date.split("-").reverse().join("."))); }
+      if (g.vatRate !== undefined) { setVatRate(g.vatRate); found.push(tr("MwSt {0} %", fmt1(g.vatRate))); }
       if (g.category) { setCategory(g.category); found.push(g.category); }
       if (g.merchant && !reason.trim()) { setReason(g.merchant); found.push(`«${g.merchant}»`); }
-      setScanned(found.length ? found : ["Nichts Brauchbares erkannt, bitte von Hand ausfüllen."]);
+      setScanned(found.length ? found : [tr("Nichts Brauchbares erkannt, bitte von Hand ausfüllen.")]);
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -391,9 +392,9 @@ function ExpenseForm({ compact = false, initialDate, onDone }: { compact?: boole
 
   const save = async () => {
     const a = isKm ? kmAmount : Number(amount);
-    if (isKm && !(Number(km) > 0)) return setError("Bitte die gefahrenen Kilometer eingeben.");
-    if (!(a > 0)) return setError("Bitte einen Betrag grösser als 0 eingeben.");
-    if (!reason.trim()) return setError("Bitte einen Grund angeben.");
+    if (isKm && !(Number(km) > 0)) return setError(tr("Bitte die gefahrenen Kilometer eingeben."));
+    if (!(a > 0)) return setError(tr("Bitte einen Betrag grösser als 0 eingeben."));
+    if (!reason.trim()) return setError(tr("Bitte einen Grund angeben."));
     try {
       await addExpenseWithReceipt(
         { employeeId: currentUserId, subProjectId: target.subProjectId, date, amount: a, category, reason: reason.trim(), billable, vatRate: isKm ? 0 : vatRate, km: isKm ? Number(km) : undefined },
@@ -408,57 +409,57 @@ function ExpenseForm({ compact = false, initialDate, onDone }: { compact?: boole
     setReason("");
     setFile(null);
     if (fileInput.current) fileInput.current.value = "";
-    notify(!scope.lead ? `Spesen über ${fmtCHF2(a)} eingereicht` : `Spesen über ${fmtCHF2(a)} erfasst`);
+    notify(!scope.lead ? tr("Spesen über {0} eingereicht", fmtCHF2(a)) : tr("Spesen über {0} erfasst", fmtCHF2(a)));
     onDone?.();
   };
 
   return (
     <section className={compact ? "" : "card card-pad"} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {!compact && <h2>Spesen erfassen</h2>}
+      {!compact && <h2>{tr("Spesen erfassen")}</h2>}
       <div className="form-grid">
         {target.fields("x")}
         <label className="field">
-          <span>Kategorie</span>
-          <Select id="x-cat" value={category} onChange={(v) => setCategory(v as ExpenseCategory)} options={CATEGORIES.map((c) => ({ value: c, label: c }))} />
+          <span>{tr("Kategorie")}</span>
+          <Select id="x-cat" value={category} onChange={(v) => setCategory(v as ExpenseCategory)} options={CATEGORIES.map((c) => ({ value: c, label: tr(c) }))} />
         </label>
-        <label className="field"><span>Datum</span><input id="x-date" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+        <label className="field"><span>{tr("Datum")}</span><input id="x-date" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
         {isKm ? (
           <>
-            <label className="field"><span>Kilometer</span><input id="x-km" type="number" step="1" min="0" className="input num" placeholder="0" value={km} onChange={(e) => setKm(e.target.value)} /></label>
-            <label className="field"><span>Betrag (CHF)</span><input className="input num" value={km ? fmtCHF2(kmAmount) : "–"} readOnly title={`${fmtCHF2(kmRate)} pro Kilometer`} /></label>
+            <label className="field"><span>{tr("Kilometer")}</span><input id="x-km" type="number" step="1" min="0" className="input num" placeholder="0" value={km} onChange={(e) => setKm(e.target.value)} /></label>
+            <label className="field"><span>{tr("Betrag (CHF)")}</span><input className="input num" value={km ? fmtCHF2(kmAmount) : "–"} readOnly title={tr("{0} pro Kilometer", fmtCHF2(kmRate))} /></label>
           </>
         ) : (
           <>
-            <label className="field"><span>Betrag brutto (CHF)</span><input id="x-amount" type="number" step="0.05" min="0" className="input num" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+            <label className="field"><span>{tr("Betrag brutto (CHF)")}</span><input id="x-amount" type="number" step="0.05" min="0" className="input num" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
             <label className="field">
-              <span>MwSt enthalten</span>
-              <Select id="x-vat" value={String(vatRate)} onChange={(v) => setVatRate(Number(v))} options={VAT_RATES.map((v) => ({ value: String(v), label: v === 0 ? "keine" : `${fmt1(v)} %` }))} />
+              <span>{tr("MwSt enthalten")}</span>
+              <Select id="x-vat" value={String(vatRate)} onChange={(v) => setVatRate(Number(v))} options={VAT_RATES.map((v) => ({ value: String(v), label: v === 0 ? tr("keine") : `${fmt1(v)} %` }))} />
             </label>
           </>
         )}
       </div>
       <label className="field">
-        <span>Grund</span>
-        <input id="x-reason" className="input" placeholder={isKm ? "z. B. Fahrt zum Workshop beim Kunden" : "z. B. SBB Basel–Zürich für Sprint Review"} value={reason} onChange={(e) => setReason(e.target.value)} />
+        <span>{tr("Grund")}</span>
+        <input id="x-reason" className="input" placeholder={isKm ? tr("z. B. Fahrt zum Workshop beim Kunden") : tr("z. B. SBB Basel–Zürich für Sprint Review")} value={reason} onChange={(e) => setReason(e.target.value)} />
       </label>
       <div className="export-bar">
         <label className="field" style={{ flex: "1 1 240px" }}>
-          <span>Beleg (Foto oder PDF, max. 10 MB)</span>
+          <span>{tr("Beleg (Foto oder PDF, max. 10 MB)")}</span>
           <input id="x-file" ref={fileInput} type="file" className="input" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </label>
         <input id="x-scan-file" ref={scanInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => onScanFile(e.target.files?.[0] ?? null)} />
-        <button id="x-scan" type="button" className="btn" disabled={Boolean(scan)} title="Foto des Belegs auslesen und Betrag, Datum und MwSt vorschlagen" onClick={() => (file && file.type.startsWith("image/") ? void readReceipt(file) : scanInput.current?.click())}>
-          <Icon.camera />{scan ? scan.step : file && file.type.startsWith("image/") ? "Beleg auslesen" : phone ? "Beleg fotografieren" : "Beleg scannen"}
+        <button id="x-scan" type="button" className="btn" disabled={Boolean(scan)} title={tr("Foto des Belegs auslesen und Betrag, Datum und MwSt vorschlagen")} onClick={() => (file && file.type.startsWith("image/") ? void readReceipt(file) : scanInput.current?.click())}>
+          <Icon.camera />{scan ? scan.step : file && file.type.startsWith("image/") ? tr("Beleg auslesen") : phone ? tr("Beleg fotografieren") : tr("Beleg scannen")}
         </button>
-        <label className="check"><input id="x-billable" type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />An Kunden weiterverrechnen</label>
-        <button className="btn primary" onClick={save}>{!scope.lead ? "Spesen einreichen" : "Spesen speichern"}</button>
+        <label className="check"><input id="x-billable" type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />{tr("An Kunden weiterverrechnen")}</label>
+        <button className="btn primary" onClick={save}>{!scope.lead ? tr("Spesen einreichen") : tr("Spesen speichern")}</button>
       </div>
       {scan && <div className="scan-bar" role="progressbar" aria-valuenow={Math.round(scan.progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.round(scan.progress * 100)}%` }} /></div>}
-      {scanned.length > 0 && <p id="x-scanned" className="notice" style={{ margin: 0 }}>Aus dem Beleg gelesen: {scanned.join(" · ")}. Bitte kurz prüfen.</p>}
+      {scanned.length > 0 && <p id="x-scanned" className="notice" style={{ margin: 0 }}>{tr("Aus dem Beleg gelesen: {0}. Bitte kurz prüfen.", scanned.join(" · "))}</p>}
       <p className="muted" style={{ fontSize: "0.8rem", margin: 0 }}>
-        {isKm ? `Kilometerpauschale ${fmtCHF2(kmRate)} pro km, ohne MwSt. ` : ""}
-        {!scope.lead ? "Spesen werden von Consultants oder Admins bewilligt, bevor sie in Report und Rechnung erscheinen." : "Als Consultant oder Admin erfasste Spesen gelten als bewilligt."}
-        {mode === "demo" && file ? " Im Prototyp bleibt der Beleg nur im Browser." : ""}
+        {isKm ? tr("Kilometerpauschale {0} pro km, ohne MwSt. ", fmtCHF2(kmRate)) : ""}
+        {!scope.lead ? tr("Spesen werden von Consultants oder Admins bewilligt, bevor sie in Report und Rechnung erscheinen.") : tr("Als Consultant oder Admin erfasste Spesen gelten als bewilligt.")}
+        {mode === "demo" && file ? tr(" Im Prototyp bleibt der Beleg nur im Browser.") : ""}
       </p>
       {error && <p className="error">{error}</p>}
     </section>
@@ -500,14 +501,14 @@ function WeekList() {
   return (
     <section className="card" style={{ maxHeight: "calc(100vh - 140px)", overflow: "auto" }}>
       <div className="card-head" style={{ paddingBottom: 12 }}>
-        <h2>{mine ? "Meine Buchungen · letzte 14 Tage" : "Alle Buchungen · letzte 7 Tage"}</h2>
+        <h2>{mine ? tr("Meine Buchungen · letzte 14 Tage") : tr("Alle Buchungen · letzte 7 Tage")}</h2>
       </div>
-      {days.length === 0 && <p className="card-pad muted">Noch keine Buchungen in diesem Zeitraum.</p>}
+      {days.length === 0 && <p className="card-pad muted">{tr("Noch keine Buchungen in diesem Zeitraum.")}</p>}
       {days.map(([day, { time, exp }]) => (
         <div className="day-group" key={day}>
-          <div className="day-head"><span>{fmtDay(day)}</span><span className="num">{fmt1(time.reduce((s, e) => s + e.hours, 0))} h</span></div>
+          <div className="day-head"><span>{fmtDay(day)}</span><span className="num">{fmt1(time.reduce((s, e) => s + e.hours, 0))}{" "}{tr("h")}</span></div>
           {time.map((e) => (
-            <EntryRow key={e.id} kind="time" item={e} who={emp.get(e.employeeId)} title={e.reason} meta={`${label(e.subProjectId)}${e.billable ? "" : " · nicht verrechenbar"}`} value={`${fmt1(e.hours)} h`} />
+            <EntryRow key={e.id} kind="time" item={e} who={emp.get(e.employeeId)} title={e.reason} meta={`${label(e.subProjectId)}${e.billable ? "" : tr(" · nicht verrechenbar")}`} value={`${fmt1(e.hours)} h`} />
           ))}
           {exp.map((x) => (
             <EntryRow
@@ -515,8 +516,8 @@ function WeekList() {
               kind="expense"
               item={x}
               who={mine ? undefined : emp.get(x.employeeId)}
-              title={`${x.category}: ${x.reason}`}
-              meta={`${label(x.subProjectId)}${x.km ? ` · ${x.km} km` : ""}${x.vatRate ? ` · inkl. ${fmt1(x.vatRate)} % MwSt` : ""}${x.billable ? "" : " · nicht verrechenbar"}`}
+              title={`${tr(x.category)}: ${x.reason}`}
+              meta={`${label(x.subProjectId)}${x.km ? ` · ${x.km} km` : ""}${x.vatRate ? tr(" · inkl. {0} % MwSt", fmt1(x.vatRate)) : ""}${x.billable ? "" : tr(" · nicht verrechenbar")}`}
               value={fmtCHF2(x.amount)}
             />
           ))}
@@ -535,9 +536,9 @@ interface AuditRow {
   after: Record<string, unknown> | null;
 }
 
-const FIELD_LABEL: Record<string, string> = { date: "Datum", hours: "Stunden", reason: "Grund", billable: "Verrechenbar", amount: "Betrag", category: "Kategorie", subProjectId: "Subprojekt", hourlyRate: "Satz", jiraIssueKey: "JIRA-Issue", vatRate: "MwSt", km: "Kilometer", receipt: "Beleg", status: "Status", comment: "Begründung" };
-const ACTION_LABEL: Record<string, string> = { create: "erfasst", update: "geändert", delete: "gelöscht", submit: "eingereicht", approve: "bewilligt", reject: "abgelehnt", reopen: "wieder geöffnet" };
-const EXPENSE_STATUS = { requested: { label: "Offen", cls: "risk" }, approved: { label: "Bewilligt", cls: "ok" }, rejected: { label: "Abgelehnt", cls: "over" } } as const;
+const FIELD_LABEL: Record<string, string> = { date: tr("Datum"), hours: tr("Stunden"), reason: tr("Grund"), billable: tr("Verrechenbar"), amount: tr("Betrag"), category: tr("Kategorie"), subProjectId: tr("Subprojekt"), hourlyRate: tr("Satz"), jiraIssueKey: "JIRA-Issue", vatRate: "MwSt", km: tr("Kilometer"), receipt: tr("Beleg"), status: "Status", comment: tr("Begründung") };
+const ACTION_LABEL: Record<string, string> = { create: tr("erfasst"), update: tr("geändert"), delete: tr("gelöscht"), submit: tr("eingereicht"), approve: tr("bewilligt"), reject: tr("abgelehnt"), reopen: tr("wieder geöffnet") };
+const EXPENSE_STATUS = { requested: { label: tr("Offen"), cls: "risk" }, approved: { label: tr("Bewilligt"), cls: "ok" }, rejected: { label: tr("Abgelehnt"), cls: "over" } } as const;
 const show = (v: unknown) => (typeof v === "boolean" ? (v ? "ja" : "nein") : v === null || v === undefined || v === "" ? "–" : String(v));
 
 function History({ id }: { id: string }) {
@@ -547,8 +548,8 @@ function History({ id }: { id: string }) {
     api<AuditRow[]>(`/api/audit/${id}`).then(setRows).catch((e) => setError((e as Error).message));
   }, [id]);
   if (error) return <p className="error">{error}</p>;
-  if (!rows) return <p className="muted">Lade Verlauf …</p>;
-  if (rows.length === 0) return <p className="muted">Kein Verlauf vorhanden (vor der Einführung des Änderungsprotokolls erfasst).</p>;
+  if (!rows) return <p className="muted">{tr("Lade Verlauf …")}</p>;
+  if (rows.length === 0) return <p className="muted">{tr("Kein Verlauf vorhanden (vor der Einführung des Änderungsprotokolls erfasst).")}</p>;
   return (
     <ul className="history">
       {rows.map((r) => {
@@ -557,9 +558,9 @@ function History({ id }: { id: string }) {
           : [];
         return (
           <li key={r.id}>
-            <span className="muted">{new Date(r.createdAt).toLocaleString("de-CH", { dateStyle: "short", timeStyle: "short" })}</span> {ACTION_LABEL[r.action] ?? r.action} von {r.actorName ?? "unbekannt"}
+            <span className="muted">{new Date(r.createdAt).toLocaleString(intlLocale, { dateStyle: "short", timeStyle: "short" })}</span> {tr("{0} durch {1}", ACTION_LABEL[r.action] ?? r.action, r.actorName ?? tr("unbekannt"))}
             {changes.length > 0 && <div className="muted">{changes.join(" · ")}</div>}
-            {r.action === "reject" && r.after?.comment ? <div className="muted">Begründung: {String(r.after.comment)}</div> : null}
+            {r.action === "reject" && r.after?.comment ? <div className="muted">{tr("Begründung:")}{" "}{String(r.after.comment)}</div> : null}
           </li>
         );
       })}
@@ -601,10 +602,10 @@ function EntryRow(props: EntryProps) {
   const save = async (): Promise<Record<string, string> | void> => {
     const n = Number(amount.replace(",", "."));
     const e: Record<string, string> = {};
-    if (!date) e.date = "Bitte ein Datum wählen.";
-    if (!reason.trim()) e.reason = "Bitte einen Grund angeben.";
-    if (kind === "time" && !(n > 0 && n <= 24)) e.amount = "Zwischen 0 und 24 Stunden.";
-    if (kind === "expense" && !(n > 0)) e.amount = "Bitte einen Betrag grösser als 0 eingeben.";
+    if (!date) e.date = tr("Bitte ein Datum wählen.");
+    if (!reason.trim()) e.reason = tr("Bitte einen Grund angeben.");
+    if (kind === "time" && !(n > 0 && n <= 24)) e.amount = tr("Zwischen 0 und 24 Stunden.");
+    if (kind === "expense" && !(n > 0)) e.amount = tr("Bitte einen Betrag grösser als 0 eingeben.");
     if (Object.keys(e).length) return e;
     const base = { date, reason: reason.trim(), billable };
     if (kind === "time") await updateTimeEntry(item.id, { ...base, hours: Math.round(n * 100) / 100 });
@@ -612,9 +613,9 @@ function EntryRow(props: EntryProps) {
     setError("");
     setState("view");
     setHistory(false);
-    notify("Änderung gespeichert");
+    notify(tr("Änderung gespeichert"));
   };
-  const remove = () => run(() => (kind === "time" ? deleteTimeEntry(item.id) : deleteExpense(item.id)), kind === "time" ? "Buchung gelöscht" : "Spese gelöscht");
+  const remove = () => run(() => (kind === "time" ? deleteTimeEntry(item.id) : deleteExpense(item.id)), kind === "time" ? tr("Buchung gelöscht") : tr("Spese gelöscht"));
 
   return (
     <div className={`entry-wrap ${state === "edit" ? "editing-entry" : ""}`}>
@@ -622,15 +623,15 @@ function EntryRow(props: EntryProps) {
         {kind === "time" || props.who ? (
           <span className="who" title={props.who?.name} style={kind === "expense" ? { background: "var(--surface-2)", color: "var(--ink-2)" } : undefined}>{props.who?.initials}</span>
         ) : (
-          <span className="who" style={{ background: "var(--surface-2)", color: "var(--ink-2)" }} title="Spesen">CHF</span>
+          <span className="who" style={{ background: "var(--surface-2)", color: "var(--ink-2)" }} title={tr("Spesen")}>{tr("CHF")}</span>
         )}
         <div className="what">
           <div className="tree-row" style={{ justifyContent: "flex-start", gap: 8 }}>
             <span>{props.title}</span>
             {expense && status !== "approved" && <span className={`pill ${EXPENSE_STATUS[status!].cls}`}>{EXPENSE_STATUS[status!].label}</span>}
             {expense?.receipt && (mode === "api"
-              ? <a className="receipt-link" href={`/api/expenses/${expense.id}/receipt`} target="_blank" rel="noreferrer" title={expense.receipt.name}><Icon.report />Beleg</a>
-              : <span className="receipt-link" title={expense.receipt.name}><Icon.report />Beleg</span>)}
+              ? <a className="receipt-link" href={`/api/expenses/${expense.id}/receipt`} target="_blank" rel="noreferrer" title={expense.receipt.name}><Icon.report />{tr("Beleg")}</a>
+              : <span className="receipt-link" title={expense.receipt.name}><Icon.report />{tr("Beleg")}</span>)}
           </div>
           <div className="meta">{props.meta}</div>
         </div>
@@ -640,13 +641,13 @@ function EntryRow(props: EntryProps) {
             <span className="lock" title={lock} aria-label={lock}><Icon.lock /></span>
           ) : state === "confirm" ? (
             <>
-              <button className="btn small primary" onClick={remove}>Löschen</button>
-              <button className="btn small ghost" onClick={() => setState("view")}>Nein</button>
+              <button className="btn small primary" onClick={remove}>{tr("Löschen")}</button>
+              <button className="btn small ghost" onClick={() => setState("view")}>{tr("Nein")}</button>
             </>
           ) : (
             <>
-              <button className="icon-btn" title="Bearbeiten" aria-label="Bearbeiten" onClick={() => setState("edit")}><Icon.edit /></button>
-              <button className="icon-btn" title="Löschen" aria-label="Löschen" onClick={() => setState("confirm")}><Icon.trash /></button>
+              <button className="icon-btn" title={tr("Bearbeiten")} aria-label={tr("Bearbeiten")} onClick={() => setState("edit")}><Icon.edit /></button>
+              <button className="icon-btn" title={tr("Löschen")} aria-label={tr("Löschen")} onClick={() => setState("confirm")}><Icon.trash /></button>
             </>
           )}
         </div>
@@ -654,41 +655,41 @@ function EntryRow(props: EntryProps) {
       {state === "edit" && (
         <FormDialog
           id="entry-edit-dialog"
-          title={kind === "time" ? "Buchung bearbeiten" : "Spese bearbeiten"}
+          title={kind === "time" ? tr("Buchung bearbeiten") : tr("Spese bearbeiten")}
           subtitle={props.title}
           onClose={() => { setState("view"); setHistory(false); setError(""); }}
           onSubmit={save}
-          danger={mode === "api" ? <button type="button" className="btn ghost" onClick={() => setHistory(!history)}>{history ? "Verlauf ausblenden" : "Verlauf"}</button> : undefined}
+          danger={mode === "api" ? <button type="button" className="btn ghost" onClick={() => setHistory(!history)}>{history ? tr("Verlauf ausblenden") : tr("Verlauf")}</button> : undefined}
         >
           <FieldRow>
-            <Field label="Datum" name="date" required><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-            <Field label={kind === "time" ? "Dauer (h)" : expense?.category === "Kilometer" ? "Kilometer" : "Betrag brutto (CHF)"} name="amount" required hint={kind === "time" ? "z. B. 1.5 für 1 h 30 min" : undefined}>
+            <Field label={tr("Datum")} name="date" required><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+            <Field label={kind === "time" ? tr("Dauer (h)") : expense?.category === "Kilometer" ? tr("Kilometer") : tr("Betrag brutto (CHF)")} name="amount" required hint={kind === "time" ? tr("z. B. 1.5 für 1 h 30 min") : undefined}>
               <input inputMode="decimal" className="input num" value={amount} onChange={(e) => setAmount(e.target.value)} />
             </Field>
             {expense && expense.category !== "Kilometer" && (
-              <Field label="MwSt enthalten">
-                <Select value={String(vatRate)} onChange={(v) => setVatRate(Number(v))} options={VAT_RATES.map((v) => ({ value: String(v), label: v === 0 ? "keine" : `${fmt1(v)} %` }))} />
+              <Field label={tr("MwSt enthalten")}>
+                <Select value={String(vatRate)} onChange={(v) => setVatRate(Number(v))} options={VAT_RATES.map((v) => ({ value: String(v), label: v === 0 ? tr("keine") : `${fmt1(v)} %` }))} />
               </Field>
             )}
           </FieldRow>
-          <Field label="Grund" name="reason" required hint="Erscheint im Report und auf der Rechnung."><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
+          <Field label={tr("Grund")} name="reason" required hint={tr("Erscheint im Report und auf der Rechnung.")}><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
           <label className="check-field">
             <input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />
-            <span><strong>Verrechenbar</strong><br /><span className="muted">Nicht verrechenbare Einträge zählen zum Aufwand, aber nicht auf die Rechnung.</span></span>
+            <span><strong>{tr("Verrechenbar")}</strong><br /><span className="muted">{tr("Nicht verrechenbare Einträge zählen zum Aufwand, aber nicht auf die Rechnung.")}</span></span>
           </label>
           {expense && (
-            <Field label={expense.receipt ? `Beleg (${expense.receipt.name})` : "Beleg"} hint="Bild oder PDF. Wird sofort gespeichert.">
+            <Field label={expense.receipt ? tr("Beleg ({0})", expense.receipt.name) : tr("Beleg")} hint={tr("Bild oder PDF. Wird sofort gespeichert.")}>
               <input type="file" className="input" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) void uploadReceipt(expense.id, f).then(() => notify("Beleg gespeichert")).catch((err: Error) => setError(err.message));
+                if (f) void uploadReceipt(expense.id, f).then(() => notify(tr("Beleg gespeichert"))).catch((err: Error) => setError(err.message));
               }} />
             </Field>
           )}
           {(expense?.receipt || (expense && status === "rejected" && (expense.employeeId === currentUserId || scope.lead))) && (
             <div className="toolbar" style={{ gap: 8 }}>
-              {expense?.receipt && <button type="button" className="btn small ghost" onClick={() => run(() => deleteReceipt(expense.id), "Beleg entfernt")}>Beleg entfernen</button>}
+              {expense?.receipt && <button type="button" className="btn small ghost" onClick={() => run(() => deleteReceipt(expense.id), tr("Beleg entfernt"))}>{tr("Beleg entfernen")}</button>}
               {expense && status === "rejected" && (expense.employeeId === currentUserId || scope.lead) && (
-                <button type="button" className="btn small" onClick={() => run(() => resubmitExpense(expense.id), "Spese erneut eingereicht")}>Erneut einreichen</button>
+                <button type="button" className="btn small" onClick={() => run(() => resubmitExpense(expense.id), tr("Spese erneut eingereicht"))}>{tr("Erneut einreichen")}</button>
               )}
             </div>
           )}
@@ -766,7 +767,7 @@ function Comments({ entry }: { entry: TimeEntry }) {
       await addComment(entry.id, text.trim(), question);
       setText("");
       setQuestion(false);
-      notify(question && canAsk ? "Rückfrage gestellt, die Person wird benachrichtigt" : owner && open ? "Antwort gespeichert, Rückfrage erledigt" : "Kommentar gespeichert");
+      notify(question && canAsk ? tr("Rückfrage gestellt, die Person wird benachrichtigt") : owner && open ? tr("Antwort gespeichert, Rückfrage erledigt") : tr("Kommentar gespeichert"));
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -774,23 +775,23 @@ function Comments({ entry }: { entry: TimeEntry }) {
   };
   return (
     <div className="comments">
-      <div className="tree-row"><span className="label">Kommentare</span>{open && <span className="pill risk">Rückfrage offen</span>}</div>
-      {rows === null && !error && <p className="muted" style={{ fontSize: "0.82rem" }}>Lade …</p>}
-      {rows && rows.length === 0 && <p className="muted" style={{ fontSize: "0.82rem" }}>Noch keine Kommentare.</p>}
+      <div className="tree-row"><span className="label">{tr("Kommentare")}</span>{open && <span className="pill risk">{tr("Rückfrage offen")}</span>}</div>
+      {rows === null && !error && <p className="muted" style={{ fontSize: "0.82rem" }}>{tr("Lade …")}</p>}
+      {rows && rows.length === 0 && <p className="muted" style={{ fontSize: "0.82rem" }}>{tr("Noch keine Kommentare.")}</p>}
       {rows && rows.length > 0 && (
         <ul className="comment-list">
           {rows.map((c) => (
             <li key={c.id} className={`comment ${c.kind} ${c.authorId === currentUserId ? "mine" : ""}`}>
-              <div className="comment-head"><strong>{c.authorName ?? "Unbekannt"}</strong>{c.kind === "question" && <span className={`pill ${c.resolvedAt ? "ok" : "risk"}`}>{c.resolvedAt ? "Beantwortet" : "Rückfrage"}</span>}<span className="muted">{new Date(c.createdAt).toLocaleString("de-CH", { dateStyle: "short", timeStyle: "short" })}</span></div>
+              <div className="comment-head"><strong>{c.authorName ?? tr("Unbekannt")}</strong>{c.kind === "question" && <span className={`pill ${c.resolvedAt ? "ok" : "risk"}`}>{c.resolvedAt ? tr("Beantwortet") : tr("Rückfrage")}</span>}<span className="muted">{new Date(c.createdAt).toLocaleString(intlLocale, { dateStyle: "short", timeStyle: "short" })}</span></div>
               <div>{c.text}</div>
             </li>
           ))}
         </ul>
       )}
       <div className="comment-form">
-        <input id="c-text" className="input" placeholder={owner && open ? "Antwort schreiben …" : canAsk ? "Kommentar oder Rückfrage …" : "Kommentar …"} value={text} onChange={(ev) => setText(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && void submit()} />
-        {canAsk && <label className="check" title="Die Person bekommt eine Mail und sieht die Rückfrage, bis sie antwortet."><input id="c-question" type="checkbox" checked={question} onChange={(ev) => setQuestion(ev.target.checked)} />Als Rückfrage</label>}
-        <button id="c-send" className="btn small" disabled={!text.trim()} onClick={() => void submit()}>Senden</button>
+        <input id="c-text" className="input" placeholder={owner && open ? tr("Antwort schreiben …") : canAsk ? tr("Kommentar oder Rückfrage …") : tr("Kommentar …")} value={text} onChange={(ev) => setText(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && void submit()} />
+        {canAsk && <label className="check" title={tr("Die Person bekommt eine Mail und sieht die Rückfrage, bis sie antwortet.")}><input id="c-question" type="checkbox" checked={question} onChange={(ev) => setQuestion(ev.target.checked)} />{tr("Als Rückfrage")}</label>}
+        <button id="c-send" className="btn small" disabled={!text.trim()} onClick={() => void submit()}>{tr("Senden")}</button>
       </div>
       {error && <p className="error">{error}</p>}
     </div>
@@ -865,52 +866,52 @@ function EntryDialog({ state, onClose }: { state: DialogState; onClose: () => vo
     }
   };
   const save = () => {
-    if (!reason.trim()) return setError("Bitte einen Grund angeben, er erscheint im Kundenreport.");
-    if (!target.subProjectId) return setError("Bitte ein Subprojekt wählen.");
-    if (!(h > 0 && h <= 24)) return setError("Dauer muss zwischen 0 und 24 Stunden liegen.");
+    if (!reason.trim()) return setError(tr("Bitte einen Grund angeben, er erscheint im Kundenreport."));
+    if (!target.subProjectId) return setError(tr("Bitte ein Subprojekt wählen."));
+    if (!(h > 0 && h <= 24)) return setError(tr("Dauer muss zwischen 0 und 24 Stunden liegen."));
     const issue = data.issues.find((i) => i.key === issueKey);
     const text = issue ? `${issue.key} ${reason.trim()}` : reason.trim();
     const body = { subProjectId: target.subProjectId, date, hours: Math.round(h * 100) / 100, reason: text, billable, jiraIssueKey: issueKey || undefined, startTime: startTime || undefined };
     return run(
       () => (e ? updateTimeEntry(e.id, { ...body, jiraIssueKey: issueKey || null } as Partial<TimeEntry>) : addTimeEntry({ employeeId: currentUserId, hourlyRate: rate, ...body })),
-      e ? "Buchung gespeichert" : `${fmt1(h)} h gebucht`,
+      e ? tr("Buchung gespeichert") : tr("{0} h gebucht", fmt1(h)),
     );
   };
 
   return (
     <div className="overlay" onMouseDown={(ev) => ev.target === ev.currentTarget && onClose()}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={e ? "Buchung bearbeiten" : "Neue Buchung"}>
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={e ? tr("Buchung bearbeiten") : tr("Neue Buchung")}>
         <div className="dialog-head">
-          {e ? <h2>Buchung bearbeiten</h2> : (
+          {e ? <h2>{tr("Buchung bearbeiten")}</h2> : (
             <div className="seg" role="tablist">
-              <button className={kind === "time" ? "on" : ""} onClick={() => setKind("time")}>Zeit</button>
-              <button className={kind === "expense" ? "on" : ""} onClick={() => setKind("expense")}>Spese</button>
+              <button className={kind === "time" ? "on" : ""} onClick={() => setKind("time")}>{tr("Zeit")}</button>
+              <button className={kind === "expense" ? "on" : ""} onClick={() => setKind("expense")}>{tr("Spese")}</button>
             </div>
           )}
-          <button className="icon-btn" aria-label="Schliessen" onClick={onClose}><Icon.close /></button>
+          <button className="icon-btn" aria-label={tr("Schliessen")} onClick={onClose}><Icon.close /></button>
         </div>
         {kind === "expense" ? (
           <ExpenseForm compact initialDate={date} onDone={onClose} />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {lock && <p className="notice">{lock}. Die Buchung kann nur angesehen werden.</p>}
+            {lock && <p className="notice">{lock}{tr(". Die Buchung kann nur angesehen werden.")}</p>}
             <QuickPicks userId={currentUserId} onPick={pick} fav={fav} />
             <div className="form-grid">{target.fields("d")}</div>
             <div className="form-grid">
-              <label className="field"><span>Datum</span><input id="d-date" type="date" className="input" value={date} onChange={(ev) => setDate(ev.target.value)} /></label>
-              <label className="field"><span>Von</span><input id="d-start" type="time" step={900} className="input" value={startTime} onChange={(ev) => setStartTime(ev.target.value)} /></label>
+              <label className="field"><span>{tr("Datum")}</span><input id="d-date" type="date" className="input" value={date} onChange={(ev) => setDate(ev.target.value)} /></label>
+              <label className="field"><span>{tr("Von")}</span><input id="d-start" type="time" step={900} className="input" value={startTime} onChange={(ev) => setStartTime(ev.target.value)} /></label>
               <label className="field">
-                <span>Dauer (h){endTime ? ` · bis ${endTime}` : ""}</span>
+                <span>{tr("Dauer (h)")}{endTime ? tr(" · bis {0}", endTime) : ""}</span>
                 <input id="d-hours" type="number" step="0.25" min="0.25" max="24" className="input num" value={hours} onChange={(ev) => setHours(ev.target.value)} />
               </label>
               <label className="field">
-                <span>JIRA-Issue (optional)</span>
+                <span>{tr("JIRA-Issue (optional)")}</span>
                 <Select
                   id="d-issue"
                   value={issueKey}
                   onChange={setIssueKey}
                   options={[
-                    { value: "", label: "Ohne Issue" },
+                    { value: "", label: tr("Ohne Issue") },
                     ...openIssues.map((i) => ({ value: i.key, label: `${i.key} · ${i.summary}` })),
                     ...(e?.jiraIssueKey && !openIssues.some((i) => i.key === e.jiraIssueKey) ? [{ value: e.jiraIssueKey, label: e.jiraIssueKey }] : []),
                   ]}
@@ -919,30 +920,30 @@ function EntryDialog({ state, onClose }: { state: DialogState; onClose: () => vo
             </div>
             <label className="field">
               <span className="tree-row" style={{ display: "flex" }}>
-                Grund / Tätigkeit
-                <button type="button" id="d-fav" className={`star ${current && fav.isFavorite(current) ? "on" : ""}`} disabled={!current} title="Diese Kombination als Favorit merken" onClick={() => current && fav.toggle(current)}>
-                  ★ <span style={{ fontSize: "0.75rem" }}>{current && fav.isFavorite(current) ? "Favorit" : "Als Favorit merken"}</span>
+                {tr("Grund / Tätigkeit")}
+                <button type="button" id="d-fav" className={`star ${current && fav.isFavorite(current) ? "on" : ""}`} disabled={!current} title={tr("Diese Kombination als Favorit merken")} onClick={() => current && fav.toggle(current)}>
+                  ★ <span style={{ fontSize: "0.75rem" }}>{current && fav.isFavorite(current) ? tr("Favorit") : tr("Als Favorit merken")}</span>
                 </button>
               </span>
-              <input id="d-reason" className="input" placeholder="z. B. Abnahme-Workshop vorbereitet" value={reason} autoFocus={!e} onChange={(ev) => setReason(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && save()} />
+              <input id="d-reason" className="input" placeholder={tr("z. B. Abnahme-Workshop vorbereitet")} value={reason} autoFocus={!e} onChange={(ev) => setReason(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && save()} />
             </label>
             {error && <p className="error">{error}</p>}
             {e && <Comments entry={e} />}
             {history && e && <History id={e.id} />}
             <div className="tree-row" style={{ flexWrap: "wrap", gap: 8 }}>
-              <label className="check"><input id="d-billable" type="checkbox" checked={billable} onChange={(ev) => setBillable(ev.target.checked)} />Verrechenbar · {fmtCHF(rate)}/h</label>
+              <label className="check"><input id="d-billable" type="checkbox" checked={billable} onChange={(ev) => setBillable(ev.target.checked)} />{tr("Verrechenbar · {0}/h", fmtCHF(rate))}</label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {e && mode === "api" && <button className="btn small ghost" onClick={() => setHistory(!history)}>Verlauf</button>}
+                {e && mode === "api" && <button className="btn small ghost" onClick={() => setHistory(!history)}>{tr("Verlauf")}</button>}
                 {e && !lock && (confirm ? (
                   <>
-                    <button className="btn small primary" disabled={busy} onClick={() => run(() => deleteTimeEntry(e.id), "Buchung gelöscht")}>Wirklich löschen</button>
-                    <button className="btn small ghost" onClick={() => setConfirm(false)}>Nein</button>
+                    <button className="btn small primary" disabled={busy} onClick={() => run(() => deleteTimeEntry(e.id), tr("Buchung gelöscht"))}>{tr("Wirklich löschen")}</button>
+                    <button className="btn small ghost" onClick={() => setConfirm(false)}>{tr("Nein")}</button>
                   </>
                 ) : (
-                  <button className="btn small ghost" onClick={() => setConfirm(true)}><Icon.trash />Löschen</button>
+                  <button className="btn small ghost" onClick={() => setConfirm(true)}><Icon.trash />{tr("Löschen")}</button>
                 ))}
-                <button className="btn small ghost" onClick={onClose}>Abbrechen</button>
-                {!lock && <button id="d-save" className="btn small primary" disabled={busy} onClick={save}>{e ? "Speichern" : "Buchen"}</button>}
+                <button className="btn small ghost" onClick={onClose}>{tr("Abbrechen")}</button>
+                {!lock && <button id="d-save" className="btn small primary" disabled={busy} onClick={save}>{e ? tr("Speichern") : tr("Buchen")}</button>}
               </div>
             </div>
           </div>
@@ -1034,7 +1035,7 @@ function WeekCalendar() {
     let n = 0;
     try {
       for (const d of targets) n += await copyDay(addDays(d, -7), d);
-      notify(n === 0 ? "Nichts kopiert: Zieltage sind belegt, gesperrt oder die Vorwoche ist leer." : `${n} ${n === 1 ? "Buchung" : "Buchungen"} von letzter Woche übernommen`);
+      notify(n === 0 ? tr("Nichts kopiert: Zieltage sind belegt, gesperrt oder die Vorwoche ist leer.") : trn(n, "{0} Buchung von letzter Woche übernommen", "{0} Buchungen von letzter Woche übernommen"));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -1045,7 +1046,7 @@ function WeekCalendar() {
     const next = startTime ? toClock(Math.min(DAY_END - 15, toMin(startTime) + Math.round(e.hours * 60))) : undefined;
     try {
       await addTimeEntry({ ...rest, startTime: next });
-      notify(`${fmt1(e.hours)} h dupliziert`);
+      notify(tr("{0} h dupliziert", fmt1(e.hours)));
     } catch (err) {
       setError((err as Error).message);
     }
@@ -1093,10 +1094,10 @@ function WeekCalendar() {
     try {
       if (submission) {
         await withdrawWeek(weekKey);
-        notify(`KW ${isoWeek(monday)} zurückgezogen`);
+        notify(tr("KW {0} zurückgezogen", isoWeek(monday)));
       } else {
         await submitWeek(weekKey);
-        notify(`KW ${isoWeek(monday)} eingereicht: ${fmt1(weekWorked)} h`);
+        notify(tr("KW {0} eingereicht: {1} h", isoWeek(monday), fmt1(weekWorked)));
       }
     } catch (e) {
       notify((e as Error).message);
@@ -1178,12 +1179,12 @@ function WeekCalendar() {
           if (!d.moved) return setDialog({ entry: d.entry, date: d.entry.date, hours: d.entry.hours });
           if (lockOf(currentUserId, d.date)) throw new Error(lockOf(currentUserId, d.date)!);
           await updateTimeEntry(d.entry.id, { startTime: toClock(d.start), date: d.date });
-          notify(`Verschoben auf ${fmtDay(d.date)} ${toClock(d.start)}`);
+          notify(tr("Verschoben auf {0} {1}", fmtDay(d.date), toClock(d.start)));
         } else {
           const hours = Math.round(((d.end - toMin(d.entry.startTime!)) / 60) * 100) / 100;
           if (hours !== d.entry.hours) {
             await updateTimeEntry(d.entry.id, { hours });
-            notify(`Dauer: ${fmt1(hours)} h`);
+            notify(tr("Dauer: {0} h", fmt1(hours)));
           }
         }
         setError("");
@@ -1218,12 +1219,12 @@ function WeekCalendar() {
         onPointerEnter={() => !preview && setHover(e)}
         onPointerLeave={() => setHover((h) => (h?.id === e.id ? null : h))}
       >
-        <div className="cal-block-title">{asked.has(e.id) && <span className="q-badge" title="Rückfrage offen">?</span>}{e.reason}</div>
+        <div className="cal-block-title">{asked.has(e.id) && <span className="q-badge" title={tr("Rückfrage offen")}>?</span>}{e.reason}</div>
         {h >= 34 && <div className="cal-block-meta">{labels.short(e.subProjectId)}</div>}
-        <div className="cal-block-time">{toClock(p.start)}–{toClock(p.end)} · {fmt1((p.end - p.start) / 60)} h</div>
+        <div className="cal-block-time">{toClock(p.start)}{tr("–{0} · {1} h", toClock(p.end), fmt1((p.end - p.start) / 60))}</div>
         {preview && <span className="cal-badge top">{toClock(p.start)}</span>}
-        {preview && <span className="cal-badge bottom">{toClock(p.end)} · {fmt1((p.end - p.start) / 60)} h</span>}
-        {!lock && !preview && <span className="cal-resize" title="Ziehen, um die Dauer zu ändern" onPointerDown={(ev) => startResize(ev, e, date)} />}
+        {preview && <span className="cal-badge bottom">{toClock(p.end)}{" "}{tr("· {0} h", fmt1((p.end - p.start) / 60))}</span>}
+        {!lock && !preview && <span className="cal-resize" title={tr("Ziehen, um die Dauer zu ändern")} onPointerDown={(ev) => startResize(ev, e, date)} />}
       </div>
     );
   };
@@ -1233,45 +1234,45 @@ function WeekCalendar() {
       <div className="card-head cal-toolbar">
         {phone ? (
           <div className="tree-row" style={{ gap: 6 }}>
-            <button className="btn small ghost step" aria-label="Vorheriger Tag" onClick={() => stepDay(-1)}>‹</button>
+            <button className="btn small ghost step" aria-label={tr("Vorheriger Tag")} onClick={() => stepDay(-1)}>‹</button>
             <h2 style={{ margin: 0 }}>{fmtDay(days[0])}</h2>
-            <button className="btn small ghost step" aria-label="Nächster Tag" onClick={() => stepDay(1)}>›</button>
-            {days[0] !== data.today && <button className="btn small ghost" onClick={goToday}>Heute</button>}
+            <button className="btn small ghost step" aria-label={tr("Nächster Tag")} onClick={() => stepDay(1)}>›</button>
+            {days[0] !== data.today && <button className="btn small ghost" onClick={goToday}>{tr("Heute")}</button>}
           </div>
         ) : (
           <div className="tree-row" style={{ gap: 8 }}>
-            <button className="btn small ghost step" aria-label="Vorherige Woche" onClick={() => setMonday(addDays(monday, -7))}>‹</button>
-            <h2 style={{ margin: 0 }}>KW {isoWeek(monday)} · {fmtDay(week[0]).split(",")[1]?.trim()} – {fmtDay(week[6]).split(",")[1]?.trim()}</h2>
-            <button className="btn small ghost step" aria-label="Nächste Woche" onClick={() => setMonday(addDays(monday, 7))}>›</button>
-            {monday !== mondayOf(data.today) && <button className="btn small ghost" onClick={() => setMonday(mondayOf(data.today))}>Heute</button>}
+            <button className="btn small ghost step" aria-label={tr("Vorherige Woche")} onClick={() => setMonday(addDays(monday, -7))}>‹</button>
+            <h2 style={{ margin: 0 }}>{tr("KW {0} · {1} –", isoWeek(monday), fmtDay(week[0]).split(",")[1]?.trim())}{" "}{fmtDay(week[6]).split(",")[1]?.trim()}</h2>
+            <button className="btn small ghost step" aria-label={tr("Nächste Woche")} onClick={() => setMonday(addDays(monday, 7))}>›</button>
+            {monday !== mondayOf(data.today) && <button className="btn small ghost" onClick={() => setMonday(mondayOf(data.today))}>{tr("Heute")}</button>}
           </div>
         )}
         <div className="tree-row" style={{ gap: 12 }}>
           <span className="muted cal-week-sum" style={{ fontSize: "0.82rem" }}>
-            {phone ? "Woche" : `${fmt1(weekWorked)} h von ${fmt1(weekTarget)} h Soll`} · Saldo <strong className={weekWorked - weekTarget < 0 ? "neg" : ""}>{signedH(weekWorked - weekTarget)}</strong>
+            {phone ? tr("Woche") : tr("{0} h von {1} h Soll", fmt1(weekWorked), fmt1(weekTarget))}{" "}{tr("· Saldo")}{" "}<strong className={weekWorked - weekTarget < 0 ? "neg" : ""}>{signedH(weekWorked - weekTarget)}</strong>
           </span>
           <details className="menu">
-            <summary className="btn small" title="Buchungen von letzter Woche übernehmen">Kopieren ▾</summary>
+            <summary className="btn small" title={tr("Buchungen von letzter Woche übernehmen")}>{tr("Kopieren ▾")}</summary>
             <div className="menu-list">
-              <button onClick={(ev) => { (ev.currentTarget.closest("details") as HTMLDetailsElement).open = false; void copyFromLastWeek("day"); }}>{phone ? "Diesen Tag" : "Heute"} wie vor einer Woche</button>
-              <button onClick={(ev) => { (ev.currentTarget.closest("details") as HTMLDetailsElement).open = false; void copyFromLastWeek("week"); }}>Ganze Woche wie letzte Woche</button>
-              <span className="menu-hint">Nur leere, nicht gesperrte Tage werden gefüllt.</span>
+              <button onClick={(ev) => { (ev.currentTarget.closest("details") as HTMLDetailsElement).open = false; void copyFromLastWeek("day"); }}>{phone ? tr("Diesen Tag") : tr("Heute")}{" "}{tr("wie vor einer Woche")}</button>
+              <button onClick={(ev) => { (ev.currentTarget.closest("details") as HTMLDetailsElement).open = false; void copyFromLastWeek("week"); }}>{tr("Ganze Woche wie letzte Woche")}</button>
+              <span className="menu-hint">{tr("Nur leere, nicht gesperrte Tage werden gefüllt.")}</span>
             </div>
           </details>
           {canSubmit && !phone && (
             submission ? (
               <details className="menu">
-                <summary id="cal-week-submitted" className="btn small ghost week-ok" title={`Eingereicht am ${new Date(submission.submittedAt).toLocaleDateString("de-CH")}`}>✓ Eingereicht</summary>
+                <summary id="cal-week-submitted" className="btn small ghost week-ok" title={tr("Eingereicht am {0}", new Date(submission.submittedAt).toLocaleDateString(intlLocale))}>{tr("✓ Eingereicht")}</summary>
                 <div className="menu-list">
-                  <button onClick={(ev) => { (ev.currentTarget.closest("details") as HTMLDetailsElement).open = false; void toggleWeek(); }}>Woche zurückziehen</button>
-                  <span className="menu-hint">Zum Nachtragen einer vergessenen Buchung.</span>
+                  <button onClick={(ev) => { (ev.currentTarget.closest("details") as HTMLDetailsElement).open = false; void toggleWeek(); }}>{tr("Woche zurückziehen")}</button>
+                  <span className="menu-hint">{tr("Zum Nachtragen einer vergessenen Buchung.")}</span>
                 </div>
               </details>
             ) : (
-              <button id="cal-week-submit" className="btn small ghost" title="Bestätigt, dass die Woche vollständig gebucht ist" onClick={() => void toggleWeek()}>Woche einreichen</button>
+              <button id="cal-week-submit" className="btn small ghost" title={tr("Bestätigt, dass die Woche vollständig gebucht ist")} onClick={() => void toggleWeek()}>{tr("Woche einreichen")}</button>
             )
           )}
-          <button id="cal-new" className="btn small" onClick={() => setDialog({ date: days.includes(data.today) ? data.today : days[0], hours: 1 })}>+ Eintrag</button>
+          <button id="cal-new" className="btn small" onClick={() => setDialog({ date: days.includes(data.today) ? data.today : days[0], hours: 1 })}>{tr("+ Eintrag")}</button>
         </div>
       </div>
       <div className="cal-scroll" style={{ "--cal-cols": days.length } as React.CSSProperties} onTouchStart={phone ? onTouchStart : undefined} onTouchEnd={phone ? onTouchEnd : undefined}>
@@ -1283,17 +1284,17 @@ function WeekCalendar() {
             return (
               <div key={d} className={`cal-day-head ${d === data.today ? "today" : ""} ${off ? "off" : ""}`}>
                 <div className="cal-day-name">{WEEKDAYS[phone ? dayIdx : i]} <span>{d.slice(8, 10)}.{d.slice(5, 7)}.</span>{lock && <span className="lock" title={lock}><Icon.lock /></span>}</div>
-                <div className="cal-day-sum num">{fmt1(hoursOf(d))} / {fmt1(targetOf(d))} h</div>
+                <div className="cal-day-sum num">{fmt1(hoursOf(d))}{" "}{tr("/ {0} h", fmt1(targetOf(d)))}</div>
                 <div className="cal-allday">
-                  {holidayOn(d) && <span className="cal-chip holiday" title="Feiertag">{holidayOn(d)!.name}</span>}
+                  {holidayOn(d) && <span className="cal-chip holiday" title={tr("Feiertag")}>{holidayOn(d)!.name}</span>}
                   {absenceOn(d) && (
-                    <span className={`cal-chip absence ${TYPE_CLASS[absenceOn(d)!.type]}`} title={absenceOn(d)!.status === "requested" ? "beantragt" : "bewilligt"}>
-                      {absenceOn(d)!.type}{absenceOn(d)!.halfDay ? " (½)" : ""}{absenceOn(d)!.status === "requested" ? " · beantragt" : ""}
+                    <span className={`cal-chip absence ${TYPE_CLASS[absenceOn(d)!.type]}`} title={absenceOn(d)!.status === "requested" ? tr("beantragt") : tr("bewilligt")}>
+                      {tr(absenceOn(d)!.type)}{absenceOn(d)!.halfDay ? " (½)" : ""}{absenceOn(d)!.status === "requested" ? tr(" · beantragt") : ""}
                     </span>
                   )}
                   {(byDay.get(d) ?? []).filter((e) => !e.startTime).map((e) => (
-                    <button key={e.id} className={`cal-chip ${e.billable ? "" : "internal"}`} title={`${e.reason} · ohne Uhrzeit`} onClick={() => setDialog({ entry: e, date: d, hours: e.hours })}>
-                      {fmt1(e.hours)} h {e.reason}
+                    <button key={e.id} className={`cal-chip ${e.billable ? "" : "internal"}`} title={tr("{0} · ohne Uhrzeit", e.reason)} onClick={() => setDialog({ entry: e, date: d, hours: e.hours })}>
+                      {fmt1(e.hours)}{" "}{tr("h")}{" "}{e.reason}
                     </button>
                   ))}
                 </div>
@@ -1322,9 +1323,9 @@ function WeekCalendar() {
                 {placed.filter((p) => !(drag && drag.kind !== "create" && drag.entry.id === p.entry.id)).map((p) => block(p, d))}
                 {drag?.kind === "create" && drag.date === d && (
                   <div className="cal-block cal-preview creating" style={{ top: (drag.from - DAY_START) * PX_PER_MIN, height: (drag.to - drag.from) * PX_PER_MIN, left: 2, right: 2 }}>
-                    <div className="cal-block-title">Neue Buchung</div>
+                    <div className="cal-block-title">{tr("Neue Buchung")}</div>
                     <span className="cal-badge top">{toClock(drag.from)}</span>
-                    <span className="cal-badge bottom">{toClock(drag.to)} · {fmt1((drag.to - drag.from) / 60)} h</span>
+                    <span className="cal-badge bottom">{toClock(drag.to)}{" "}{tr("· {0} h", fmt1((drag.to - drag.from) / 60))}</span>
                   </div>
                 )}
                 {drag?.kind === "move" && drag.date === d && block({ entry: drag.entry, start: drag.start, end: drag.start + Math.round(drag.entry.hours * 60), col: 0, cols: 1 }, d, true)}
@@ -1335,7 +1336,7 @@ function WeekCalendar() {
         </div>
       </div>
       <div className="card-pad" style={{ paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <span className="muted" style={{ fontSize: "0.78rem" }}>Ziehen bucht (15-Minuten-Raster), Einträge lassen sich verschieben und unten verlängern. Tasten: N neu, S Stoppuhr, ← → Woche, T heute, D dupliziert den Eintrag unter der Maus. Buchungen ohne Uhrzeit stehen oben im Tag.</span>
+        <span className="muted" style={{ fontSize: "0.78rem" }}>{tr("Ziehen bucht (15-Minuten-Raster), Einträge lassen sich verschieben und unten verlängern. Tasten: N neu, S Stoppuhr, ← → Woche, T heute, D dupliziert den Eintrag unter der Maus. Buchungen ohne Uhrzeit stehen oben im Tag.")}</span>
         {error && <span className="error">{error}</span>}
       </div>
       {dialog && <EntryDialog key={`${dialog.entry?.id ?? "new"}|${dialog.date}|${dialog.startTime ?? ""}`} state={dialog} onClose={() => setDialog(null)} />}
@@ -1343,9 +1344,9 @@ function WeekCalendar() {
   );
 }
 
-const STAMP_LABEL: Record<StampAction, string> = { in: "Kommen", break: "Pause", resume: "Weiter", out: "Gehen" };
+const STAMP_LABEL: Record<StampAction, string> = { in: tr("Kommen"), break: tr("Pause"), resume: tr("Weiter"), out: tr("Gehen") };
 /** Clock time in Zurich, like the server stamps it, whatever time zone the device is in. */
-const clockZurich = () => new Intl.DateTimeFormat("de-CH", { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()).replace(".", ":");
+const clockZurich = () => new Intl.DateTimeFormat(intlLocale, { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()).replace(".", ":");
 
 /** Come/go bar (time model «full»): stamp, see presence against booked hours, fix forgotten stamps. */
 function StampBar() {
@@ -1365,7 +1366,7 @@ function StampBar() {
   const booked = data.timeEntries.filter((e) => e.employeeId === currentUserId && e.date === data.today).reduce((s, e) => s + e.hours, 0);
   const run = (f: () => Promise<void>, msg?: string) => f().then(() => { setError(""); if (msg) notify(msg); }).catch((e: Error) => setError(e.message));
   const h = (min: number) => `${(min / 60).toFixed(2).replace(/\.?0+$/, "")} h`;
-  const stateText = day.state === "working" ? `Am Arbeiten seit ${day.open!.start}` : day.state === "break" ? `Pause seit ${day.open!.start}` : day.periods.length ? `Gegangen um ${day.last ?? "–"}` : "Noch nicht gestempelt";
+  const stateText = day.state === "working" ? tr("Am Arbeiten seit {0}", day.open!.start) : day.state === "break" ? tr("Pause seit {0}", day.open!.start) : day.periods.length ? tr("Gegangen um {0}", day.last ?? "–") : tr("Noch nicht gestempelt");
   if (scope.readOnly) return null;
   return (
     <section className="card stamp" id="stamp-bar">
@@ -1374,46 +1375,46 @@ function StampBar() {
           <span className={`stamp-dot ${day.state}`} />
           <div>
             <strong>{stateText}</strong>
-            <div className="muted num" style={{ fontSize: "0.82rem" }}>Anwesend {h(day.work)} · Pausen {day.breaks} min · Gebucht {fmt1(booked)} h{day.work > 0 && Math.abs(day.work / 60 - booked) >= 0.25 ? ` · Differenz ${fmt1(day.work / 60 - booked)} h` : ""}</div>
+            <div className="muted num" style={{ fontSize: "0.82rem" }}>{tr("Anwesend {0} · Pausen {1} min · Gebucht {2} h", h(day.work), day.breaks, fmt1(booked))}{day.work > 0 && Math.abs(day.work / 60 - booked) >= 0.25 ? tr(" · Differenz {0} h", fmt1(day.work / 60 - booked)) : ""}</div>
           </div>
         </div>
         <div className="toolbar">
           {stampOptions(day.state).map((a) => (
             <button key={a} id={`stamp-${a}`} className={`btn ${a === "in" || a === "resume" ? "primary" : ""}`} onClick={() => void run(() => stamp(a), `${STAMP_LABEL[a]} ${now}`)}>{STAMP_LABEL[a]}</button>
           ))}
-          <button className="btn small ghost" onClick={() => setMore(!more)} aria-expanded={more}>{more ? "Weniger" : "Abschnitte"}</button>
+          <button className="btn small ghost" onClick={() => setMore(!more)} aria-expanded={more}>{more ? tr("Weniger") : tr("Abschnitte")}</button>
         </div>
       </div>
       {issues.length > 0 && <ul className="stamp-issues">{issues.map((i) => <li key={i}>{i}</li>)}</ul>}
       {more && (
         <div className="stamp-more">
-          {day.periods.length === 0 ? <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>Heute noch keine Abschnitte.</p> : (
+          {day.periods.length === 0 ? <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>{tr("Heute noch keine Abschnitte.")}</p> : (
             <ul className="stamp-list">
               {day.periods.map((p) => (
                 <li key={p.id}>
-                  <span className={`pill ${p.kind === "work" ? "ok" : "neutral"}`}>{p.kind === "work" ? "Arbeit" : "Pause"}</span>
-                  <input className="input num" type="time" value={p.start} aria-label="Beginn" onChange={(e) => void run(() => updateWorkPeriod(p.id, { start: e.target.value }))} />
-                  <span className="muted">bis</span>
-                  <input className="input num" type="time" value={p.end ?? ""} aria-label="Ende" placeholder="offen" onChange={(e) => void run(() => updateWorkPeriod(p.id, { end: e.target.value || null }))} />
-                  <span className="muted num">{p.end ? h(Math.max(0, (Number(p.end.slice(0, 2)) * 60 + Number(p.end.slice(3))) - (Number(p.start.slice(0, 2)) * 60 + Number(p.start.slice(3))))) : "läuft"}</span>
-                  <button className="btn small ghost" aria-label="Abschnitt löschen" onClick={() => void run(() => deleteWorkPeriod(p.id), "Abschnitt entfernt")}>×</button>
+                  <span className={`pill ${p.kind === "work" ? "ok" : "neutral"}`}>{p.kind === "work" ? tr("Arbeit") : tr("Pause")}</span>
+                  <input className="input num" type="time" value={p.start} aria-label={tr("Beginn")} onChange={(e) => void run(() => updateWorkPeriod(p.id, { start: e.target.value }))} />
+                  <span className="muted">{tr("bis")}</span>
+                  <input className="input num" type="time" value={p.end ?? ""} aria-label={tr("Ende")} placeholder={tr("offen")} onChange={(e) => void run(() => updateWorkPeriod(p.id, { end: e.target.value || null }))} />
+                  <span className="muted num">{p.end ? h(Math.max(0, (Number(p.end.slice(0, 2)) * 60 + Number(p.end.slice(3))) - (Number(p.start.slice(0, 2)) * 60 + Number(p.start.slice(3))))) : tr("läuft")}</span>
+                  <button className="btn small ghost" aria-label={tr("Abschnitt löschen")} onClick={() => void run(() => deleteWorkPeriod(p.id), tr("Abschnitt entfernt"))}>{tr("×")}</button>
                 </li>
               ))}
             </ul>
           )}
           <div className="stamp-add">
-            <span className="muted" style={{ fontSize: "0.85rem" }}>Vergessen zu stempeln?</span>
-            <input id="pp-date" className="input" type="date" value={draft.date} max={data.today} onChange={(e) => setDraft({ ...draft, date: e.target.value })} aria-label="Datum" />
-            <input id="pp-start" className="input num" type="time" value={draft.start} onChange={(e) => setDraft({ ...draft, start: e.target.value })} aria-label="Beginn" />
-            <input id="pp-end" className="input num" type="time" value={draft.end} onChange={(e) => setDraft({ ...draft, end: e.target.value })} aria-label="Ende" />
-            <div className="seg" role="radiogroup" aria-label="Art">
-              <button role="radio" aria-checked={draft.kind === "work"} className={draft.kind === "work" ? "on" : ""} onClick={() => setDraft({ ...draft, kind: "work" })}>Arbeit</button>
-              <button role="radio" aria-checked={draft.kind === "break"} className={draft.kind === "break" ? "on" : ""} onClick={() => setDraft({ ...draft, kind: "break" })}>Pause</button>
+            <span className="muted" style={{ fontSize: "0.85rem" }}>{tr("Vergessen zu stempeln?")}</span>
+            <input id="pp-date" className="input" type="date" value={draft.date} max={data.today} onChange={(e) => setDraft({ ...draft, date: e.target.value })} aria-label={tr("Datum")} />
+            <input id="pp-start" className="input num" type="time" value={draft.start} onChange={(e) => setDraft({ ...draft, start: e.target.value })} aria-label={tr("Beginn")} />
+            <input id="pp-end" className="input num" type="time" value={draft.end} onChange={(e) => setDraft({ ...draft, end: e.target.value })} aria-label={tr("Ende")} />
+            <div className="seg" role="radiogroup" aria-label={tr("Art")}>
+              <button role="radio" aria-checked={draft.kind === "work"} className={draft.kind === "work" ? "on" : ""} onClick={() => setDraft({ ...draft, kind: "work" })}>{tr("Arbeit")}</button>
+              <button role="radio" aria-checked={draft.kind === "break"} className={draft.kind === "break" ? "on" : ""} onClick={() => setDraft({ ...draft, kind: "break" })}>{tr("Pause")}</button>
             </div>
-            <button id="pp-add" className="btn small" onClick={() => void run(() => addWorkPeriod(draft), "Abschnitt nachgetragen")}>Nachtragen</button>
+            <button id="pp-add" className="btn small" onClick={() => void run(() => addWorkPeriod(draft), tr("Abschnitt nachgetragen"))}>{tr("Nachtragen")}</button>
           </div>
           {error && <p className="error" style={{ margin: 0 }}>{error}</p>}
-          <p className="muted" style={{ margin: 0, fontSize: "0.78rem" }}>Jetzt {now}. Gesetzliche Pausen: 15 min ab 5½ h, 30 min ab 7 h, 60 min ab 9 h Arbeit; 11 h Ruhezeit zwischen zwei Arbeitstagen.</p>
+          <p className="muted" style={{ margin: 0, fontSize: "0.78rem" }}>{tr("Jetzt {0}. Gesetzliche Pausen: 15 min ab 5½ h, 30 min ab 7 h, 60 min ab 9 h Arbeit; 11 h Ruhezeit zwischen zwei Arbeitstagen.", now)}</p>
         </div>
       )}
       {error && !more && <p className="error" style={{ margin: "8px 0 0" }}>{error}</p>}
@@ -1434,12 +1435,12 @@ export function TimeTracking() {
     <>
       <div className="page-head">
         <div>
-          <h1>Zeiterfassung</h1>
-          <p className="sub">Zeit und Spesen auf Kunde, Projekt und Subprojekt buchen.</p>
+          <h1>{tr("Zeiterfassung")}</h1>
+          <p className="sub">{tr("Zeit und Spesen auf Kunde, Projekt und Subprojekt buchen.")}</p>
         </div>
-        <div className="seg" role="tablist" aria-label="Ansicht">
-          <button id="view-week" className={view === "week" ? "on" : ""} onClick={() => switchTo("week")}>Kalender</button>
-          <button id="view-day" className={view === "day" ? "on" : ""} onClick={() => switchTo("day")}>Liste</button>
+        <div className="seg" role="tablist" aria-label={tr("Ansicht")}>
+          <button id="view-week" className={view === "week" ? "on" : ""} onClick={() => switchTo("week")}>{tr("Kalender")}</button>
+          <button id="view-day" className={view === "day" ? "on" : ""} onClick={() => switchTo("day")}>{tr("Liste")}</button>
         </div>
       </div>
       {stamping && <StampBar />}

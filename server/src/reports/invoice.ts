@@ -7,11 +7,13 @@ import { HttpError, type AppContext } from "../app";
 import { customers, invoices, organizations, type BillingSettings, type InvoicePosition, type PostalAddress } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { loadDataset } from "../routes/data";
+import { tr } from "@taktwerk/domain";
+import { currentLocale, withLocale } from "../i18n";
 
 type Invoice = typeof invoices.$inferSelect;
 
-const money2 = (v: number) => v.toLocaleString("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const qty = (v: number) => v.toLocaleString("de-CH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const money2 = (v: number) => v.toLocaleString(`${currentLocale()}-CH`, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const qty = (v: number) => v.toLocaleString(`${currentLocale()}-CH`, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const swissDate = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 const round05 = (v: number) => Math.round(v * 20) / 20;
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -22,8 +24,8 @@ const addDays = (iso: string, n: number) => {
 };
 
 export function billingProblem(b: BillingSettings | undefined): string | null {
-  if (!b) return "Bitte zuerst unter Einstellungen → Rechnung die Absenderadresse und IBAN hinterlegen.";
-  if (!b.iban) return "Unter Einstellungen → Rechnung fehlt die IBAN.";
+  if (!b) return tr("Bitte zuerst unter Einstellungen → Rechnung die Absenderadresse und IBAN hinterlegen.");
+  if (!b.iban) return tr("Unter Einstellungen → Rechnung fehlt die IBAN.");
   return null;
 }
 
@@ -44,7 +46,7 @@ export async function invoicePositions(ctx: AppContext, orgId: string, customerI
     const s = subs.get(e.subProjectId);
     if (!s || !e.billable || !inMonth(e.date)) continue;
     const key = `${e.subProjectId}:${e.hourlyRate}`;
-    const g = groups.get(key) ?? { text: `${s.project.name} · ${s.sub.name}`, detail: `Leistungen ${fmtMonthLong(month)}`, hours: 0, rate: e.hourlyRate };
+    const g = groups.get(key) ?? { text: `${s.project.name} · ${s.sub.name}`, detail: tr("Leistungen {0}", fmtMonthLong(month)), hours: 0, rate: e.hourlyRate };
     g.hours += e.hours;
     groups.set(key, g);
   }
@@ -55,9 +57,9 @@ export async function invoicePositions(ctx: AppContext, orgId: string, customerI
   for (const x of data.expenses.filter((x) => countsExpense(x) && inMonth(x.date) && subs.has(x.subProjectId)).sort((a, b) => a.date.localeCompare(b.date))) {
     const s = subs.get(x.subProjectId)!;
     if (x.category === "Kilometer" && x.km) {
-      positions.push({ text: `Kilometer ${swissDate(x.date)} · ${x.reason}`, detail: `${s.sub.name} · ${person.get(x.employeeId) ?? ""}`, quantity: x.km, unit: "km", unitPrice: round2(x.amount / x.km), amount: x.amount });
+      positions.push({ text: tr("Kilometer {0} · {1}", swissDate(x.date), x.reason), detail: `${s.sub.name} · ${person.get(x.employeeId) ?? ""}`, quantity: x.km, unit: "km", unitPrice: round2(x.amount / x.km), amount: x.amount });
     } else {
-      positions.push({ text: `${x.category} ${swissDate(x.date)} · ${x.reason}`, detail: `${s.sub.name} · ${person.get(x.employeeId) ?? ""}`, quantity: 1, unit: "Stk.", unitPrice: x.amount, amount: x.amount });
+      positions.push({ text: `${tr(x.category)} ${swissDate(x.date)} · ${x.reason}`, detail: `${s.sub.name} · ${person.get(x.employeeId) ?? ""}`, quantity: 1, unit: "Stk.", unitPrice: x.amount, amount: x.amount });
     }
   }
   return { positions, customerName: data.customers.find((c) => c.id === customerId)?.name ?? "" };
@@ -75,21 +77,26 @@ async function nextNumber(ctx: AppContext, orgId: string, year: string) {
 }
 
 export async function createInvoice(ctx: AppContext, orgId: string, customerId: string, month: string, today: string): Promise<Invoice> {
+  const [lang] = await ctx.db.select({ locale: customers.locale }).from(customers).where(and(eq(customers.id, customerId), eq(customers.organizationId, orgId))).limit(1);
+  return withLocale(lang?.locale, () => createInvoiceIn(ctx, orgId, customerId, month, today));
+}
+
+async function createInvoiceIn(ctx: AppContext, orgId: string, customerId: string, month: string, today: string): Promise<Invoice> {
   const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
   const [customer] = await ctx.db.select().from(customers).where(and(eq(customers.id, customerId), eq(customers.organizationId, orgId))).limit(1);
-  if (!org || !customer) throw new HttpError(404, "Kunde nicht gefunden.");
+  if (!org || !customer) throw new HttpError(404, tr("Kunde nicht gefunden."));
   const problem = billingProblem(org.settings.billing);
   if (problem) throw new HttpError(400, problem);
-  if (!customer.billingAddress) throw new HttpError(400, "Für diesen Kunden fehlt die Rechnungsadresse.");
+  if (!customer.billingAddress) throw new HttpError(400, tr("Für diesen Kunden fehlt die Rechnungsadresse."));
   const [existing] = await ctx.db
     .select({ number: invoices.number })
     .from(invoices)
     .where(and(eq(invoices.customerId, customerId), eq(invoices.month, month), eq(invoices.status, "draft")))
     .limit(1);
-  if (existing) throw new HttpError(409, `Für ${fmtMonthLong(month)} gibt es bereits den Entwurf ${existing.number}.`);
+  if (existing) throw new HttpError(409, tr("Für {0} gibt es bereits den Entwurf {1}.", fmtMonthLong(month), existing.number));
 
   const { positions } = await invoicePositions(ctx, orgId, customerId, month);
-  if (positions.length === 0) throw new HttpError(400, `Für ${fmtMonthLong(month)} gibt es keine verrechenbaren Leistungen oder Spesen.`);
+  if (positions.length === 0) throw new HttpError(400, tr("Für {0} gibt es keine verrechenbaren Leistungen oder Spesen.", fmtMonthLong(month)));
   const billing = org.settings.billing!;
   const vatRate = org.settings.vatRate ?? DEFAULT_RATES.vatRate;
   const net = round05(positions.reduce((s, p) => s + p.amount, 0));
@@ -108,7 +115,7 @@ export async function createInvoice(ctx: AppContext, orgId: string, customerId: 
     vatRate,
     vat,
     gross: round05(net + vat),
-    snapshot: { sender: billing, recipient: customer.billingAddress, customerName: customer.name, appName: org.settings.branding.appName, primaryColor: org.settings.branding.primaryColor, currency: customer.currency },
+    snapshot: { sender: billing, recipient: customer.billingAddress, customerName: customer.name, appName: org.settings.branding.appName, primaryColor: org.settings.branding.primaryColor, currency: customer.currency, locale: customer.locale },
     sentAt: null,
     paidAt: null,
     createdAt: new Date(),
@@ -135,7 +142,7 @@ export function qrBillPayload(inv: Invoice): string {
     ...addr(s.recipient),
     "NON",
     "",
-    `Rechnung ${inv.number}, ${fmtMonthLong(inv.month)}`,
+    withLocale(inv.snapshot.locale, () => tr("Rechnung {0}, {1}", inv.number, fmtMonthLong(inv.month))),
     "EPD",
   ].join("\n");
 }
@@ -174,27 +181,27 @@ async function drawQrBill(doc: PDFKit.PDFDocument, inv: Invoice) {
   // Receipt (left, 62 mm)
   let x = 5 * MM;
   let y = top + 5 * MM;
-  title(x, y, "Empfangsschein", 11);
+  title(x, y, tr("Empfangsschein"), 11);
   y += 7 * MM;
-  heading(x, y, "Konto / Zahlbar an");
+  heading(x, y, tr("Konto / Zahlbar an"));
   y = value(x, y + 8, [iban, ...addressLines(s.sender.address)]);
   y += 6;
-  heading(x, y, "Referenz");
-  y = value(x, y + 8, [`Rechnung ${inv.number}`]);
+  heading(x, y, tr("Referenz"));
+  y = value(x, y + 8, [tr("Rechnung {0}", inv.number)]);
   y += 6;
-  heading(x, y, "Zahlbar durch");
+  heading(x, y, tr("Zahlbar durch"));
   y = value(x, y + 8, addressLines(s.recipient));
   y = top + 68 * MM;
-  heading(x, y, "Währung");
-  heading(x + 15 * MM, y, "Betrag");
+  heading(x, y, tr("Währung"));
+  heading(x + 15 * MM, y, tr("Betrag"));
   value(x, y + 8, [s.currency ?? "CHF"]);
   value(x + 15 * MM, y + 8, [money2(inv.gross)]);
-  heading(x + 38 * MM, top + 82 * MM, "Annahmestelle");
+  heading(x + 38 * MM, top + 82 * MM, tr("Annahmestelle"));
 
   // Payment part (right, 148 mm)
   x = 67 * MM;
   y = top + 5 * MM;
-  title(x, y, "Zahlteil", 11);
+  title(x, y, tr("Zahlteil"), 11);
   const qrSize = 46 * MM;
   const qrY = top + 17 * MM;
   doc.image(png, x, qrY, { width: qrSize, height: qrSize });
@@ -208,30 +215,34 @@ async function drawQrBill(doc: PDFKit.PDFDocument, inv: Invoice) {
   doc.rect(cx - 2.2 * MM, cy - 0.7 * MM, 4.4 * MM, 1.4 * MM).fill("#FFFFFF");
   doc.fillColor("#000000");
   y = top + 68 * MM;
-  heading(x, y, "Währung", 8);
-  heading(x + 20 * MM, y, "Betrag", 8);
+  heading(x, y, tr("Währung"), 8);
+  heading(x + 20 * MM, y, tr("Betrag"), 8);
   value(x, y + 10, [s.currency ?? "CHF"], 10);
   value(x + 20 * MM, y + 10, [money2(inv.gross)], 10);
 
   x = 118 * MM;
   y = top + 5 * MM;
-  heading(x, y, "Konto / Zahlbar an", 8);
+  heading(x, y, tr("Konto / Zahlbar an"), 8);
   y = value(x, y + 10, [iban, ...addressLines(s.sender.address)], 10);
   y += 8;
-  heading(x, y, "Referenz", 8);
-  y = value(x, y + 10, [`Rechnung ${inv.number}`], 10);
+  heading(x, y, tr("Referenz"), 8);
+  y = value(x, y + 10, [tr("Rechnung {0}", inv.number)], 10);
   y += 8;
-  heading(x, y, "Zusätzliche Informationen", 8);
-  y = value(x, y + 10, [`${fmtMonthLong(inv.month)}, zahlbar bis ${swissDate(inv.dueDate)}`], 10);
+  heading(x, y, tr("Zusätzliche Informationen"), 8);
+  y = value(x, y + 10, [tr("{0}, zahlbar bis {1}", fmtMonthLong(inv.month), swissDate(inv.dueDate))], 10);
   y += 8;
-  heading(x, y, "Zahlbar durch", 8);
+  heading(x, y, tr("Zahlbar durch"), 8);
   value(x, y + 10, addressLines(s.recipient), 10);
   doc.restore();
 }
 
-export async function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
+export function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
+  return withLocale(inv.snapshot.locale, () => renderInvoicePdfIn(inv));
+}
+
+async function renderInvoicePdfIn(inv: Invoice): Promise<Buffer> {
   const s = inv.snapshot;
-  const doc = new PDFDocument({ size: "A4", margins: { top: 50, bottom: 60, left: 50, right: 50 }, bufferPages: true, info: { Title: `Rechnung ${inv.number}`, Author: s.sender.address.name } });
+  const doc = new PDFDocument({ size: "A4", margins: { top: 50, bottom: 60, left: 50, right: 50 }, bufferPages: true, info: { Title: tr("Rechnung {0}", inv.number), Author: s.sender.address.name } });
   const chunks: Buffer[] = [];
   doc.on("data", (c: Buffer) => chunks.push(c));
   const done = new Promise<Buffer>((res) => doc.on("end", () => res(Buffer.concat(chunks))));
@@ -246,25 +257,25 @@ export async function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
 
   doc.font("Helvetica").fontSize(9).fillColor(MUTED);
   const meta: [string, string][] = [
-    ["Rechnungsnummer", inv.number],
-    ["Rechnungsdatum", swissDate(inv.issueDate)],
-    ["Zahlbar bis", swissDate(inv.dueDate)],
-    ["Leistungsperiode", fmtMonthLong(inv.month)],
+    [tr("Rechnungsnummer"), inv.number],
+    [tr("Rechnungsdatum"), swissDate(inv.issueDate)],
+    [tr("Zahlbar bis"), swissDate(inv.dueDate)],
+    [tr("Leistungsperiode"), fmtMonthLong(inv.month)],
   ];
   meta.forEach(([k, v], i) => {
     doc.fillColor(MUTED).text(k, 350, 130 + i * 13, { width: 100, lineBreak: false });
     doc.fillColor(INK).text(v, 450, 130 + i * 13, { width: 95, align: "right", lineBreak: false });
   });
 
-  doc.fillColor(INK).font("Helvetica-Bold").fontSize(14).text(`Rechnung ${inv.number}`, 50, 215);
-  doc.font("Helvetica").fontSize(9).fillColor(MUTED).text(`Leistungen und Spesen ${fmtMonthLong(inv.month)} für ${s.customerName}`, 50, 234);
+  doc.fillColor(INK).font("Helvetica-Bold").fontSize(14).text(tr("Rechnung {0}", inv.number), 50, 215);
+  doc.font("Helvetica").fontSize(9).fillColor(MUTED).text(tr("Leistungen und Spesen {0} für {1}", fmtMonthLong(inv.month), s.customerName), 50, 234);
 
   // Positions table
   const cols = [
-    { label: "Beschreibung", w: W * 0.5 },
-    { label: "Menge", w: W * 0.13, r: true },
-    { label: "Ansatz", w: W * 0.17, r: true },
-    { label: `Betrag ${s.currency ?? "CHF"}`, w: W * 0.2, r: true },
+    { label: tr("Beschreibung"), w: W * 0.5 },
+    { label: tr("Menge"), w: W * 0.13, r: true },
+    { label: tr("Ansatz"), w: W * 0.17, r: true },
+    { label: tr("Betrag {0}", s.currency ?? "CHF"), w: W * 0.2, r: true },
   ];
   let y = 262;
   const header = () => {
@@ -290,7 +301,7 @@ export async function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
     doc.fillColor(INK).text(p.text, 53, y + 3, { width: cols[0]!.w - 6 });
     if (p.detail) doc.fillColor(MUTED).fontSize(7.5).text(p.detail, 53, doc.y, { width: cols[0]!.w - 6 });
     doc.fillColor(INK).fontSize(9);
-    doc.text(`${qty(p.quantity)} ${p.unit}`, 50 + cols[0]!.w + 3, y + 3, { width: cols[1]!.w - 6, align: "right", lineBreak: false });
+    doc.text(`${qty(p.quantity)} ${tr(p.unit)}`, 50 + cols[0]!.w + 3, y + 3, { width: cols[1]!.w - 6, align: "right", lineBreak: false });
     doc.text(money2(p.unitPrice), 50 + cols[0]!.w + cols[1]!.w + 3, y + 3, { width: cols[2]!.w - 6, align: "right", lineBreak: false });
     doc.text(money2(p.amount), 50 + cols[0]!.w + cols[1]!.w + cols[2]!.w + 3, y + 3, { width: cols[3]!.w - 6, align: "right", lineBreak: false });
     y += h;
@@ -302,9 +313,9 @@ export async function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
   }
   y += 8;
   const totals: [string, string, boolean][] = [
-    ["Total netto", money2(inv.net), false],
-    [`MwSt ${inv.vatRate.toLocaleString("de-CH")} %`, money2(inv.vat), false],
-    [`Total ${s.currency ?? "CHF"}`, money2(inv.gross), true],
+    [tr("Total netto"), money2(inv.net), false],
+    [tr("MwSt {0} %", inv.vatRate.toLocaleString(`${currentLocale()}-CH`)), money2(inv.vat), false],
+    [tr("Total {0}", s.currency ?? "CHF"), money2(inv.gross), true],
   ];
   for (const [k, v, bold] of totals) {
     doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(bold ? 11 : 9).fillColor(INK);
@@ -314,7 +325,7 @@ export async function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
   }
   doc.moveTo(50 + W * 0.5, y - 4).lineTo(50 + W, y - 4).lineWidth(0.8).stroke(INK);
   y += 10;
-  doc.font("Helvetica").fontSize(9).fillColor(INK).text(s.sender.footer || `Zahlbar innert ${s.sender.paymentDays} Tagen bis ${swissDate(inv.dueDate)} mit dem Zahlteil unten. Besten Dank für die Zusammenarbeit.`, 50, y, { width: W });
+  doc.font("Helvetica").fontSize(9).fillColor(INK).text(s.sender.footer || tr("Zahlbar innert {0} Tagen bis {1} mit dem Zahlteil unten. Besten Dank für die Zusammenarbeit.", s.sender.paymentDays, swissDate(inv.dueDate)), 50, y, { width: W });
 
   // QR bill on the last page (the Swiss QR bill exists for CHF and EUR only).
   if ((s.currency ?? "CHF") !== "USD") {
@@ -325,21 +336,25 @@ export async function renderInvoicePdf(inv: Invoice): Promise<Buffer> {
   return done;
 }
 
-export async function sendInvoice(ctx: AppContext, inv: Invoice, recipients: string[]) {
+export function sendInvoice(ctx: AppContext, inv: Invoice, recipients: string[]) {
+  return withLocale(inv.snapshot.locale, () => sendInvoiceIn(ctx, inv, recipients));
+}
+
+async function sendInvoiceIn(ctx: AppContext, inv: Invoice, recipients: string[]) {
   const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, inv.organizationId)).limit(1);
-  if (!org) throw new HttpError(404, "Organisation nicht gefunden.");
+  if (!org) throw new HttpError(404, tr("Organisation nicht gefunden."));
   const pdf = await renderInvoicePdf(inv);
   const mail = actionMail(org.settings.branding, {
     to: recipients.join(", "),
-    subject: `${org.name}: Rechnung ${inv.number} – ${fmtMonthLong(inv.month)}`,
-    greeting: "Guten Tag",
+    subject: tr("{0}: Rechnung {1} – {2}", org.name, inv.number, fmtMonthLong(inv.month)),
+    greeting: tr("Guten Tag"),
     lines: [
-      `Im Anhang finden Sie unsere Rechnung ${inv.number} für ${fmtMonthLong(inv.month)} über ${inv.snapshot.currency ?? "CHF"} ${money2(inv.gross)}.`,
-      (inv.snapshot.currency ?? "CHF") === "USD" ? `Zahlbar bis ${swissDate(inv.dueDate)} auf das angegebene Konto.` : `Zahlbar bis ${swissDate(inv.dueDate)}; der Zahlteil mit QR-Code befindet sich auf der letzten Seite.`,
+      tr("Im Anhang finden Sie unsere Rechnung {0} für {1} über {2} {3}.", inv.number, fmtMonthLong(inv.month), inv.snapshot.currency ?? "CHF", money2(inv.gross)),
+      (inv.snapshot.currency ?? "CHF") === "USD" ? tr("Zahlbar bis {0} auf das angegebene Konto.", swissDate(inv.dueDate)) : tr("Zahlbar bis {0}; der Zahlteil mit QR-Code befindet sich auf der letzten Seite.", swissDate(inv.dueDate)),
     ],
-    footer: `Bei Fragen antworten Sie einfach auf diese E-Mail. Freundliche Grüsse, ${org.name}`,
+    footer: tr("Bei Fragen antworten Sie einfach auf diese E-Mail. Freundliche Grüsse, {0}", org.name),
   });
-  await ctx.mailer.send({ ...mail, attachments: [{ filename: `Rechnung-${inv.number}.pdf`, content: pdf, contentType: "application/pdf" }] });
+  await ctx.mailer.send({ ...mail, attachments: [{ filename: tr("Rechnung-{0}.pdf", inv.number), content: pdf, contentType: "application/pdf" }] });
 }
 
 export const previousMonth = (today: string) => addMonths(today.slice(0, 7), -1);

@@ -6,6 +6,7 @@ import { App } from "./App";
 import { Login, SetPassword } from "./pages/Login";
 import { StoreProvider, loadLocal, saveLocal } from "./store";
 import "./styles.css";
+import { locale, setLocale, tr } from "./i18n";
 
 // Installable app: the service worker keeps the shell and the last data available offline (not in the single-file demo).
 if (!DEMO && "serviceWorker" in navigator && location.protocol.startsWith("http")) {
@@ -33,6 +34,8 @@ function Root() {
     }
     try {
       const me = await api<Me>("/api/auth/me");
+      // The language chosen in the profile wins over this browser's; switching reloads once.
+      if (me.locale && me.locale !== locale) return setLocale(me.locale);
       // Portal accounts have no access to the organization's dataset; the portal loads its own overview.
       const data: Dataset = me.role === "customer"
         ? { teams: [], employees: [], customers: [], projects: [], subProjects: [], timeEntries: [], expenses: [], issues: [], today: new Date().toISOString().slice(0, 10) }
@@ -64,9 +67,9 @@ function Root() {
 
   switch (state.kind) {
     case "loading":
-      return <div className="center-note">Lade …</div>;
+      return <div className="center-note">{tr("Lade …")}</div>;
     case "error":
-      return <div className="center-note">Der Server ist nicht erreichbar: {state.message}</div>;
+      return <div className="center-note">{tr("Der Server ist nicht erreichbar:")}{" "}{state.message}</div>;
     case "login":
       return <Login branding={branding} providers={providers} demo={DEMO} onLoggedIn={enter} />;
     case "set-password":

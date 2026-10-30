@@ -6,6 +6,7 @@ import { fmtMonthLong, monthOf } from "@taktwerk/domain";
 import { loadLocal, saveLocal, useStore } from "../store";
 import { Icon } from "../ui/components";
 import { WIDGETS, type WidgetConfig } from "../widgets/registry";
+import { tr } from "../i18n";
 
 const Grid = WidthProvider(Responsive);
 
@@ -118,29 +119,29 @@ export function Dashboard() {
     <>
       <div className="page-head">
         <div>
-          <h1>Dashboard</h1>
-          <p className="sub">{fmtMonthLong(monthOf(data.today))} · {employee ? "Meine Zahlen" : "Alle Kunden und Projekte"}</p>
+          <h1>{tr("Dashboard")}</h1>
+          <p className="sub">{fmtMonthLong(monthOf(data.today))} · {employee ? tr("Meine Zahlen") : tr("Alle Kunden und Projekte")}</p>
         </div>
         <div className="toolbar">
           {editing && (
             <>
-              <button className="btn" onClick={() => setCatalogOpen((v) => !v)}>+ Widget hinzufügen</button>
-              <button className="btn ghost" onClick={() => setState(defaults(employee))}>Zurücksetzen</button>
+              <button className="btn" onClick={() => setCatalogOpen((v) => !v)}>{tr("+ Widget hinzufügen")}</button>
+              <button className="btn ghost" onClick={() => setState(defaults(employee))}>{tr("Zurücksetzen")}</button>
             </>
           )}
           <button className={`btn ${editing ? "primary" : ""}`} onClick={() => { setEditing((v) => !v); setCatalogOpen(false); }}>
-            {editing ? "Fertig" : "Dashboard anpassen"}
+            {editing ? tr("Fertig") : tr("Dashboard anpassen")}
           </button>
         </div>
       </div>
 
       {editing && (
-        <div className="notice">Widgets am Griff ziehen, an der Ecke unten rechts in der Grösse ändern, mit × entfernen. Die Anordnung wird in diesem Browser gespeichert.</div>
+        <div className="notice">{tr("Widgets am Griff ziehen, an der Ecke unten rechts in der Grösse ändern, mit × entfernen. Die Anordnung wird in diesem Browser gespeichert.")}</div>
       )}
 
       {catalogOpen && (
         <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <h2>Widget hinzufügen</h2>
+          <h2>{tr("Widget hinzufügen")}</h2>
           <div className="catalog">
             {catalog.map(([type, w]) => (
               <button key={type} onClick={() => addWidget(type)}>
@@ -174,10 +175,10 @@ export function Dashboard() {
               <div key={it.i} data-grid={{ x: 0, y: Infinity, w: def.w, h: def.h, ...lg, minW: def.minW, minH: def.minH }}>
                 <section className="card widget" aria-label={def.title}>
                   <header className="widget-head">
-                    <span className="drag-handle" title="Verschieben"><Icon.grip /></span>
+                    <span className="drag-handle" title={tr("Verschieben")}><Icon.grip /></span>
                     <h2>{def.title}</h2>
                     {def.HeaderControl && <def.HeaderControl {...props} />}
-                    <button className="btn ghost small widget-remove" aria-label={`${def.title} entfernen`} onClick={() => removeWidget(it.i)}>
+                    <button className="btn ghost small widget-remove" aria-label={tr("{0} entfernen", def.title)} onClick={() => removeWidget(it.i)}>
                       <Icon.close />
                     </button>
                   </header>

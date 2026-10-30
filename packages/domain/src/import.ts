@@ -1,5 +1,6 @@
 // Importing bookings from other tools: CSV parsing, recognising the export of Clockodo, Toggl Track and Harvest,
 // and turning each line into a booking the app understands. Excel files arrive here already as rows of text.
+import { tr } from "./i18n";
 
 export type ImportSource = "clockodo" | "toggl" | "harvest" | "generic";
 
@@ -28,24 +29,24 @@ export interface ImportProblem {
 }
 
 export const IMPORT_FIELDS: { id: ImportField; label: string; required?: boolean }[] = [
-  { id: "date", label: "Datum", required: true },
-  { id: "person", label: "Person", required: true },
-  { id: "email", label: "E-Mail der Person" },
-  { id: "customer", label: "Kunde", required: true },
-  { id: "project", label: "Projekt", required: true },
-  { id: "task", label: "Tätigkeit oder Aufgabe" },
-  { id: "description", label: "Beschreibung" },
-  { id: "hours", label: "Dauer" },
-  { id: "start", label: "Beginn (Uhrzeit)" },
-  { id: "end", label: "Ende (Uhrzeit)" },
-  { id: "billable", label: "Verrechenbar" },
+  { id: "date", label: tr("Datum"), required: true },
+  { id: "person", label: tr("Person"), required: true },
+  { id: "email", label: tr("E-Mail der Person") },
+  { id: "customer", label: tr("Kunde"), required: true },
+  { id: "project", label: tr("Projekt"), required: true },
+  { id: "task", label: tr("Tätigkeit oder Aufgabe") },
+  { id: "description", label: tr("Beschreibung") },
+  { id: "hours", label: tr("Dauer") },
+  { id: "start", label: tr("Beginn (Uhrzeit)") },
+  { id: "end", label: tr("Ende (Uhrzeit)") },
+  { id: "billable", label: tr("Verrechenbar") },
 ];
 
 export const IMPORT_SOURCES: { id: ImportSource; label: string; hint: string }[] = [
-  { id: "clockodo", label: "Clockodo", hint: "Berichte → Stundenzettel oder Einträge, als CSV oder Excel exportieren." },
-  { id: "toggl", label: "Toggl Track", hint: "Reports → Detailed → Export → CSV." },
-  { id: "harvest", label: "Harvest", hint: "Reports → Detailed time → Export → CSV." },
-  { id: "generic", label: "Excel oder andere", hint: "Eine Zeile pro Buchung mit Datum, Person, Kunde, Projekt und Dauer. Die Spalten ordnen Sie im nächsten Schritt zu." },
+  { id: "clockodo", label: tr("Clockodo"), hint: tr("Berichte → Stundenzettel oder Einträge, als CSV oder Excel exportieren.") },
+  { id: "toggl", label: tr("Toggl Track"), hint: tr("Reports → Detailed → Export → CSV.") },
+  { id: "harvest", label: tr("Harvest"), hint: tr("Reports → Detailed time → Export → CSV.") },
+  { id: "generic", label: tr("Excel oder andere"), hint: tr("Eine Zeile pro Buchung mit Datum, Person, Kunde, Projekt und Dauer. Die Spalten ordnen Sie im nächsten Schritt zu.") },
 ];
 
 /** Column names per field, lower case, as the tools write them in German and English. */
@@ -204,19 +205,19 @@ export function toRows(header: string[], data: string[][], mapping: ImportMappin
     const project = get(r, "project");
     const task = get(r, "task");
     const description = get(r, "description");
-    if (!date) return problems.push({ line, message: `Datum «${get(r, "date")}» nicht lesbar` });
-    if (!person) return problems.push({ line, message: "Person fehlt" });
-    if (!project) return problems.push({ line, message: "Projekt fehlt" });
-    if (hours === null || !(hours > 0)) return problems.push({ line, message: `Dauer «${get(r, "hours")}» nicht lesbar` });
-    if (hours > 24) return problems.push({ line, message: "Mehr als 24 Stunden an einem Tag" });
+    if (!date) return problems.push({ line, message: tr("Datum «{0}» nicht lesbar", get(r, "date")) });
+    if (!person) return problems.push({ line, message: tr("Person fehlt") });
+    if (!project) return problems.push({ line, message: tr("Projekt fehlt") });
+    if (hours === null || !(hours > 0)) return problems.push({ line, message: tr("Dauer «{0}» nicht lesbar", get(r, "hours")) });
+    if (hours > 24) return problems.push({ line, message: tr("Mehr als 24 Stunden an einem Tag") });
     rows.push({
       line,
       date,
       person,
       email: get(r, "email") || undefined,
-      customer: customer || "Ohne Kunde",
+      customer: customer || tr("Ohne Kunde"),
       project,
-      task: task || "Allgemein",
+      task: task || tr("Allgemein"),
       reason: (description || task || project).slice(0, 1000),
       hours: Math.round(hours * 100) / 100,
       billable: mapping.billable === undefined ? true : truthy(get(r, "billable")),

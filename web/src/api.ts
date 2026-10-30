@@ -1,4 +1,5 @@
 import type { BillingInterval, Dataset, Holiday, Plan, PlanId, PostalAddress, ProjectReport, Role, Subscription, SubscriptionStatus } from "@taktwerk/domain";
+import { intlLocale, tr } from "./i18n";
 
 /** Demo mode runs entirely in the browser with example data (shareable prototype build). */
 export const DEMO = import.meta.env.VITE_DEMO === "1" || import.meta.env.MODE === "single";
@@ -24,6 +25,8 @@ export interface Me {
   customerId?: string | null;
   /** Operator of the installation: may manage the companies on it. */
   platformAdmin?: boolean;
+  /** Language chosen in the profile; null until chosen. */
+  locale?: "de" | "fr" | "en" | null;
   /** Employees: projects and teams they lead. */
   leadsProjects?: string[];
   leadsTeams?: string[];
@@ -191,11 +194,11 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   const res = await fetch(path, {
     method: init.method ?? (init.body === undefined ? "GET" : "POST"),
     credentials: "same-origin",
-    headers: init.body === undefined ? undefined : { "content-type": "application/json" },
+    headers: init.body === undefined ? { "accept-language": intlLocale } : { "content-type": "application/json", "accept-language": intlLocale },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   });
   const data = res.headers.get("content-type")?.includes("json") ? await res.json() : null;
-  if (!res.ok) throw new ApiError(res.status, data?.error ?? `Fehler ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, data?.error ? tr(data.error) : tr("Fehler {0}", res.status));
   return data as T;
 }
 
@@ -203,9 +206,9 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 export async function upload<T>(path: string, file: File): Promise<T> {
   const form = new FormData();
   form.append("file", file, file.name);
-  const res = await fetch(path, { method: "POST", credentials: "same-origin", body: form });
+  const res = await fetch(path, { method: "POST", credentials: "same-origin", body: form, headers: { "accept-language": intlLocale } });
   const data = res.headers.get("content-type")?.includes("json") ? await res.json() : null;
-  if (!res.ok) throw new ApiError(res.status, data?.error ?? `Fehler ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, data?.error ? tr(data.error) : tr("Fehler {0}", res.status));
   return data as T;
 }
 

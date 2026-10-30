@@ -5,6 +5,7 @@ import { z } from "zod";
 import { HttpError, requireRole, requireUser } from "../app";
 import { invoices } from "../db/schema";
 import { loadDataset } from "./data";
+import { tr } from "@taktwerk/domain";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -26,8 +27,8 @@ export async function exportRoutes(app: FastifyInstance) {
         .map((i) => ({ nummer: i.number, kunde: data.customers.find((c) => c.id === i.customerId)?.name ?? "", monat: i.month, datum: i.issueDate, faellig: i.dueDate, status: i.status, netto: i.net, mwst_prozent: i.vatRate, mwst: i.vat, brutto: i.gross, waehrung: i.snapshot.currency ?? "CHF", bezahlt_am: i.paidAt?.toISOString().slice(0, 10) ?? "", id: i.id }));
     } else {
       const known = EXPORT_ENTITIES.find((e) => e.id === entity);
-      if (!known) throw new HttpError(404, "Unbekannter Export.");
-      if ((entity === "customers" || entity === "projects" || entity === "employees") && user.role === "employee") throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+      if (!known) throw new HttpError(404, tr("Unbekannter Export."));
+      if ((entity === "customers" || entity === "projects" || entity === "employees") && user.role === "employee") throw new HttpError(403, tr("Dafür fehlt dir die Berechtigung."));
       // With a start date only that period needs single bookings; older months come as totals and are filtered out.
       rows = exportRows(await loadDataset(ctx, user, { detailFrom: q.from }), known.id, q.from, q.to);
     }

@@ -169,6 +169,8 @@ export const users = mysqlTable(
     totpSecret: varchar("totp_secret", { length: 64 }),
     totpEnabledAt: datetime("totp_enabled_at", { mode: "date" }),
     recoveryCodes: json<string[]>("recovery_codes"),
+    /** Language of the app and of e-mails to this person (de, fr, en); null = browser language, e-mails German. */
+    locale: varchar("locale", { length: 2 }),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("users_username_uq").on(t.username), uniqueIndex("users_email_uq").on(t.email)],
@@ -220,6 +222,8 @@ export const customers = mysqlTable("customers", {
   reportRecipients: json<string[]>("report_recipients").notNull().$defaultFn(() => []),
   /** Postal address printed on invoices and in the QR bill. */
   billingAddress: json<PostalAddress>("billing_address"),
+  /** Language of reports, invoices, portal e-mails for this customer (de, fr, en). */
+  locale: varchar("locale", { length: 2 }).notNull().default("de"),
   createdAt: createdAt(),
 });
 
@@ -357,7 +361,7 @@ export const invoices = mysqlTable(
     vat: money("vat").notNull(),
     gross: money("gross").notNull(),
     /** Snapshot of sender, recipient and texts at creation, so the PDF stays stable. */
-    snapshot: json<{ sender: BillingSettings; recipient: PostalAddress; customerName: string; appName: string; primaryColor: string; currency?: "CHF" | "EUR" | "USD" }>("snapshot").notNull(),
+    snapshot: json<{ sender: BillingSettings; recipient: PostalAddress; customerName: string; appName: string; primaryColor: string; currency?: "CHF" | "EUR" | "USD"; locale?: string }>("snapshot").notNull(),
     sentAt: datetime("sent_at", { mode: "date" }),
     paidAt: datetime("paid_at", { mode: "date" }),
     createdAt: createdAt(),

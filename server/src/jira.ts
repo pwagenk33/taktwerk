@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import { HttpError, type AppContext } from "./app";
 import { jiraConnections, jiraIssues, projects, subProjects } from "./db/schema";
+import { tr } from "@taktwerk/domain";
 
 export const ATLASSIAN_AUTH = "https://auth.atlassian.com";
 export const ATLASSIAN_API = "https://api.atlassian.com";
@@ -40,7 +41,7 @@ async function tokenRequest(ctx: AppContext, body: Record<string, string>): Prom
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ client_id: ctx.config.ATLASSIAN_CLIENT_ID, client_secret: ctx.config.ATLASSIAN_CLIENT_SECRET, ...body }),
   });
-  if (!res.ok) throw new HttpError(502, `Atlassian hat die Anmeldung abgelehnt (${res.status}).`);
+  if (!res.ok) throw new HttpError(502, tr("Atlassian hat die Anmeldung abgelehnt ({0}).", res.status));
   return (await res.json()) as TokenAnswer;
 }
 
@@ -49,19 +50,19 @@ export const exchangeCode = (ctx: AppContext, code: string) => tokenRequest(ctx,
 /** The Jira sites the token may use. */
 export async function accessibleSites(accessToken: string) {
   const res = await fetch(`${ATLASSIAN_API}/oauth/token/accessible-resources`, { headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" } });
-  if (!res.ok) throw new HttpError(502, `Atlassian hat keine Jira-Sites geliefert (${res.status}).`);
+  if (!res.ok) throw new HttpError(502, tr("Atlassian hat keine Jira-Sites geliefert ({0}).", res.status));
   return ((await res.json()) as { id: string; url: string; name: string; scopes: string[] }[]).filter((s) => s.scopes.some((x) => x.includes("jira")));
 }
 
 /** A valid access token; refreshes it shortly before it expires (Atlassian rotates the refresh token on every use). */
 async function accessToken(ctx: AppContext, conn: JiraConnection, force = false) {
   if (!force && conn.expiresAt.getTime() - 60_000 > Date.now()) return conn.accessToken;
-  if (!conn.refreshToken) throw new HttpError(401, "Die Verbindung mit Atlassian ist abgelaufen. Bitte neu verbinden.");
+  if (!conn.refreshToken) throw new HttpError(401, tr("Die Verbindung mit Atlassian ist abgelaufen. Bitte neu verbinden."));
   let t: TokenAnswer;
   try {
     t = await tokenRequest(ctx, { grant_type: "refresh_token", refresh_token: conn.refreshToken });
   } catch {
-    throw new HttpError(401, "Die Verbindung mit Atlassian ist abgelaufen oder wurde in Atlassian entfernt. Bitte neu verbinden.");
+    throw new HttpError(401, tr("Die Verbindung mit Atlassian ist abgelaufen oder wurde in Atlassian entfernt. Bitte neu verbinden."));
   }
   conn.accessToken = t.access_token;
   conn.refreshToken = t.refresh_token ?? conn.refreshToken;
@@ -80,7 +81,7 @@ export async function jiraApi<T>(ctx: AppContext, conn: JiraConnection, path: st
       ...(init.body ? { body: JSON.stringify(init.body) } : {}),
     });
     if (res.status === 401 && attempt === 0) continue;
-    if (!res.ok) throw new HttpError(502, `Jira antwortet mit Fehler ${res.status} auf ${path.split("?")[0]}.`);
+    if (!res.ok) throw new HttpError(502, tr("Jira antwortet mit Fehler {0} auf {1}.", res.status, path.split("?")[0]));
     return (await res.json()) as T;
   }
 }
@@ -151,7 +152,7 @@ export interface SyncResult { ok: boolean; message: string; issues?: number; pro
  */
 export async function syncOrganization(ctx: AppContext, orgId: string): Promise<SyncResult> {
   const [conn] = await ctx.db.select().from(jiraConnections).where(eq(jiraConnections.organizationId, orgId)).limit(1);
-  if (!conn) return { ok: false, message: "Keine Verbindung mit Atlassian." };
+  if (!conn) return { ok: false, message: tr("Keine Verbindung mit Atlassian.") };
   let result: SyncResult;
   try {
     const linked = await ctx.db.select().from(projects).where(and(eq(projects.organizationId, orgId), isNotNull(projects.jiraProjectKey)));
@@ -166,14 +167,14 @@ export async function syncOrganization(ctx: AppContext, orgId: string): Promise<
         failed.push(p.jiraProjectKey!);
       }
     }
-    const done = `${total} Issues aus ${linked.length - failed.length} Projekten abgeglichen.`;
+    const done = tr("{0} Issues aus {1} Projekten abgeglichen.", total, linked.length - failed.length);
     result = !linked.length
-      ? { ok: true, message: "Noch kein Projekt mit Jira verknüpft.", issues: 0, projects: 0 }
+      ? { ok: true, message: tr("Noch kein Projekt mit Jira verknüpft."), issues: 0, projects: 0 }
       : failed.length
-        ? { ok: false, message: `${done} Nicht gefunden oder kein Zugriff in Jira: ${failed.join(", ")}.`, issues: total, projects: linked.length - failed.length }
+        ? { ok: false, message: tr("{0} Nicht gefunden oder kein Zugriff in Jira: {1}.", done, failed.join(", ")), issues: total, projects: linked.length - failed.length }
         : { ok: true, message: done, issues: total, projects: linked.length };
   } catch (err) {
-    result = { ok: false, message: err instanceof Error ? err.message : "Abgleich fehlgeschlagen." };
+    result = { ok: false, message: err instanceof Error ? err.message : tr("Abgleich fehlgeschlagen.") };
   }
   await ctx.db.update(jiraConnections).set({ lastSyncAt: new Date(), lastResult: result }).where(eq(jiraConnections.organizationId, orgId));
   return result;

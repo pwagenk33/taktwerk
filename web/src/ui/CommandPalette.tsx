@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { fmt1, rateOn } from "@taktwerk/domain";
 import { useStore } from "../store";
 import { Icon } from "./components";
+import { tr } from "../i18n";
 
 /** One entry in the palette: a page, a customer, a project, or a parsed quick booking. */
 interface Item {
@@ -97,7 +98,7 @@ export function CommandPalette({ open, onClose, pages, onNewEntry }: PaletteProp
           id: "book",
           group: "Buchen",
           title: `${fmt1(booking.hours)} h · ${label}`,
-          sub: `«${reason}» heute buchen`,
+          sub: tr("«{0}» heute buchen", reason),
           hint: "↵",
           run: async () => {
             await addTimeEntry({
@@ -109,21 +110,21 @@ export function CommandPalette({ open, onClose, pages, onNewEntry }: PaletteProp
               billable: true,
               hourlyRate: rateOn(customer, data.today),
             });
-            notify(`${fmt1(booking.hours)} h gebucht: ${reason}`);
+            notify(tr("{0} h gebucht: {1}", fmt1(booking.hours), reason));
             onClose();
           },
         });
       } else if (booking.words.length === 0) {
-        out.push({ id: "book-hint", group: "Buchen", title: `${fmt1(booking.hours)} h buchen auf …`, sub: "Kunde oder Projekt dahinter schreiben, z. B. «2h medtech review»", run: () => { onNewEntry(); onClose(); } });
+        out.push({ id: "book-hint", group: "Buchen", title: tr("{0} h buchen auf …", fmt1(booking.hours)), sub: tr("Kunde oder Projekt dahinter schreiben, z. B. «2h medtech review»"), run: () => { onNewEntry(); onClose(); } });
       }
     }
 
-    out.push({ id: "new", group: "Buchen", title: "Neue Buchung", sub: "Dialog mit Kalenderzeit öffnen", hint: "N", run: () => { onNewEntry(); onClose(); } });
+    out.push({ id: "new", group: "Buchen", title: tr("Neue Buchung"), sub: tr("Dialog mit Kalenderzeit öffnen"), hint: "N", run: () => { onNewEntry(); onClose(); } });
 
     for (const p of pages) out.push({ id: `page:${p.id}`, group: "Seiten", title: p.label, run: () => go(`#${p.id}`) });
 
     if (lead) {
-      for (const c of data.customers) out.push({ id: `c:${c.id}`, group: "Kunden", title: c.name, sub: `${data.projects.filter((p) => p.customerId === c.id).length} Projekte`, run: () => go(`#projekte/c/${c.id}`) });
+      for (const c of data.customers) out.push({ id: `c:${c.id}`, group: "Kunden", title: c.name, sub: tr("{0} Projekte", data.projects.filter((p) => p.customerId === c.id).length), run: () => go(`#projekte/c/${c.id}`) });
       for (const p of data.projects) out.push({ id: `p:${p.id}`, group: "Projekte", title: p.name, sub: custById.get(p.customerId)?.name, run: () => go(`#projekte/p/${p.id}`) });
     }
 
@@ -146,15 +147,15 @@ export function CommandPalette({ open, onClose, pages, onNewEntry }: PaletteProp
   let lastGroup = "";
   return (
     <div className="pal-overlay" onMouseDown={(ev) => ev.target === ev.currentTarget && onClose()}>
-      <div className="pal" role="dialog" aria-modal="true" aria-label="Befehle">
+      <div className="pal" role="dialog" aria-modal="true" aria-label={tr("Befehle")}>
         <div className="pal-input">
           <Icon.search />
-          <input ref={inputRef} id="pal-input" value={q} onChange={(ev) => setQ(ev.target.value)} onKeyDown={onKey} placeholder="Buchen, springen, suchen … z. B. «2h medtech review»" aria-label="Befehl" autoComplete="off" />
-          <kbd>Esc</kbd>
+          <input ref={inputRef} id="pal-input" value={q} onChange={(ev) => setQ(ev.target.value)} onKeyDown={onKey} placeholder={tr("Buchen, springen, suchen … z. B. «2h medtech review»")} aria-label={tr("Befehl")} autoComplete="off" />
+          <kbd>{tr("Esc")}</kbd>
         </div>
         <ul className="pal-list" role="listbox">
           {items.map((it, i) => {
-            const head = it.group !== lastGroup ? <li key={`g-${it.group}`} className="pal-group">{it.group}</li> : null;
+            const head = it.group !== lastGroup ? <li key={`g-${it.group}`} className="pal-group">{tr(it.group)}</li> : null;
             lastGroup = it.group;
             return (
               <Fragment key={it.id}>
@@ -167,7 +168,7 @@ export function CommandPalette({ open, onClose, pages, onNewEntry }: PaletteProp
               </Fragment>
             );
           })}
-          {items.length === 0 && <li className="pal-empty">Nichts gefunden.</li>}
+          {items.length === 0 && <li className="pal-empty">{tr("Nichts gefunden.")}</li>}
         </ul>
       </div>
     </div>

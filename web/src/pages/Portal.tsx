@@ -8,6 +8,7 @@ import { useStore, useThemeColors } from "../store";
 import { ChartTip, Icon, Money, StatusPill } from "../ui/components";
 import { BrandMark } from "../ui/motif";
 import { Select } from "../ui/Select";
+import { tr, trn } from "../i18n";
 
 /** Demo: the portal of «Medtech Basel AG», computed from the example data in the browser. */
 function demoOverview(data: Parameters<typeof projectReports>[0], customerId: string): PortalOverview {
@@ -28,7 +29,7 @@ function demoOverview(data: Parameters<typeof projectReports>[0], customerId: st
       return { id: `demo-${m.month}`, number: `${m.month.slice(0, 4)}-${String(40 + i).padStart(4, "0")}`, month: m.month, issueDate: issue, dueDate: `${addMonths(m.month, 2)}-04`, status: (i === arr.length - 1 ? "sent" : "paid") as "sent" | "paid", net, gross: Math.round(net * 1.081 * 20) / 20 };
     })
     .reverse();
-  return { customer: { id: customer.id, name: customer.name, currency: currencyOf(customer) }, orgName: "Beispiel AG", today: data.today, projects, months, invoices };
+  return { customer: { id: customer.id, name: customer.name, currency: currencyOf(customer) }, orgName: tr("Beispiel AG"), today: data.today, projects, months, invoices };
 }
 
 function MonthChart({ months, currency }: { months: PortalOverview["months"]; currency: Currency }) {
@@ -41,14 +42,14 @@ function MonthChart({ months, currency }: { months: PortalOverview["months"]; cu
           <XAxis dataKey="label" tick={{ fill: c.muted, fontSize: 11 }} axisLine={{ stroke: c.axis }} tickLine={false} />
           <YAxis tick={{ fill: c.muted, fontSize: 11 }} axisLine={false} tickLine={false} unit=" h" width={52} />
           <Tooltip cursor={{ fill: c.grid, opacity: 0.5 }} content={<ChartTip format={(v) => `${fmt1(v)} h`} title={(l) => { const m = months.find((x) => x.label === l); return m ? `${fmtMonthLong(m.month)} · ${fmtMoney(m.amount, currency)}` : String(l); }} />} />
-          <Bar dataKey="hours" name="Verrechenbare Stunden" fill={c.s1} radius={[4, 4, 0, 0]} maxBarSize={30} isAnimationActive={false} />
+          <Bar dataKey="hours" name={tr("Verrechenbare Stunden")} fill={c.s1} radius={[4, 4, 0, 0]} maxBarSize={30} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
-const INVOICE_STATUS = { sent: { label: "Offen", cls: "risk" }, paid: { label: "Bezahlt", cls: "ok" } } as const;
+const INVOICE_STATUS = { sent: { label: tr("Offen"), cls: "risk" }, paid: { label: tr("Bezahlt"), cls: "ok" } } as const;
 
 export function Portal() {
   const { data, mode, me, branding, logout } = useStore();
@@ -63,7 +64,7 @@ export function Portal() {
   const [month, setMonth] = useState("");
 
   if (error) return <div className="center-note">{error}</div>;
-  if (!o) return <div className="center-note">Lade …</div>;
+  if (!o) return <div className="center-note">{tr("Lade …")}</div>;
 
   const cur = o.customer.currency;
   const m = (v: number) => fmtMoney(v, cur);
@@ -74,35 +75,35 @@ export function Portal() {
   const reportMonths = o.months.filter((x) => x.hours > 0).map((x) => x.month).reverse();
   const chosen = month || reportMonths[0] || "";
   const reportUrl = (format: "pdf" | "xlsx") => (mode === "api" ? `/api/portal/report?month=${chosen}&format=${format}` : undefined);
-  const name = me?.name ?? "Claudia Steiner";
+  const name = me?.name ?? tr("Claudia Steiner");
 
   return (
     <div className="portal">
       <header className="portal-top">
-        <div className="brand"><BrandMark logo={branding.logo} /><span>{branding.appName}</span><span className="portal-org">· Kundenportal {o.orgName}</span></div>
+        <div className="brand"><BrandMark logo={branding.logo} /><span>{branding.appName}</span><span className="portal-org">{tr("· Kundenportal")}{" "}{o.orgName}</span></div>
         <div className="toolbar">
           <span className="muted portal-who">{name} · {o.customer.name}</span>
-          <button className="btn small ghost" onClick={logout} title="Abmelden" aria-label="Abmelden"><Icon.logout /><span>Abmelden</span></button>
+          <button className="btn small ghost" onClick={logout} title={tr("Abmelden")} aria-label={tr("Abmelden")}><Icon.logout /><span>{tr("Abmelden")}</span></button>
         </div>
       </header>
       <main className="portal-main">
         <div className="page-head">
           <div>
             <h1>{o.customer.name}</h1>
-            <p className="sub">Stand {fmtDate(o.today)} · {o.projects.length} {o.projects.length === 1 ? "Projekt" : "Projekte"} · Beträge in {cur}</p>
+            <p className="sub">{tr("Stand {0} ·", fmtDate(o.today))}{" "}{trn(o.projects.length, "{0} Projekt", "{0} Projekte")}{" "}{tr("· Beträge in")}{" "}{cur}</p>
           </div>
         </div>
 
         <div className="tiles" id="portal-tiles">
-          <div className="card tile"><span className="label">Budget</span><span className="value num">{m(budget)}</span></div>
-          <div className="card tile"><span className="label">Verbraucht</span><span className="value num">{m(actual)}</span><span className="delta num">{budget > 0 ? `${fmt1((actual / budget) * 100)} % des Budgets` : `${fmtNum(hours)} h geleistet`}</span></div>
-          <div className="card tile"><span className="label">Restbudget</span><span className="value num"><Money v={budget - actual} signed={budget - actual < 0} currency={cur} /></span></div>
-          <div className="card tile"><span className="label">Prognose bis Abschluss</span><span className="value num">{m(forecast)}</span><span className="delta">Abweichung <Money v={budget - forecast} signed currency={cur} /></span></div>
+          <div className="card tile"><span className="label">{tr("Budget")}</span><span className="value num">{m(budget)}</span></div>
+          <div className="card tile"><span className="label">{tr("Verbraucht")}</span><span className="value num">{m(actual)}</span><span className="delta num">{budget > 0 ? tr("{0} % des Budgets", fmt1((actual / budget) * 100)) : tr("{0} h geleistet", fmtNum(hours))}</span></div>
+          <div className="card tile"><span className="label">{tr("Restbudget")}</span><span className="value num"><Money v={budget - actual} signed={budget - actual < 0} currency={cur} /></span></div>
+          <div className="card tile"><span className="label">{tr("Prognose bis Abschluss")}</span><span className="value num">{m(forecast)}</span><span className="delta">{tr("Abweichung")}{" "}<Money v={budget - forecast} signed currency={cur} /></span></div>
         </div>
 
         <div className="grid-2">
           <section className="card">
-            <div className="card-head"><h2>Projekte</h2></div>
+            <div className="card-head"><h2>{tr("Projekte")}</h2></div>
             <div className="portal-projects">
               {o.projects.map((p: ProjectReport) => {
                 const pct = p.retainer ? (p.retainer.used / Math.max(1, p.retainer.hoursPerMonth)) * 100 : p.budget > 0 ? (p.actualCost / p.budget) * 100 : 0;
@@ -115,8 +116,8 @@ export function Portal() {
                     <div className="util-bar"><span className={`util-fill ${p.status === "over" ? "over" : p.status === "risk" ? "risk" : ""}`} style={{ width: `${Math.min(100, pct)}%` }} /></div>
                     <div className="muted num" style={{ fontSize: "0.8rem" }}>
                       {p.retainer
-                        ? `Kontingent ${fmtNum(p.retainer.hoursPerMonth)} h/Monat · ${fmtMonth(p.retainer.month)} ${fmt1(p.retainer.used)} h genutzt`
-                        : `${m(p.actualCost)} von ${m(p.budget)} verbraucht · ${fmtNum(p.hoursBooked)} h · Prognose ${m(p.forecastCost)}${p.completionMonth ? ` · voraussichtlich fertig ${fmtMonth(p.completionMonth)}` : ""}`}
+                        ? tr("Kontingent {0} h/Monat · {1} {2} h genutzt", fmtNum(p.retainer.hoursPerMonth), fmtMonth(p.retainer.month), fmt1(p.retainer.used))
+                        : tr("{0} von {1} verbraucht · {2} h · Prognose {3}{4}", m(p.actualCost), m(p.budget), fmtNum(p.hoursBooked), m(p.forecastCost), p.completionMonth ? tr(" · voraussichtlich fertig {0}", fmtMonth(p.completionMonth)) : "")}
                     </div>
                   </div>
                 );
@@ -124,42 +125,42 @@ export function Portal() {
             </div>
           </section>
           <section className="card">
-            <div className="card-head"><h2>Geleistete Stunden pro Monat</h2></div>
+            <div className="card-head"><h2>{tr("Geleistete Stunden pro Monat")}</h2></div>
             <div className="card-pad"><MonthChart months={o.months} currency={cur} /></div>
           </section>
         </div>
 
         <div className="grid-2">
           <section className="card">
-            <div className="card-head"><h2>Monatsreport</h2></div>
+            <div className="card-head"><h2>{tr("Monatsreport")}</h2></div>
             <div className="card-pad portal-report">
-              {reportMonths.length === 0 && <p className="muted">Noch kein Monat mit Leistungen.</p>}
+              {reportMonths.length === 0 && <p className="muted">{tr("Noch kein Monat mit Leistungen.")}</p>}
               {reportMonths.length > 0 && (
                 <>
-                  <Select id="portal-month" ariaLabel="Monat" value={chosen} onChange={setMonth} options={reportMonths.map((x) => ({ value: x, label: fmtMonthLong(x) }))} />
-                  <a className={`btn ${mode === "api" ? "" : "disabled"}`} id="portal-pdf" href={reportUrl("pdf")} onClick={(e) => { if (mode !== "api") { e.preventDefault(); } }} title={mode === "api" ? "" : "In der Demo nicht verfügbar"}><Icon.download />PDF</a>
-                  <a className={`btn ${mode === "api" ? "" : "disabled"}`} id="portal-xlsx" href={reportUrl("xlsx")} onClick={(e) => { if (mode !== "api") { e.preventDefault(); } }} title={mode === "api" ? "" : "In der Demo nicht verfügbar"}><Icon.download />Excel</a>
+                  <Select id="portal-month" ariaLabel={tr("Monat")} value={chosen} onChange={setMonth} options={reportMonths.map((x) => ({ value: x, label: fmtMonthLong(x) }))} />
+                  <a className={`btn ${mode === "api" ? "" : "disabled"}`} id="portal-pdf" href={reportUrl("pdf")} onClick={(e) => { if (mode !== "api") { e.preventDefault(); } }} title={mode === "api" ? "" : tr("In der Demo nicht verfügbar")}><Icon.download />{tr("PDF")}</a>
+                  <a className={`btn ${mode === "api" ? "" : "disabled"}`} id="portal-xlsx" href={reportUrl("xlsx")} onClick={(e) => { if (mode !== "api") { e.preventDefault(); } }} title={mode === "api" ? "" : tr("In der Demo nicht verfügbar")}><Icon.download />{tr("Excel")}</a>
                 </>
               )}
-              <p className="muted" style={{ fontSize: "0.82rem", margin: 0 }}>Der Report enthält Budget, Prognose und alle verrechenbaren Leistungen des Monats.</p>
+              <p className="muted" style={{ fontSize: "0.82rem", margin: 0 }}>{tr("Der Report enthält Budget, Prognose und alle verrechenbaren Leistungen des Monats.")}</p>
             </div>
           </section>
           <section className="card">
-            <div className="card-head"><h2>Rechnungen</h2></div>
-            {o.invoices.length === 0 && <p className="muted card-pad">Noch keine Rechnung gestellt.</p>}
+            <div className="card-head"><h2>{tr("Rechnungen")}</h2></div>
+            {o.invoices.length === 0 && <p className="muted card-pad">{tr("Noch keine Rechnung gestellt.")}</p>}
             {o.invoices.length > 0 && (
               <div className="table-wrap">
                 <table className="data" id="portal-invoices">
-                  <thead><tr><th>Nummer</th><th>Monat</th><th>Fällig</th><th className="r">Betrag</th><th>Status</th><th /></tr></thead>
+                  <thead><tr><th>{tr("Nummer")}</th><th>{tr("Monat")}</th><th>{tr("Fällig")}</th><th className="r">{tr("Betrag")}</th><th>{tr("Status")}</th><th /></tr></thead>
                   <tbody>
                     {o.invoices.map((i) => (
                       <tr key={i.id}>
                         <td className="mono">{i.number}</td>
                         <td style={{ whiteSpace: "nowrap" }}>{fmtMonth(i.month)}</td>
-                        <td style={{ whiteSpace: "nowrap" }} title={`Gestellt am ${fmtDate(i.issueDate)}`}>{fmtDate(i.dueDate)}</td>
+                        <td style={{ whiteSpace: "nowrap" }} title={tr("Gestellt am {0}", fmtDate(i.issueDate))}>{fmtDate(i.dueDate)}</td>
                         <td className="r num">{fmtMoney(i.gross, cur, 2)}</td>
                         <td><span className={`pill ${INVOICE_STATUS[i.status].cls}`}>{INVOICE_STATUS[i.status].label}</span></td>
-                        <td className="r">{mode === "api" ? <a className="btn small ghost" href={`/api/portal/invoices/${i.id}/pdf`} target="_blank" rel="noreferrer" title="PDF öffnen"><Icon.download /></a> : <span className="muted" style={{ fontSize: "0.78rem" }}>Demo</span>}</td>
+                        <td className="r">{mode === "api" ? <a className="btn small ghost" href={`/api/portal/invoices/${i.id}/pdf`} target="_blank" rel="noreferrer" title={tr("PDF öffnen")}><Icon.download /></a> : <span className="muted" style={{ fontSize: "0.78rem" }}>{tr("Demo")}</span>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -168,7 +169,7 @@ export function Portal() {
             )}
           </section>
         </div>
-        <p className="portal-foot muted">Fragen zu Ihren Projekten? Ihre Ansprechperson bei {o.orgName} hilft gern weiter.</p>
+        <p className="portal-foot muted">{tr("Fragen zu Ihren Projekten? Ihre Ansprechperson bei {0} hilft gern weiter.", o.orgName)}</p>
       </main>
     </div>
   );

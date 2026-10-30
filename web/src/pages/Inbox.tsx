@@ -3,6 +3,7 @@ import { useState } from "react";
 import { absenceDays, addMonths, fmt1, fmtCHF, fmtCHF2, fmtDate, fmtH, fmtMoney, fmtMonthLong, monthOf, vacationSummary, workBalance, type ProjectReport } from "@taktwerk/domain";
 import { useStore } from "../store";
 import { Icon } from "../ui/components";
+import { intlLocale, tr, trn } from "../i18n";
 
 /* Start page «Eingang» (design A2, Tony 2026-10-29): everything that needs someone's attention as one grouped list,
    four figures on top, and the selected item explained on the right. */
@@ -26,11 +27,11 @@ interface Item {
 interface Group { label: string; items: Item[] }
 
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
-const days = (n: number) => `${fmt1(n).replace(/[.,]0$/, "")} ${n === 1 ? "Tag" : "Tage"}`;
-const range = (from: string, to: string) => (from === to ? fmtDate(from) : `${fmtDate(from).slice(0, 6)} bis ${fmtDate(to)}`);
+const days = (n: number) => trn(n, "{1} Tag", "{1} Tage", fmt1(n).replace(/[.,]0$/, ""));
+const range = (from: string, to: string) => (from === to ? fmtDate(from) : tr("{0} bis {1}", fmtDate(from).slice(0, 6), fmtDate(to)));
 const ago = (date: string, today: string) => {
   const d = Math.round((Date.parse(today) - Date.parse(date.slice(0, 10))) / 86_400_000);
-  return d <= 0 ? "heute" : d === 1 ? "gestern" : `vor ${d} Tagen`;
+  return d <= 0 ? tr("heute") : d === 1 ? tr("gestern") : tr("vor {0} Tagen", d);
 };
 /** Projects the signed-in person may see budgets for. */
 export function useVisibleReports(): ProjectReport[] {
@@ -57,13 +58,13 @@ export function useInbox(): Group[] {
       const dot = r.status === "over" ? "over" : "risk";
       if (r.retainer) {
         const peak = Math.max(r.retainer.used, r.retainer.avg3);
-        return { id: `b-${r.project.id}`, dot, report: r, ratio: peak / r.retainer.hoursPerMonth, title: r.status === "over" ? `${r.project.name} überzieht das Monatskontingent` : `${r.project.name}: Kontingent fast aufgebraucht`, meta: `${r.customer.name} · ${fmt1(peak)} von ${fmt1(r.retainer.hoursPerMonth)} h pro Monat` };
+        return { id: `b-${r.project.id}`, dot, report: r, ratio: peak / r.retainer.hoursPerMonth, title: r.status === "over" ? tr("{0} überzieht das Monatskontingent", r.project.name) : tr("{0}: Kontingent fast aufgebraucht", r.project.name), meta: tr("{0} · {1} von {2} h pro Monat", r.customer.name, fmt1(peak), fmt1(r.retainer.hoursPerMonth)) };
       }
       return r.status === "over"
-        ? { id: `b-${r.project.id}`, dot: "over", report: r, ratio: r.forecastCost / r.budget, title: `${r.project.name} läuft auf ${pct(r.forecastCost, r.budget)} % des Budgets`, meta: `${r.customer.name} · Prognose ${money(r.forecastCost)}` }
-        : { id: `b-${r.project.id}`, dot: "risk", report: r, ratio: r.forecastCost / r.budget, title: `${r.project.name} wird knapp`, meta: `${r.customer.name} · Reserve ${money(r.variance)}` };
+        ? { id: `b-${r.project.id}`, dot: "over", report: r, ratio: r.forecastCost / r.budget, title: tr("{0} läuft auf {1} % des Budgets", r.project.name, pct(r.forecastCost, r.budget)), meta: tr("{0} · Prognose {1}", r.customer.name, money(r.forecastCost)) }
+        : { id: `b-${r.project.id}`, dot: "risk", report: r, ratio: r.forecastCost / r.budget, title: tr("{0} wird knapp", r.project.name), meta: tr("{0} · Reserve {1}", r.customer.name, money(r.variance)) };
     });
-  if (budget.length) groups.push({ label: "Budget", items: budget });
+  if (budget.length) groups.push({ label: tr("Budget"), items: budget });
 
   const approvals: Item[] = [];
   if (scope.managesPeople && !scope.readOnly) {
@@ -73,11 +74,11 @@ export function useInbox(): Group[] {
       const n = absenceDays(data, a);
       approvals.push({
         id: `a-${a.id}`, dot: "ring", person: a.employeeId,
-        title: `${name(a.employeeId)}: ${a.type} ${range(a.startDate, a.endDate)}`,
-        meta: [days(n), vac ? `danach ${days(vac.remaining - n)} Ferien übrig` : "", a.note ?? ""].filter(Boolean).join(" · "),
+        title: `${name(a.employeeId)}: ${tr(a.type)} ${range(a.startDate, a.endDate)}`,
+        meta: [days(n), vac ? tr("danach {0} Ferien übrig", days(vac.remaining - n)) : "", a.note ?? ""].filter(Boolean).join(" · "),
         actions: [
-          { label: "Ablehnen", done: `${a.type} abgelehnt`, run: () => decideAbsence(a.id, false) },
-          { label: "Bewilligen", primary: true, done: `${a.type} bewilligt`, run: () => decideAbsence(a.id, true) },
+          { label: tr("Ablehnen"), done: tr("{0} abgelehnt", tr(a.type)), run: () => decideAbsence(a.id, false) },
+          { label: tr("Bewilligen"), primary: true, done: tr("{0} bewilligt", tr(a.type)), run: () => decideAbsence(a.id, true) },
         ],
       });
     }
@@ -85,48 +86,48 @@ export function useInbox(): Group[] {
     for (const x of expenses.slice(0, MAX_EXPENSES)) {
       approvals.push({
         id: `x-${x.id}`, dot: "ring", person: x.employeeId, when: ago(x.date, data.today),
-        title: `${name(x.employeeId)}: ${x.category}, ${x.reason}`,
-        meta: `${fmtCHF2(x.amount)} · ${x.receipt ? "Beleg vorhanden" : "ohne Beleg"}`,
+        title: `${name(x.employeeId)}: ${tr(x.category)}, ${x.reason}`,
+        meta: `${fmtCHF2(x.amount)} · ${x.receipt ? tr("Beleg vorhanden") : tr("ohne Beleg")}`,
         actions: [
-          { label: "Ablehnen", done: "Spese abgelehnt", run: () => decideExpense(x.id, false) },
-          { label: "Bewilligen", primary: true, done: "Spese bewilligt", run: () => decideExpense(x.id, true) },
+          { label: tr("Ablehnen"), done: tr("Spese abgelehnt"), run: () => decideExpense(x.id, false) },
+          { label: tr("Bewilligen"), primary: true, done: tr("Spese bewilligt"), run: () => decideExpense(x.id, true) },
         ],
       });
     }
     if (expenses.length > MAX_EXPENSES) {
       const rest = expenses.slice(MAX_EXPENSES);
-      approvals.push({ id: "x-more", dot: "ring", href: "#abschluss", title: `${rest.length} weitere Spesen`, meta: `zusammen ${fmtCHF2(rest.reduce((s, x) => s + x.amount, 0))} · im Monatsabschluss` });
+      approvals.push({ id: "x-more", dot: "ring", href: "#abschluss", title: tr("{0} weitere Spesen", rest.length), meta: tr("zusammen {0} · im Monatsabschluss", fmtCHF2(rest.reduce((s, x) => s + x.amount, 0))) });
     }
     for (const c of closings.filter((c) => c.month === lastMonth && c.status === "submitted" && others(c.userId))) {
       approvals.push({
         id: `c-${c.userId}`, dot: "ring", person: c.userId,
-        title: `${name(c.userId)}: ${fmtMonthLong(lastMonth)} eingereicht`,
-        meta: "Monatsabschluss wartet auf deine Freigabe",
+        title: tr("{0}: {1} eingereicht", name(c.userId), fmtMonthLong(lastMonth)),
+        meta: tr("Monatsabschluss wartet auf deine Freigabe"),
         actions: [
-          { label: "Zurückweisen", done: "Zur Korrektur zurückgegeben", run: () => closeMonth("reopen", lastMonth, c.userId) },
-          { label: "Freigeben", primary: true, done: `${fmtMonthLong(lastMonth)} freigegeben`, run: () => closeMonth("approve", lastMonth, c.userId) },
+          { label: tr("Zurückweisen"), done: tr("Zur Korrektur zurückgegeben"), run: () => closeMonth("reopen", lastMonth, c.userId) },
+          { label: tr("Freigeben"), primary: true, done: tr("{0} freigegeben", fmtMonthLong(lastMonth)), run: () => closeMonth("approve", lastMonth, c.userId) },
         ],
       });
     }
   }
-  if (approvals.length) groups.push({ label: "Freigaben", items: approvals });
+  if (approvals.length) groups.push({ label: tr("Freigaben"), items: approvals });
 
   const own: Item[] = [];
   // People who started recording this month (e.g. a new company) have nothing to submit for last month.
   const myStart = data.employees.find((e) => e.id === currentUserId)?.trackingStart;
   if (role !== "auditor" && data.employees.some((e) => e.id === currentUserId) && (!myStart || myStart.slice(0, 7) <= lastMonth) && !closings.some((c) => c.userId === currentUserId && c.month === lastMonth)) {
-    own.push({ id: "own-close", dot: "dashed", href: "#abschluss", title: `${fmtMonthLong(lastMonth)} noch nicht eingereicht`, meta: "Stunden prüfen und den Monat abschliessen" });
+    own.push({ id: "own-close", dot: "dashed", href: "#abschluss", title: tr("{0} noch nicht eingereicht", fmtMonthLong(lastMonth)), meta: tr("Stunden prüfen und den Monat abschliessen") });
   }
   for (const q of questions) {
     const mine = q.ownerId === currentUserId;
     if (!mine && role === "employee") continue;
     own.push({
       id: `q-${q.entryId}`, dot: "dashed", href: `#zeit/e/${q.entryId}`, when: ago(q.createdAt, data.today),
-      title: mine ? `Rückfrage zu deiner Buchung vom ${fmtDate(q.date)}` : `Rückfrage an ${name(q.ownerId)} noch offen`,
+      title: mine ? tr("Rückfrage zu deiner Buchung vom {0}", fmtDate(q.date)) : tr("Rückfrage an {0} noch offen", name(q.ownerId)),
       meta: `«${q.text}» · ${q.reason}`,
     });
   }
-  if (own.length) groups.push({ label: "Du", items: own });
+  if (own.length) groups.push({ label: tr("Du"), items: own });
   return groups;
 }
 
@@ -170,25 +171,25 @@ function Stats() {
   const billable = entries.filter((e) => e.billable).reduce((s, e) => s + e.hours * e.hourlyRate, 0);
   const monthName = fmtMonthLong(month).split(" ")[0];
   const delta = before ? Math.round(((hours - before) / before) * 100) : 0;
-  const stats: { label: string; value: string; tone?: string }[] = [{ label: "Verrechenbar", value: fmtCHF(billable) }];
+  const stats: { label: string; value: string; tone?: string }[] = [{ label: tr("Verrechenbar"), value: fmtCHF(billable) }];
   if (role === "employee") {
     if (data.employees.some((e) => e.id === currentUserId)) {
       const b = workBalance(data, currentUserId).balance;
-      stats.push({ label: "Überzeit", value: `${b >= 0 ? "+" : "−"}${fmtH(Math.abs(b))}`, tone: b < 0 ? "neg" : undefined });
-      stats.push({ label: "Ferien übrig", value: days(vacationSummary(data, currentUserId).remaining) });
+      stats.push({ label: tr("Überzeit"), value: `${b >= 0 ? "+" : "−"}${fmtH(Math.abs(b))}`, tone: b < 0 ? "neg" : undefined });
+      stats.push({ label: tr("Ferien übrig"), value: days(vacationSummary(data, currentUserId).remaining) });
     }
   } else {
     const atRisk = reports.filter((r) => r.status !== "ok").length;
-    stats.push({ label: "Velocity", value: factor ? `${fmt1(factor.current)} h/SP` : "–" });
-    stats.push({ label: "Budgets in Gefahr", value: `${atRisk} von ${reports.length}`, tone: atRisk > 0 ? "alert" : undefined });
+    stats.push({ label: tr("Velocity"), value: factor ? `${fmt1(factor.current)} h/SP` : "–" });
+    stats.push({ label: tr("Budgets in Gefahr"), value: tr("{0} von {1}", atRisk, reports.length), tone: atRisk > 0 ? "alert" : undefined });
   }
   return (
     <div className="ib-stats">
       <div className="ib-hero">
         <div>
-          <span>Stunden im {monthName}</span>
-          <strong className="num">{fmt1(hours)}<small> h</small></strong>
-          {before > 0 && <em className={delta < 0 ? "down" : "up"}>{delta >= 0 ? "+" : "−"}{Math.abs(delta)} % zum Vormonat</em>}
+          <span>{tr("Stunden im")}{" "}{monthName}</span>
+          <strong className="num">{fmt1(hours)}<small>{" "}{tr("h")}</small></strong>
+          {before > 0 && <em className={delta < 0 ? "down" : "up"}>{delta >= 0 ? "+" : "−"}{Math.abs(delta)}{" "}{tr("% zum Vormonat")}</em>}
         </div>
         <Spark values={weeklyHours(mine, data.today)} />
       </div>
@@ -229,27 +230,27 @@ function RetainerDetail({ r }: { r: ProjectReport }) {
   return (
     <>
       <div>
-        <p className="ib-eyebrow">{r.customer.name} · Monatskontingent</p>
+        <p className="ib-eyebrow">{r.customer.name}{" "}{tr("· Monatskontingent")}</p>
         <h2>{r.project.name}</h2>
       </div>
-      <div className="ib-bar" role="img" aria-label={`${pct(peak, t.hoursPerMonth)} % des Kontingents`}>
+      <div className="ib-bar" role="img" aria-label={tr("{0} % des Kontingents", pct(peak, t.hoursPerMonth))}>
         <span className="act" style={{ width: `${(t.used / scale) * 100}%` }} />
         <span className={`fc ${r.status}`} style={{ width: `${(Math.max(0, t.avg3 - t.used) / scale) * 100}%` }} />
         <span className="bud" style={{ left: `${(t.hoursPerMonth / scale) * 100}%` }} />
       </div>
       <dl className="ib-figs">
-        <div><dt>Kontingent pro Monat</dt><dd className="num">{fmtH(t.hoursPerMonth)}</dd></div>
-        <div><dt>Gebucht diesen Monat</dt><dd className="num">{fmtH(t.used)}<small>{pct(t.used, t.hoursPerMonth)} %</small></dd></div>
-        <div><dt>Schnitt der letzten 3 Monate</dt><dd className={`num ${t.avg3 > t.hoursPerMonth ? "alert" : ""}`}>{fmtH(t.avg3)}<small>{pct(t.avg3, t.hoursPerMonth)} %</small></dd></div>
+        <div><dt>{tr("Kontingent pro Monat")}</dt><dd className="num">{fmtH(t.hoursPerMonth)}</dd></div>
+        <div><dt>{tr("Gebucht diesen Monat")}</dt><dd className="num">{fmtH(t.used)}<small>{pct(t.used, t.hoursPerMonth)} %</small></dd></div>
+        <div><dt>{tr("Schnitt der letzten 3 Monate")}</dt><dd className={`num ${t.avg3 > t.hoursPerMonth ? "alert" : ""}`}>{fmtH(t.avg3)}<small>{pct(t.avg3, t.hoursPerMonth)} %</small></dd></div>
       </dl>
       <p className="ib-explain">
         {t.avg3 > t.hoursPerMonth
-          ? <>In den letzten drei Monaten wurden im Schnitt {fmtH(t.avg3 - t.hoursPerMonth)} mehr gebucht, als das Kontingent enthält. Das Kontingent oder die Abrechnung der Mehrstunden sollte mit dem Kunden besprochen werden.</>
-          : <>Das Kontingent ist zu über 95 % genutzt. Weitere Stunden in diesem Monat gehen über das Vereinbarte hinaus.</>}
+          ? <>{tr("In den letzten drei Monaten wurden im Schnitt {0} mehr gebucht, als das Kontingent enthält. Das Kontingent oder die Abrechnung der Mehrstunden sollte mit dem Kunden besprochen werden.", fmtH(t.avg3 - t.hoursPerMonth))}</>
+          : <>{tr("Das Kontingent ist zu über 95 % genutzt. Weitere Stunden in diesem Monat gehen über das Vereinbarte hinaus.")}</>}
       </p>
       <div className="ib-detail-actions">
-        <a className="btn primary" href={`#projekte/p/${r.project.id}`}>Projekt öffnen</a>
-        <a className="btn" href="#reports">Report</a>
+        <a className="btn primary" href={`#projekte/p/${r.project.id}`}>{tr("Projekt öffnen")}</a>
+        <a className="btn" href="#reports">{tr("Report")}</a>
       </div>
     </>
   );
@@ -261,11 +262,11 @@ function BudgetDetail({ r }: { r: ProjectReport }) {
   const money = (v: number) => fmtMoney(v, r.currency);
   const scale = Math.max(r.budget, r.forecastCost, 1);
   const rows: [string, string, string?][] = [
-    ["Budget", money(r.budget)],
-    ["Verbraucht", money(r.actualCost), `${pct(r.actualCost, r.budget)} %`],
-    ["Prognose", money(r.forecastCost), `${pct(r.forecastCost, r.budget)} %`],
-    [r.variance < 0 ? "Überschreitung" : "Reserve", money(Math.abs(r.variance))],
-    ["Story Points offen", fmt1(r.spOpen).replace(/[.,]0$/, "")],
+    [tr("Budget"), money(r.budget)],
+    [tr("Verbraucht"), money(r.actualCost), `${pct(r.actualCost, r.budget)} %`],
+    [tr("Prognose"), money(r.forecastCost), `${pct(r.forecastCost, r.budget)} %`],
+    [r.variance < 0 ? tr("Überschreitung") : tr("Reserve"), money(Math.abs(r.variance))],
+    [tr("Story Points offen"), fmt1(r.spOpen).replace(/[.,]0$/, "")],
   ];
   return (
     <>
@@ -273,25 +274,25 @@ function BudgetDetail({ r }: { r: ProjectReport }) {
         <p className="ib-eyebrow">{r.customer.name}</p>
         <h2>{r.project.name}</h2>
       </div>
-      <div className="ib-bar" role="img" aria-label={`Verbraucht ${pct(r.actualCost, r.budget)} %, Prognose ${pct(r.forecastCost, r.budget)} % des Budgets`}>
+      <div className="ib-bar" role="img" aria-label={tr("Verbraucht {0} %, Prognose {1} % des Budgets", pct(r.actualCost, r.budget), pct(r.forecastCost, r.budget))}>
         <span className="act" style={{ width: `${(r.actualCost / scale) * 100}%` }} />
         <span className={`fc ${r.status}`} style={{ width: `${(Math.max(0, r.forecastCost - r.actualCost) / scale) * 100}%` }} />
         <span className="bud" style={{ left: `${(r.budget / scale) * 100}%` }} />
       </div>
       <dl className="ib-figs">
         {rows.map(([k, v, p]) => (
-          <div key={k}><dt>{k}</dt><dd className={`num ${k === "Überschreitung" ? "alert" : ""}`}>{v}{p && <small>{p}</small>}</dd></div>
+          <div key={k}><dt>{k}</dt><dd className={`num ${k === tr("Überschreitung") ? "alert" : ""}`}>{v}{p && <small>{p}</small>}</dd></div>
         ))}
       </dl>
       <p className="ib-explain">
         {r.spOpen > 0 && factor
-          ? <>Für die offenen {fmt1(r.spOpen).replace(/[.,]0$/, "")} Story Points rechnet die Prognose mit {fmt1(factor.current)} Stunden pro Story Point, also noch rund {fmt1(r.remainingHours)} Stunden. </>
-          : <>Die Prognose stützt sich auf die gebuchten Stunden und den Restaufwand der Subprojekte. </>}
-        {r.variance < 0 ? <>Damit überschreitet das Projekt sein Budget um {money(-r.variance)}.</> : <>Danach bleiben {money(r.variance)} Reserve, das sind weniger als 5 % des Budgets.</>}
+          ? <>{tr("Für die offenen {0} Story Points rechnet die Prognose mit {1} Stunden pro Story Point, also noch rund {2} Stunden.", fmt1(r.spOpen).replace(/[.,]0$/, ""), fmt1(factor.current), fmt1(r.remainingHours))}{" "}</>
+          : <>{tr("Die Prognose stützt sich auf die gebuchten Stunden und den Restaufwand der Subprojekte.")}{" "}</>}
+        {r.variance < 0 ? <>{tr("Damit überschreitet das Projekt sein Budget um {0}.", money(-r.variance))}</> : <>{tr("Danach bleiben {0} Reserve, das sind weniger als 5 % des Budgets.", money(r.variance))}</>}
       </p>
       <div className="ib-detail-actions">
-        <a className="btn primary" href={`#projekte/p/${r.project.id}`}>Projekt öffnen</a>
-        <a className="btn" href="#reports">Report</a>
+        <a className="btn primary" href={`#projekte/p/${r.project.id}`}>{tr("Projekt öffnen")}</a>
+        <a className="btn" href="#reports">{tr("Report")}</a>
       </div>
     </>
   );
@@ -301,12 +302,12 @@ function BudgetDetail({ r }: { r: ProjectReport }) {
 function summary(groups: Group[]): string {
   const n = (label: string) => groups.find((g) => g.label === label)?.items.length ?? 0;
   const parts = [
-    n("Budget") && `${n("Budget")} ${n("Budget") === 1 ? "Budget" : "Budgets"} knapp`,
-    n("Freigaben") && `${n("Freigaben")} ${n("Freigaben") === 1 ? "Freigabe" : "Freigaben"} offen`,
-    n("Du") && `${n("Du")} ${n("Du") === 1 ? "eigene Pendenz" : "eigene Pendenzen"}`,
+    n(tr("Budget")) && trn(n(tr("Budget")), "{0} Budget knapp", "{0} Budgets knapp"),
+    n(tr("Freigaben")) && trn(n(tr("Freigaben")), "{0} Freigabe offen", "{0} Freigaben offen"),
+    n(tr("Du")) && trn(n(tr("Du")), "{0} eigene Pendenz", "{0} eigene Pendenzen"),
   ].filter(Boolean) as string[];
-  if (!parts.length) return "Nichts offen";
-  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} und ${parts[parts.length - 1]}`;
+  if (!parts.length) return tr("Nichts offen");
+  return parts.length === 1 ? parts[0] : tr("{0} und {1}", parts.slice(0, -1).join(", "), parts[parts.length - 1]);
 }
 
 export function Inbox() {
@@ -316,7 +317,7 @@ export function Inbox() {
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const current = all.find((i) => i.id === selected && i.report) ?? all.find((i) => i.report);
-  const today = new Intl.DateTimeFormat("de-CH", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${data.today}T12:00:00`));
+  const today = new Intl.DateTimeFormat(intlLocale, { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${data.today}T12:00:00`));
 
   const act = async (item: Item, a: Action) => {
     setBusy(item.id);
@@ -325,20 +326,20 @@ export function Inbox() {
 
   return (
     <div className={`inbox ${current ? "with-detail" : ""}`}>
-      <section className="ib-main" aria-label="Eingang">
+      <section className="ib-main" aria-label={tr("Eingang")}>
         <div className="ib-head">
           <div>
-            <h1>Eingang</h1>
+            <h1>{tr("Eingang")}</h1>
             <p className="sub"><span className="ib-date">{today}</span>{summary(groups)}.</p>
           </div>
-          <a className="btn" href="#dashboard">Dashboard</a>
+          <a className="btn" href="#dashboard">{tr("Dashboard")}</a>
         </div>
         <GettingStarted />
         <Stats />
         {all.length === 0 && (
           <div className="ib-empty">
-            <strong>Alles erledigt.</strong>
-            <span>Keine offenen Budgets, Freigaben oder Rückfragen.</span>
+            <strong>{tr("Alles erledigt.")}</strong>
+            <span>{tr("Keine offenen Budgets, Freigaben oder Rückfragen.")}</span>
           </div>
         )}
         {groups.map((g) => (
@@ -366,7 +367,7 @@ export function Inbox() {
         ))}
       </section>
       {current?.report && (
-        <aside className="ib-detail" aria-label="Details">
+        <aside className="ib-detail" aria-label={tr("Details")}>
           <div className="ib-detail-in"><BudgetDetail r={current.report} /></div>
         </aside>
       )}

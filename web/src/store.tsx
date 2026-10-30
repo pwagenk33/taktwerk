@@ -3,6 +3,7 @@ import { api, loadDataset, loadOlder, upload, type Branding, type Me, type Entry
 import { currentVelocity, profitability, projectReports, velocityByMonth, type Profitability, type ProjectReport, type VelocityFactor, type VelocityMonth, applyStamp, type PeriodKind, type StampAction, type TimeModel, type WorkPeriod } from "@taktwerk/domain";
 import { NEEDS_APPROVAL, WorkCalendar, absenceProblem, isoWeekKey, monthRange, weekFigures } from "@taktwerk/domain";
 import type { Absence, Customer, Dataset, Employee, Expense, Holiday, Project, Role, SubProject, TimeEntry, VelocitySettings } from "@taktwerk/domain";
+import { intlLocale, tr, trn } from "./i18n";
 
 export interface WorkSettingsPatch {
   weeklyHours?: number;
@@ -50,10 +51,10 @@ export interface Closing {
 export function lockReason(closings: Closing[], actor: { id: string; role: Role; manages?: (userId: string) => boolean }, ownerId: string, date: string): string | null {
   if (actor.role === "auditor") return "Nur-Lesen-Zugang";
   const lead = actor.role === "admin" || actor.role === "consultant";
-  if (ownerId !== actor.id && !lead && !actor.manages?.(ownerId)) return "Nur eigene Buchungen können geändert werden.";
+  if (ownerId !== actor.id && !lead && !actor.manages?.(ownerId)) return tr("Nur eigene Buchungen können geändert werden.");
   const status = closings.find((c) => c.userId === ownerId && c.month === date.slice(0, 7))?.status;
-  if (status === "approved") return "Monat abgeschlossen";
-  if (status === "submitted" && ownerId === actor.id && !lead) return "Monat eingereicht";
+  if (status === "approved") return tr("Monat abgeschlossen");
+  if (status === "submitted" && ownerId === actor.id && !lead) return tr("Monat eingereicht");
   return null;
 }
 
@@ -128,7 +129,7 @@ interface Store {
   deleteTimeEntry: (id: string) => Promise<void>;
   updateExpense: Patch<Expense>;
   updateProject: Patch<Project>;
-  updateCustomer: (id: string, patch: { name?: string; currency?: Customer["currency"]; address?: Customer["address"]; rate?: Customer["rates"][number] }) => Promise<void>;
+  updateCustomer: (id: string, patch: { name?: string; currency?: Customer["currency"]; locale?: Customer["locale"]; address?: Customer["address"]; rate?: Customer["rates"][number] }) => Promise<void>;
   /** Resource planning: reserve `hours` of a person for a project in an ISO week (0 removes the reservation). */
   setAllocation: (employeeId: string, projectId: string, week: string, hours: number) => Promise<void>;
   /** Customer portal accounts of a customer (leads). */
@@ -262,7 +263,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
       const tempId = uid("offline-");
       setOutbox([...outboxRef.current, { tempId, body: body as Record<string, unknown>, employeeId, hourlyRate }]);
       setData((d) => ({ ...d, timeEntries: [...d.timeEntries, { ...item, id: tempId }] }));
-      setTimeout(() => notify("Kein Netz: Buchung zwischengespeichert, wird gesendet sobald du online bist"), 60);
+      setTimeout(() => notify(tr("Kein Netz: Buchung zwischengespeichert, wird gesendet sobald du online bist")), 60);
     }
   };
   const flushing = useRef(false);
@@ -280,12 +281,12 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
           if (isOffline(e)) break;
           // Rejected by the server (e.g. month locked): drop it and tell the person.
           setOutbox(outboxRef.current.filter((x) => x.tempId !== q.tempId));
-          notify(`Offline-Buchung abgelehnt: ${(e as Error).message}`);
+          notify(tr("Offline-Buchung abgelehnt: {0}", (e as Error).message));
         }
       }
       if (sent > 0) {
         setData(await loadDataset());
-        notify(`${sent} ${sent === 1 ? "Offline-Buchung" : "Offline-Buchungen"} gesendet`);
+        notify(trn(sent, "{0} Offline-Buchung gesendet", "{0} Offline-Buchungen gesendet"));
       }
     } finally {
       flushing.current = false;
@@ -341,8 +342,8 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
       if (mode === "api") {
         next = file ? await upload<Branding>("/api/branding/logo", file) : await api<Branding>("/api/branding/logo", { method: "DELETE" });
       } else {
-        if (file && file.size > 300 * 1024) throw new Error("In der Demo sind Logos bis 300 KB möglich.");
-        const logo = file ? await new Promise<string>((ok, fail) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => fail(new Error("Datei konnte nicht gelesen werden.")); r.readAsDataURL(file); }) : undefined;
+        if (file && file.size > 300 * 1024) throw new Error(tr("In der Demo sind Logos bis 300 KB möglich."));
+        const logo = file ? await new Promise<string>((ok, fail) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => fail(new Error(tr("Datei konnte nicht gelesen werden."))); r.readAsDataURL(file); }) : undefined;
         const { logo: _l, logoMime: _m, ...rest } = branding;
         next = logo ? { ...rest, logo, logoMime: file!.type } : rest;
         saveLocal("rt.branding", next);
@@ -399,7 +400,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
     },
     addCustomer:
       mode === "api"
-        ? (c) => remote("/api/customers", { name: c.name, hourlyRate: c.rates[0].hourlyRate, validFrom: c.rates[0].validFrom, currency: c.currency, address: c.address })
+        ? (c) => remote("/api/customers", { name: c.name, hourlyRate: c.rates[0].hourlyRate, validFrom: c.rates[0].validFrom, currency: c.currency, locale: c.locale, address: c.address })
         : local("customers", "c"),
     setAllocation: async (employeeId, projectId, week, hours) => {
       const h = Math.round(hours * 2) / 2;
@@ -543,7 +544,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
       }
       const e = data.timeEntries.find((x) => x.id === entryId);
       const owner = e?.employeeId === currentUserId;
-      const author = data.employees.find((x) => x.id === currentUserId)?.name ?? "Ich";
+      const author = data.employees.find((x) => x.id === currentUserId)?.name ?? tr("Ich");
       const now = new Date().toISOString();
       const resolved = localRef.current.map((c) => (owner && c.entryId === entryId && c.kind === "question" && !c.resolvedAt ? { ...c, resolvedAt: now } : c));
       const next = [...resolved, { id: uid("c"), entryId, kind: question && !owner && scope.managesPeople ? ("question" as const) : ("comment" as const), text, authorId: currentUserId, authorName: author, createdAt: now, resolvedAt: null }];
@@ -587,7 +588,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
         setData(await loadDataset());
         return;
       }
-      const now = new Intl.DateTimeFormat("de-CH", { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()).replace(".", ":");
+      const now = new Intl.DateTimeFormat(intlLocale, { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()).replace(".", ":");
       setData((d) => {
         const next = applyStamp(d.workPeriods ?? [], action, currentUserId, d.today, now, () => uid("wp"));
         saveLocal("rt.presence", next);
@@ -651,7 +652,7 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
 
 export function useStore(): Store {
   const s = useContext(Ctx);
-  if (!s) throw new Error("StoreProvider missing");
+  if (!s) throw new Error(tr("StoreProvider missing"));
   return s;
 }
 

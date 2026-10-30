@@ -1,5 +1,6 @@
 import { addMonths, monthOf, rateOn, statusFor, type BudgetStatus, type ProjectReport, type VelocityFactor } from "./calc";
 import type { Dataset } from "./types";
+import { tr } from "./i18n";
 
 /** Knobs of a what-if scenario on one project. */
 export interface ScenarioInput {
@@ -33,7 +34,7 @@ function overheadOf(report: ProjectReport, velocity: VelocityFactor | null): num
 }
 
 /** Recomputes forecast, variance and finish month of a project under changed assumptions. */
-export function scenario(data: Dataset, report: ProjectReport, velocity: VelocityFactor | null, w: ScenarioInput, label = "Szenario"): ScenarioResult {
+export function scenario(data: Dataset, report: ProjectReport, velocity: VelocityFactor | null, w: ScenarioInput, label = tr("Szenario")): ScenarioResult {
   const factor = w.factor ?? velocity?.current ?? 0;
   const overhead = overheadOf(report, velocity);
   const spOpen = Math.max(0, report.spOpen + (w.spDelta ?? 0));
@@ -52,10 +53,10 @@ export function scenario(data: Dataset, report: ProjectReport, velocity: Velocit
 
 /** The three band scenarios of the velocity window plus the baseline. */
 export function scenarioBand(data: Dataset, report: ProjectReport, velocity: VelocityFactor | null): ScenarioResult[] {
-  if (!velocity) return [scenario(data, report, null, {}, "Erwartet")];
+  if (!velocity) return [scenario(data, report, null, {}, tr("Erwartet"))];
   return [
-    scenario(data, report, velocity, { factor: velocity.low }, "Optimistisch"),
-    scenario(data, report, velocity, { factor: velocity.current }, "Erwartet"),
-    scenario(data, report, velocity, { factor: velocity.high }, "Pessimistisch"),
+    scenario(data, report, velocity, { factor: velocity.low }, tr("Optimistisch")),
+    scenario(data, report, velocity, { factor: velocity.current }, tr("Erwartet")),
+    scenario(data, report, velocity, { factor: velocity.high }, tr("Pessimistisch")),
   ];
 }

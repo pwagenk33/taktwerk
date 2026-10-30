@@ -1,4 +1,4 @@
-import { WorkCalendar, addMonths, billableSeats, canWrite, fmtCHF, fmtDate, fmtMonthLong, planById, priceOf, projectReports, trialDaysLeft } from "@taktwerk/domain";
+import { WorkCalendar, addMonths, fmt1, billableSeats, canWrite, fmtCHF, fmtDate, fmtMonthLong, planById, priceOf, projectReports, trialDaysLeft } from "@taktwerk/domain";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import type { AppContext } from "./app";
 import { purgeExpired } from "./routes/privacy";
@@ -12,6 +12,8 @@ import { loadDataset } from "./routes/data";
 import { intervalLabel, mailAdmins, notifyOperator, periodEnd } from "./routes/subscription";
 import { syncAllJira } from "./jira";
 import { saasOn, seatsUsed, subscriptionOf } from "./saas";
+import { tr } from "@taktwerk/domain";
+import { trn, withLocale } from "./i18n";
 
 const THRESHOLDS = ["80", "95", "100"] as const;
 type Threshold = (typeof THRESHOLDS)[number];
@@ -90,18 +92,20 @@ export async function checkBudgetAlerts(ctx: AppContext) {
       .select()
       .from(users)
       .where(and(eq(users.organizationId, org.id), eq(users.active, true), inArray(users.role, ["admin", "consultant"])));
-    const lines = fresh.map((a) => `${a.name}: Forecast ${fmtCHF(a.forecast)} von ${fmtCHF(a.budget)} Budget (${Math.round((a.forecast / a.budget) * 100)} %, Schwelle ${a.threshold} %).`);
     for (const lead of leads) {
       await ctx.mailer.send(
-        actionMail(org.settings.branding, {
+        withLocale(lead.locale, () => actionMail(org.settings.branding, {
           to: lead.email,
-          subject: `${org.settings.branding.appName}: Budget-Alarm (${fresh.length} ${fresh.length === 1 ? "Eintrag" : "Einträge"})`,
-          greeting: `Hallo ${lead.name.split(" ")[0]}`,
-          lines: ["Der Forecast hat bei folgenden Projekten eine Budgetschwelle erreicht:", ...lines],
-          action: "Reports öffnen",
+          subject: trn(fresh.length, "{1}: Budget-Alarm ({0} Eintrag)", "{1}: Budget-Alarm ({0} Einträge)", org.settings.branding.appName),
+          greeting: tr("Hallo {0}", lead.name.split(" ")[0]),
+          lines: [
+            tr("Der Forecast hat bei folgenden Projekten eine Budgetschwelle erreicht:"),
+            ...fresh.map((a) => tr("{0}: Forecast {1} von {2} Budget ({3} %, Schwelle {4} %).", a.name, fmtCHF(a.forecast), fmtCHF(a.budget), Math.round((a.forecast / a.budget) * 100), a.threshold)),
+          ],
+          action: tr("Reports öffnen"),
           url: new URL("/", ctx.config.APP_URL).toString(),
-          footer: "Du erhältst diese E-Mail einmal pro Schwelle (80, 95 und 100 %) und Projekt.",
-        }),
+          footer: tr("Du erhältst diese E-Mail einmal pro Schwelle (80, 95 und 100 %) und Projekt."),
+        })),
       );
     }
   }
@@ -152,18 +156,18 @@ export async function sendHoursReminders(ctx: AppContext, now = new Date()) {
       if (missing <= 2) continue;
       if (!(await claim(ctx, `hours-reminder:${u.id}`, week.key))) continue;
       await ctx.mailer.send(
-        actionMail(org.settings.branding, {
+        withLocale(u.locale, () => actionMail(org.settings.branding, {
           to: u.email,
-          subject: `${org.settings.branding.appName}: ${missing.toFixed(1).replace(".", ",")} Stunden fehlen für letzte Woche`,
-          greeting: `Hallo ${u.name.split(" ")[0]}`,
+          subject: tr("{0}: {1} Stunden fehlen für letzte Woche", org.settings.branding.appName, missing.toFixed(1).replace(".", ",")),
+          greeting: tr("Hallo {0}", u.name.split(" ")[0]),
           lines: [
-            `Für die Woche vom ${fmtDate(week.from)} bis ${fmtDate(week.to)} sind ${worked.toFixed(1).replace(".", ",")} von ${due.toFixed(1).replace(".", ",")} Stunden erfasst.`,
-            "Bitte trage die fehlenden Stunden nach, damit Kundenreports und dein Überzeit-Saldo stimmen. Am schnellsten geht es im Wochenraster.",
+            tr("Für die Woche vom {0} bis {1} sind {2} von {3} Stunden erfasst.", fmtDate(week.from), fmtDate(week.to), worked.toFixed(1).replace(".", ","), due.toFixed(1).replace(".", ",")),
+            tr("Bitte trage die fehlenden Stunden nach, damit Kundenreports und dein Überzeit-Saldo stimmen. Am schnellsten geht es im Wochenraster."),
           ],
-          action: "Wochenraster öffnen",
+          action: tr("Wochenraster öffnen"),
           url: new URL("/#zeit", ctx.config.APP_URL).toString(),
-          footer: "Du erhältst diese Erinnerung jeweils montags, wenn mehr als zwei Stunden fehlen. Admins können sie unter Einstellungen → Arbeitszeit ausschalten.",
-        }),
+          footer: tr("Du erhältst diese Erinnerung jeweils montags, wenn mehr als zwei Stunden fehlen. Admins können sie unter Einstellungen → Arbeitszeit ausschalten."),
+        })),
       );
       sent.push({ userId: u.id, missing });
     }
@@ -172,19 +176,19 @@ export async function sendHoursReminders(ctx: AppContext, now = new Date()) {
 }
 
 /** The mail asking one person to submit a month; also sent on demand by leads from the closing page. */
-export function closingReminderMail(settings: OrgSettings, user: { name: string; email: string }, month: string, appUrl: string) {
-  return actionMail(settings.branding, {
+export function closingReminderMail(settings: OrgSettings, user: { name: string; email: string; locale?: string | null }, month: string, appUrl: string) {
+  return withLocale(user.locale, () => actionMail(settings.branding, {
     to: user.email,
-    subject: `${settings.branding.appName}: Bitte ${fmtMonthLong(month)} einreichen`,
-    greeting: `Hallo ${user.name.split(" ")[0]}`,
+    subject: tr("{0}: Bitte {1} einreichen", settings.branding.appName, fmtMonthLong(month)),
+    greeting: tr("Hallo {0}", user.name.split(" ")[0]),
     lines: [
-      `Dein Monat ${fmtMonthLong(month)} ist noch nicht eingereicht. Bitte prüfe deine Buchungen und reiche den Monat ein, damit er freigegeben und abgerechnet werden kann.`,
-      "Fehlt noch etwas, trage es vorher nach. Nach dem Einreichen sind die Buchungen gesperrt.",
+      tr("Dein Monat {0} ist noch nicht eingereicht. Bitte prüfe deine Buchungen und reiche den Monat ein, damit er freigegeben und abgerechnet werden kann.", fmtMonthLong(month)),
+      tr("Fehlt noch etwas, trage es vorher nach. Nach dem Einreichen sind die Buchungen gesperrt."),
     ],
-    action: "Monat einreichen",
+    action: tr("Monat einreichen"),
     url: new URL("/#abschluss", appUrl).toString(),
-    footer: "Admins können diese Erinnerung unter Einstellungen → Arbeitszeit ausschalten.",
-  });
+    footer: tr("Admins können diese Erinnerung unter Einstellungen → Arbeitszeit ausschalten."),
+  }));
 }
 
 /**
@@ -219,18 +223,18 @@ export async function sendClosingReminders(ctx: AppContext, now = new Date()) {
     if (!(await claim(ctx, `closing-digest:${org.id}`, month))) continue;
     for (const lead of people.filter((u) => u.role === "admin" || u.role === "consultant")) {
       await ctx.mailer.send(
-        actionMail(org.settings.branding, {
+        withLocale(lead.locale, () => actionMail(org.settings.branding, {
           to: lead.email,
-          subject: `${org.settings.branding.appName}: Monatsabschluss ${fmtMonthLong(month)}, ${open.length} offen, ${submitted.length} zur Freigabe`,
-          greeting: `Hallo ${lead.name.split(" ")[0]}`,
+          subject: tr("{0}: Monatsabschluss {1}, {2} offen, {3} zur Freigabe", org.settings.branding.appName, fmtMonthLong(month), open.length, submitted.length),
+          greeting: tr("Hallo {0}", lead.name.split(" ")[0]),
           lines: [
-            open.length ? `Noch nicht eingereicht: ${open.map((u) => u.name).join(", ")}.` : "Alle haben eingereicht.",
-            submitted.length ? `Warten auf deine Freigabe: ${submitted.map((u) => u.name).join(", ")}.` : "Nichts wartet auf Freigabe.",
+            open.length ? tr("Noch nicht eingereicht: {0}.", open.map((u) => u.name).join(", ")) : tr("Alle haben eingereicht."),
+            submitted.length ? tr("Warten auf deine Freigabe: {0}.", submitted.map((u) => u.name).join(", ")) : tr("Nichts wartet auf Freigabe."),
           ],
-          action: "Monatsabschluss öffnen",
+          action: tr("Monatsabschluss öffnen"),
           url: new URL("/#abschluss", ctx.config.APP_URL).toString(),
-          footer: "Diese Übersicht kommt einmal pro Monat ab dem 5. Admins können sie unter Einstellungen → Arbeitszeit ausschalten.",
-        }),
+          footer: tr("Diese Übersicht kommt einmal pro Monat ab dem 5. Admins können sie unter Einstellungen → Arbeitszeit ausschalten."),
+        })),
       );
       sent.push({ kind: "digest", to: lead.email, month });
     }
@@ -244,7 +248,7 @@ const addDaysIso = (iso: string, n: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-type ReminderUser = { id: string; name: string; email: string; reminder: ReminderSettings | null };
+type ReminderUser = { id: string; name: string; email: string; reminder: ReminderSettings | null; locale?: string | null };
 
 /** Zurich date (YYYY-MM-DD), ISO weekday (1 = Monday) and HH:MM of an instant. */
 function zurichClock(now: Date) {
@@ -258,14 +262,17 @@ function zurichClock(now: Date) {
 }
 
 /** The text of the personal reminder; `test` marks a message sent on request from the profile page. */
-export function reminderMessage(settings: OrgSettings, user: { name: string }, worked: number, appUrl: string, test = false): ChatMessage {
+export function reminderMessage(settings: OrgSettings, user: { name: string; locale?: string | null }, worked: number, appUrl: string, test = false): ChatMessage {
+  return withLocale(user.locale, () => reminderText(settings, user, worked, appUrl, test));
+}
+function reminderText(settings: OrgSettings, user: { name: string }, worked: number, appUrl: string, test: boolean): ChatMessage {
   const first = user.name.split(" ")[0];
   const url = new URL("/#zeit", appUrl).toString();
-  if (test) return { title: `${settings.branding.appName}: Testnachricht`, text: `Hallo ${first}, so sieht deine Erinnerung aus. Sie kommt nur an Tagen, an denen bis zur gewählten Uhrzeit nichts gebucht ist.`, action: { label: "Zeit erfassen", url } };
+  if (test) return { title: tr("{0}: Testnachricht", settings.branding.appName), text: tr("Hallo {0}, so sieht deine Erinnerung aus. Sie kommt nur an Tagen, an denen bis zur gewählten Uhrzeit nichts gebucht ist.", first), action: { label: tr("Zeit erfassen"), url } };
   return {
-    title: `${settings.branding.appName}: Heute noch nichts gebucht`,
-    text: worked > 0 ? `Hallo ${first}, heute sind erst ${worked.toFixed(1).replace(".", ",")} Stunden erfasst. Kurz nachtragen, solange es frisch ist?` : `Hallo ${first}, für heute ist noch keine Zeit erfasst. Kurz nachtragen, solange es frisch ist?`,
-    action: { label: "Zeit erfassen", url },
+    title: tr("{0}: Heute noch nichts gebucht", settings.branding.appName),
+    text: worked > 0 ? tr("Hallo {0}, heute sind erst {1} Stunden erfasst. Kurz nachtragen, solange es frisch ist?", first, fmt1(worked)) : tr("Hallo {0}, für heute ist noch keine Zeit erfasst. Kurz nachtragen, solange es frisch ist?", first),
+    action: { label: tr("Zeit erfassen"), url },
   };
 }
 
@@ -275,15 +282,15 @@ export async function sendReminderTo(ctx: AppContext, settings: OrgSettings, use
   if (!r || r.channel === "off") return;
   if (r.channel === "mail") {
     await ctx.mailer.send(
-      actionMail(settings.branding, {
+      withLocale(user.locale, () => actionMail(settings.branding, {
         to: user.email,
         subject: msg.title,
-        greeting: msg.text.split(", ")[0] ?? "Hallo",
+        greeting: msg.text.split(", ")[0] ?? tr("Hallo"),
         lines: [msg.text.slice(msg.text.indexOf(", ") + 2)],
         action: msg.action?.label,
         url: msg.action?.url,
-        footer: "Uhrzeit, Tage und Kanal dieser Erinnerung änderst du in deinem Profil.",
-      }),
+        footer: tr("Uhrzeit, Tage und Kanal dieser Erinnerung änderst du in deinem Profil."),
+      })),
     );
     return;
   }
@@ -332,7 +339,9 @@ export async function sendScheduledReports(ctx: AppContext, now = new Date()) {
       if (!r.enabled || r.recipients.length === 0) continue;
       const dueDay = r.kind === "weekly" ? z.weekday === (r.dayOfWeek ?? 1) : Number(z.date.slice(8, 10)) === (r.dayOfMonth ?? 1);
       if (!dueDay || Number(z.time.slice(0, 2)) < r.hour) continue;
-      const { mail, period } = await digestMail(ctx, org.id, org.settings, r, z.date);
+      // Language of the first recipient who has an account here; German otherwise.
+      const [reader] = await ctx.db.select({ locale: users.locale }).from(users).where(and(eq(users.organizationId, org.id), inArray(users.email, r.recipients))).limit(1);
+      const { mail, period } = await withLocale(reader?.locale, () => digestMail(ctx, org.id, org.settings, r, z.date));
       const job = `scheduled-report:${r.id}`;
       if (!(await claim(ctx, job, period))) continue;
       try {
@@ -361,19 +370,19 @@ export async function runSubscriptionJobs(ctx: AppContext, now = new Date()) {
       const left = trialDaysLeft(sub, now)!;
       const end = fmtDate(org.trialEndsAt.toISOString().slice(0, 10));
       if ((left === 7 || left === 1) && (await claim(ctx, `trial-reminder:${org.id}`, String(left)))) {
-        await mailAdmins(ctx, org, left === 1 ? "Die Testphase endet morgen" : "Noch eine Woche Testphase", [
-          `Die kostenlose Testphase von ${org.name} endet am ${end}.`,
-          "Wähle unter Einstellungen → Abo ein Paket, dann geht es ohne Unterbruch weiter. Alle erfassten Daten bleiben erhalten.",
-        ], { label: "Paket wählen", path: "/einstellungen" });
+        await mailAdmins(ctx, org, () => ({ subject: left === 1 ? tr("Die Testphase endet morgen") : tr("Noch eine Woche Testphase"), lines: [
+          tr("Die kostenlose Testphase von {0} endet am {1}.", org.name, end),
+          tr("Wähle unter Einstellungen → Abo ein Paket, dann geht es ohne Unterbruch weiter. Alle erfassten Daten bleiben erhalten."),
+        ], action: { label: tr("Paket wählen"), path: "/einstellungen" } }));
         done.push(`reminder:${org.slug}:${left}`);
       }
       if (!canWrite(sub, now) && (await claim(ctx, `trial-expired:${org.id}`, org.trialEndsAt.toISOString().slice(0, 10)))) {
         await ctx.db.update(organizations).set({ subStatus: "expired" }).where(eq(organizations.id, org.id));
-        await mailAdmins(ctx, org, "Testphase abgelaufen", [
-          `Die Testphase von ${org.name} ist vorbei, die Daten sind jetzt nur noch lesbar.`,
-          "Sobald du unter Einstellungen → Abo ein Paket wählst, kannst du sofort weiterarbeiten.",
-        ], { label: "Paket wählen", path: "/einstellungen" });
-        await notifyOperator(ctx, `Testphase abgelaufen: ${org.name}`, [`${org.name} (${org.slug}) hat nach der Testphase kein Paket gewählt.`]);
+        await mailAdmins(ctx, org, () => ({ subject: tr("Testphase abgelaufen"), lines: [
+          tr("Die Testphase von {0} ist vorbei, die Daten sind jetzt nur noch lesbar.", org.name),
+          tr("Sobald du unter Einstellungen → Abo ein Paket wählst, kannst du sofort weiterarbeiten."),
+        ], action: { label: tr("Paket wählen"), path: "/einstellungen" } }));
+        await notifyOperator(ctx, () => ({ subject: tr("Testphase abgelaufen: {0}", org.name), lines: [tr("{0} ({1}) hat nach der Testphase kein Paket gewählt.", org.name, org.slug)] }));
         done.push(`expired:${org.slug}`);
       }
     }
@@ -382,17 +391,17 @@ export async function runSubscriptionJobs(ctx: AppContext, now = new Date()) {
       if (!(await claim(ctx, `invoice-period:${org.id}`, period))) continue;
       if (org.canceledAt) {
         await ctx.db.update(organizations).set({ subStatus: "canceled" }).where(eq(organizations.id, org.id));
-        await mailAdmins(ctx, org, "Abo beendet", [`Das Abo von ${org.name} ist wie gekündigt beendet. Die Daten bleiben lesbar und exportierbar.`]);
+        await mailAdmins(ctx, org, () => ({ subject: tr("Abo beendet"), lines: [tr("Das Abo von {0} ist wie gekündigt beendet. Die Daten bleiben lesbar und exportierbar.", org.name)] }));
         done.push(`canceled:${org.slug}`);
       } else {
         const next = periodEnd(org.currentPeriodEnd, org.billingInterval);
         await ctx.db.update(organizations).set({ currentPeriodEnd: next }).where(eq(organizations.id, org.id));
         const plan = planById(org.plan);
         const seats = billableSeats(await seatsUsed(ctx, org.id));
-        await notifyOperator(ctx, `Rechnung stellen: ${org.name}, ${plan.name}`, [
-          `Neue Periode für ${org.name}: ${plan.name}, ${intervalLabel(org.billingInterval)}, ${seats} Personen, CHF ${priceOf(plan, org.billingInterval, seats)} zzgl. MWST.`,
-          `Periode ${fmtDate(period)} bis ${fmtDate(next.toISOString().slice(0, 10))}.`,
-        ]);
+        await notifyOperator(ctx, () => ({ subject: tr("Rechnung stellen: {0}, {1}", org.name, plan.name), lines: [
+          tr("Neue Periode für {0}: {1}, {2}, {3} Personen, CHF {4} zzgl. MWST.", org.name, plan.name, intervalLabel(org.billingInterval), seats, priceOf(plan, org.billingInterval, seats)),
+          tr("Periode {0} bis {1}.", fmtDate(period), fmtDate(next.toISOString().slice(0, 10))),
+        ] }));
         done.push(`renewed:${org.slug}`);
       }
     }

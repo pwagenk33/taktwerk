@@ -341,9 +341,13 @@ table.data tr.clickable:hover td { background: var(--hover); }
 .login-claim h1 { font-size: clamp(2rem, 3.4vw, 3rem); line-height: 1.05; letter-spacing: -0.03em; font-weight: 700; }
 .login-claim p { margin-top: 14px; font-size: 1.02rem; opacity: 0.88; max-width: 36ch; }
 .login-motif { margin-top: auto; margin-left: -40px; margin-right: -40px; width: calc(100% + 80px); height: 46vh; min-height: 220px; color: #ffffff; display: block; }
-.login-main { background: var(--bg); display: grid; place-items: center; padding-block: 40px; padding-left: 24px; padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+.login-main { background: var(--bg); display: grid; place-items: center; align-content: center; padding-block: 40px; padding-left: 24px; padding-right: max(24px, env(safe-area-inset-right, 0px)); }
 .login-card { width: 100%; max-width: 420px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 32px; }
 @media (max-width: 460px) { .login-card { padding: 22px 18px; } }
+.login-langs { display: flex; gap: 4px; justify-content: center; margin-top: 16px; }
+.login-langs button { background: none; border: 0; color: var(--muted); font: inherit; font-size: 0.82rem; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
+.login-langs button:hover { color: var(--ink); background: var(--hover, rgba(0,0,0,.04)); }
+.login-langs button[aria-current] { color: var(--ink); font-weight: 600; }
 .login-form { display: flex; flex-direction: column; gap: 14px; }
 .login-form h2 { font-size: 1.5rem; margin-bottom: 4px; }
 .sso { display: flex; flex-direction: column; gap: 8px; }

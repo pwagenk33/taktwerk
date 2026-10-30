@@ -1,5 +1,6 @@
 import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
+import { tr } from "@taktwerk/domain";
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number, opts: object) => Promise<Buffer>;
 const PARAMS = { N: 2 ** 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
@@ -27,7 +28,7 @@ export const sha256 = (v: string) => createHash("sha256").update(v).digest("hex"
 
 /** Minimum policy: 10+ characters, not only digits. */
 export function passwordProblem(pw: string): string | null {
-  if (pw.length < 10) return "Das Passwort muss mindestens 10 Zeichen lang sein.";
-  if (/^\d+$/.test(pw)) return "Das Passwort darf nicht nur aus Ziffern bestehen.";
+  if (pw.length < 10) return tr("Das Passwort muss mindestens 10 Zeichen lang sein.");
+  if (/^\d+$/.test(pw)) return tr("Das Passwort darf nicht nur aus Ziffern bestehen.");
   return null;
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { HttpError, requireRole, requireUser, type AppContext } from "../app";
 import { verifyPassword } from "../auth/crypto";
 import { absences, allocations, auditLog, dashboards, entryComments, expenses, monthClosings, oauthAccounts, passkeys, passwordTokens, sessions, timeEntries, users, weekSubmissions } from "../db/schema";
+import { tr } from "@taktwerk/domain";
 
 /**
  * Everything the installation stores about one person, in a readable JSON (Auskunftsrecht, Art. 25 DSG).
@@ -13,7 +14,7 @@ import { absences, allocations, auditLog, dashboards, entryComments, expenses, m
 export async function personalDataExport(ctx: AppContext, userId: string) {
   const db = ctx.db;
   const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  if (!u) throw new HttpError(404, "Person nicht gefunden.");
+  if (!u) throw new HttpError(404, tr("Person nicht gefunden."));
   const [entries, spent, abs, closings, weeks, allocs, comments, sess, keys, oauth, audits] = await Promise.all([
     db.select().from(timeEntries).where(eq(timeEntries.userId, userId)),
     db.select().from(expenses).where(eq(expenses.userId, userId)),
@@ -29,7 +30,7 @@ export async function personalDataExport(ctx: AppContext, userId: string) {
   ]);
   return {
     exportiertAm: new Date().toISOString(),
-    hinweis: "Auskunft nach Art. 25 DSG. Buchungen und Spesen bleiben als Geschäftsunterlagen 10 Jahre aufbewahrt (Art. 958f OR), Arbeitszeiten 5 Jahre (Art. 73 ArGV 1).",
+    hinweis: tr("Auskunft nach Art. 25 DSG. Buchungen und Spesen bleiben als Geschäftsunterlagen 10 Jahre aufbewahrt (Art. 958f OR), Arbeitszeiten 5 Jahre (Art. 73 ArGV 1)."),
     person: {
       name: u.name,
       benutzername: u.username,
@@ -68,8 +69,8 @@ export async function personalDataExport(ctx: AppContext, userId: string) {
 export async function anonymizeUser(ctx: AppContext, userId: string, orgId: string) {
   const db = ctx.db;
   const [u] = await db.select().from(users).where(and(eq(users.id, userId), eq(users.organizationId, orgId))).limit(1);
-  if (!u) throw new HttpError(404, "Person nicht gefunden.");
-  if (u.active) throw new HttpError(409, "Bitte die Person zuerst deaktivieren.");
+  if (!u) throw new HttpError(404, tr("Person nicht gefunden."));
+  if (u.active) throw new HttpError(409, tr("Bitte die Person zuerst deaktivieren."));
   const short = userId.slice(0, 8);
   await db.delete(sessions).where(eq(sessions.userId, userId));
   await db.delete(passwordTokens).where(eq(passwordTokens.userId, userId));
@@ -82,7 +83,7 @@ export async function anonymizeUser(ctx: AppContext, userId: string, orgId: stri
   await db
     .update(users)
     .set({
-      name: "Ehemalige Person",
+      name: tr("Ehemalige Person"),
       username: `ehemalig-${short}`,
       email: `ehemalig-${short}@geloescht.invalid`,
       passwordHash: null,
@@ -96,7 +97,7 @@ export async function anonymizeUser(ctx: AppContext, userId: string, orgId: stri
       lastLoginAt: null,
     })
     .where(eq(users.id, userId));
-  return { id: userId, name: "Ehemalige Person" };
+  return { id: userId, name: tr("Ehemalige Person") };
 }
 
 /** Housekeeping: expired sessions and used/expired password links are removed; nothing else is touched. */
@@ -125,7 +126,7 @@ export async function privacyRoutes(app: FastifyInstance) {
     const admin = requireRole(req, "admin");
     const { id } = req.params as { id: string };
     const [u] = await ctx.db.select({ id: users.id, username: users.username }).from(users).where(and(eq(users.id, id), eq(users.organizationId, admin.organizationId))).limit(1);
-    if (!u) throw new HttpError(404, "Person nicht gefunden.");
+    if (!u) throw new HttpError(404, tr("Person nicht gefunden."));
     const data = await personalDataExport(ctx, id);
     return reply
       .header("content-type", "application/json; charset=utf-8")
@@ -139,8 +140,8 @@ export async function privacyRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { password } = z.object({ password: z.string() }).parse(req.body);
     const [me] = await ctx.db.select({ hash: users.passwordHash }).from(users).where(eq(users.id, admin.id)).limit(1);
-    if (!me?.hash || !(await verifyPassword(password, me.hash))) throw new HttpError(403, "Passwort stimmt nicht.");
-    if (id === admin.id) throw new HttpError(400, "Das eigene Konto kann nicht anonymisiert werden.");
+    if (!me?.hash || !(await verifyPassword(password, me.hash))) throw new HttpError(403, tr("Passwort stimmt nicht."));
+    if (id === admin.id) throw new HttpError(400, tr("Das eigene Konto kann nicht anonymisiert werden."));
     // Receipts stay on disk (accounting records); they carry the expense id, not the person's name.
     return anonymizeUser(ctx, id, admin.organizationId);
   });

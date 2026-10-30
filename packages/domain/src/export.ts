@@ -1,3 +1,5 @@
+import { tr } from "./i18n";
+
 /** CSV in the dialect Excel (de-CH) opens directly: semicolon, UTF-8 BOM, quotes doubled. */
 export function toCsv(rows: Record<string, unknown>[], columns?: string[]): string {
   const cols = columns ?? [...new Set(rows.flatMap((r) => Object.keys(r)))];
@@ -10,12 +12,12 @@ export function toCsv(rows: Record<string, unknown>[], columns?: string[]): stri
 }
 
 export const EXPORT_ENTITIES = [
-  { id: "time-entries", label: "Zeitbuchungen" },
-  { id: "expenses", label: "Spesen" },
-  { id: "absences", label: "Absenzen" },
-  { id: "customers", label: "Kunden" },
-  { id: "projects", label: "Projekte und Subprojekte" },
-  { id: "employees", label: "Mitarbeitende" },
+  { id: "time-entries", label: tr("Zeitbuchungen") },
+  { id: "expenses", label: tr("Spesen") },
+  { id: "absences", label: tr("Absenzen") },
+  { id: "customers", label: tr("Kunden") },
+  { id: "projects", label: tr("Projekte und Subprojekte") },
+  { id: "employees", label: tr("Mitarbeitende") },
 ] as const;
 export type ExportEntity = (typeof EXPORT_ENTITIES)[number]["id"];
 

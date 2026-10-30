@@ -5,6 +5,7 @@ import { useStore, type ClosingStatus } from "../store";
 import { Icon } from "../ui/components";
 import { signedH } from "./WorkTime";
 import { Select } from "../ui/Select";
+import { tr, trn } from "../i18n";
 
 /** Expenses of employees waiting for a lead's decision. */
 function OpenExpenses() {
@@ -28,7 +29,7 @@ function OpenExpenses() {
       setError("");
       setRejecting(null);
       setComment("");
-      notify(approve ? "Spese bewilligt" : "Spese abgelehnt");
+      notify(approve ? tr("Spese bewilligt") : tr("Spese abgelehnt"));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -36,14 +37,14 @@ function OpenExpenses() {
   return (
     <section className="card" style={{ marginTop: 16 }}>
       <div className="card-head" style={{ paddingBottom: 8 }}>
-        <h2>Offene Spesen</h2>
-        <span className="muted" style={{ fontSize: "0.8rem" }}>{open.length === 0 ? "Nichts zu bewilligen" : `${open.length} warten auf Bewilligung · ${fmtCHF2(open.reduce((s, x) => s + x.amount, 0))}`}</span>
+        <h2>{tr("Offene Spesen")}</h2>
+        <span className="muted" style={{ fontSize: "0.8rem" }}>{open.length === 0 ? tr("Nichts zu bewilligen") : tr("{0} warten auf Bewilligung · {1}", open.length, fmtCHF2(open.reduce((s, x) => s + x.amount, 0)))}</span>
       </div>
       {open.length > 0 && (
         <div className="table-wrap">
           <table className="data">
             <thead>
-              <tr><th>Person</th><th>Datum</th><th>Spese</th><th>Subprojekt</th><th className="r">Betrag</th><th>Beleg</th><th className="r">Entscheid</th></tr>
+              <tr><th>{tr("Person")}</th><th>{tr("Datum")}</th><th>{tr("Spese")}</th><th>{tr("Subprojekt")}</th><th className="r">{tr("Betrag")}</th><th>{tr("Beleg")}</th><th className="r">{tr("Entscheid")}</th></tr>
             </thead>
             <tbody>
               {open.map((x) => (
@@ -51,29 +52,29 @@ function OpenExpenses() {
                   <td>{emp.get(x.employeeId)?.name}</td>
                   <td className="num">{fmtDate(x.date)}</td>
                   <td>
-                    {x.category}: {x.reason}
-                    <div className="muted" style={{ fontSize: "0.76rem" }}>{x.km ? `${x.km} km · ` : ""}{x.vatRate ? `inkl. ${fmt1(x.vatRate)} % MwSt` : "ohne MwSt"}{x.billable ? "" : " · nicht verrechenbar"}</div>
+                    {tr(x.category)}: {x.reason}
+                    <div className="muted" style={{ fontSize: "0.76rem" }}>{x.km ? `${x.km} km · ` : ""}{x.vatRate ? tr("inkl. {0} % MwSt", fmt1(x.vatRate)) : tr("ohne MwSt")}{x.billable ? "" : tr(" · nicht verrechenbar")}</div>
                   </td>
                   <td>{label(x.subProjectId)}</td>
                   <td className="r num">{fmtCHF2(x.amount)}</td>
                   <td>
                     {x.receipt ? (
                       mode === "api"
-                        ? <a className="receipt-link" href={`/api/expenses/${x.id}/receipt`} target="_blank" rel="noreferrer" title={x.receipt.name}><Icon.report />öffnen</a>
+                        ? <a className="receipt-link" href={`/api/expenses/${x.id}/receipt`} target="_blank" rel="noreferrer" title={x.receipt.name}><Icon.report />{tr("öffnen")}</a>
                         : <span className="receipt-link" title={x.receipt.name}><Icon.report />{x.receipt.name}</span>
-                    ) : <span className="muted">fehlt</span>}
+                    ) : <span className="muted">{tr("fehlt")}</span>}
                   </td>
                   <td>
                     {rejecting === x.id ? (
                       <div className="closing-actions" style={{ flexWrap: "wrap" }}>
-                        <input className="input" style={{ minWidth: 180 }} placeholder="Begründung (optional)" value={comment} autoFocus onChange={(e) => setComment(e.target.value)} />
-                        <button className="btn small primary" onClick={() => decide(x.id, false)}>Ablehnen</button>
-                        <button className="btn small ghost" onClick={() => setRejecting(null)}>Zurück</button>
+                        <input className="input" style={{ minWidth: 180 }} placeholder={tr("Begründung (optional)")} value={comment} autoFocus onChange={(e) => setComment(e.target.value)} />
+                        <button className="btn small primary" onClick={() => decide(x.id, false)}>{tr("Ablehnen")}</button>
+                        <button className="btn small ghost" onClick={() => setRejecting(null)}>{tr("Zurück")}</button>
                       </div>
                     ) : (
                       <div className="closing-actions">
-                        <button className="btn small primary" onClick={() => decide(x.id, true)}>Bewilligen</button>
-                        <button className="btn small ghost" onClick={() => { setRejecting(x.id); setComment(""); }}>Ablehnen</button>
+                        <button className="btn small primary" onClick={() => decide(x.id, true)}>{tr("Bewilligen")}</button>
+                        <button className="btn small ghost" onClick={() => { setRejecting(x.id); setComment(""); }}>{tr("Ablehnen")}</button>
                       </div>
                     )}
                   </td>
@@ -89,9 +90,9 @@ function OpenExpenses() {
 }
 
 const STATUS: Record<ClosingStatus, { label: string; cls: string }> = {
-  open: { label: "Offen", cls: "neutral" },
-  submitted: { label: "Eingereicht", cls: "risk" },
-  approved: { label: "Freigegeben", cls: "ok" },
+  open: { label: tr("Offen"), cls: "neutral" },
+  submitted: { label: tr("Eingereicht"), cls: "risk" },
+  approved: { label: tr("Freigegeben"), cls: "ok" },
 };
 
 function Status({ s }: { s: ClosingStatus }) {
@@ -119,16 +120,16 @@ function TeamWeeks() {
   return (
     <section className="card" style={{ marginTop: 16 }}>
       <div className="card-head" style={{ paddingBottom: 8, flexWrap: "wrap", gap: 12 }}>
-        <h2>Wochen im Team</h2>
+        <h2>{tr("Wochen im Team")}</h2>
         <span className="muted" style={{ fontSize: "0.8rem" }}>
-          {missing === 0 ? "Alle vergangenen Wochen sind eingereicht" : `${missing} ${missing === 1 ? "Woche fehlt" : "Wochen fehlen"} noch`}
+          {missing === 0 ? tr("Alle vergangenen Wochen sind eingereicht") : trn(missing, "{0} Woche fehlt noch", "{0} Wochen fehlen noch")}
         </span>
       </div>
       <div className="table-wrap">
         <table className="data wk">
           <thead>
             <tr>
-              <th>Person</th>
+              <th>{tr("Person")}</th>
               {keys.map((k) => <th key={k} className={`r ${k === to ? "wk-now" : ""}`}>{label(k)}</th>)}
             </tr>
           </thead>
@@ -139,15 +140,15 @@ function TeamWeeks() {
                 {r.weeks.map((w) => {
                   const gap = Math.round((w.due - w.worked) * 10) / 10;
                   const kind = w.due <= 0 && w.worked === 0 ? "none" : w.submitted ? (gap > 1 ? "short" : "ok") : w.week === to ? "now" : gap > 1 ? "missing" : "open";
-                  const title = w.submitted ? `Eingereicht · ${fmt1(w.worked)} h von ${fmt1(w.due)} h` : `Nicht eingereicht · ${fmt1(w.worked)} h von ${fmt1(w.due)} h`;
+                  const title = w.submitted ? tr("Eingereicht · {0} h von {1} h", fmt1(w.worked), fmt1(w.due)) : tr("Nicht eingereicht · {0} h von {1} h", fmt1(w.worked), fmt1(w.due));
                   return (
                     <td key={w.week} className={`r wk-cell wk-${kind} ${w.week === to ? "wk-now" : ""}`} title={title}>
                       {kind === "none" && "–"}
                       {kind === "ok" && "✓"}
-                      {kind === "short" && <>✓ <small>−{fmt1(gap)} h</small></>}
-                      {kind === "missing" && <>fehlen {fmt1(gap)} h</>}
-                      {kind === "open" && "offen"}
-                      {kind === "now" && <small>{fmt1(w.worked)} h</small>}
+                      {kind === "short" && <>✓ <small>{tr("−{0} h", fmt1(gap))}</small></>}
+                      {kind === "missing" && <>{tr("fehlen {0} h", fmt1(gap))}</>}
+                      {kind === "open" && tr("offen")}
+                      {kind === "now" && <small>{fmt1(w.worked)}{" "}{tr("h")}</small>}
                     </td>
                   );
                 })}
@@ -199,7 +200,7 @@ export function Closing() {
   const approveAll = async () => {
     try {
       const n = await approveSubmitted(month);
-      notify(n === 0 ? "Nichts zum Freigeben" : `${n} ${n === 1 ? "Monat" : "Monate"} freigegeben`);
+      notify(n === 0 ? tr("Nichts zum Freigeben") : trn(n, "{0} Monat freigegeben", "{0} Monate freigegeben"));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -207,7 +208,7 @@ export function Closing() {
   const remind = async (p: { id: string; name: string }) => {
     try {
       await remindClosing(month, p.id);
-      notify(mode === "api" ? `${p.name} erinnert` : `${p.name} würde jetzt eine Erinnerung erhalten (Demo)`);
+      notify(mode === "api" ? tr("{0} erinnert", p.name) : tr("{0} würde jetzt eine Erinnerung erhalten (Demo)", p.name));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -217,20 +218,20 @@ export function Closing() {
     <>
       <div className="page-head">
         <div>
-          <h1>Monatsabschluss</h1>
+          <h1>{tr("Monatsabschluss")}</h1>
           <p className="sub">
-            Mitarbeitende reichen ihren Monat ein, Consultants oder Admins geben ihn frei. Danach sind die Buchungen gesperrt und erscheinen so im Kundenreport.
+            {tr("Mitarbeitende reichen ihren Monat ein, Consultants oder Admins geben ihn frei. Danach sind die Buchungen gesperrt und erscheinen so im Kundenreport.")}
           </p>
         </div>
       </div>
       {error && <p className="notice error" style={{ marginBottom: 12 }}>{error}</p>}
 
       <section className="card">
-        <div className="card-head" style={{ paddingBottom: 8 }}><h2>Meine Monate</h2></div>
+        <div className="card-head" style={{ paddingBottom: 8 }}><h2>{tr("Meine Monate")}</h2></div>
         <div className="table-wrap">
           <table className="data">
             <thead>
-              <tr><th>Monat</th><th className="r">Soll</th><th className="r">Ist</th><th className="r">Saldo</th><th className="r">Verrechenbar</th><th className="r">Spesen</th><th>Status</th><th className="r">Aktion</th></tr>
+              <tr><th>{tr("Monat")}</th><th className="r">{tr("Soll")}</th><th className="r">{tr("Ist")}</th><th className="r">{tr("Saldo")}</th><th className="r">{tr("Verrechenbar")}</th><th className="r">{tr("Spesen")}</th><th>{tr("Status")}</th><th className="r">{tr("Aktion")}</th></tr>
             </thead>
             <tbody>
               {months.map((m) => {
@@ -239,11 +240,11 @@ export function Closing() {
                 const running = m === current;
                 return (
                   <tr key={m}>
-                    <td>{fmtMonthLong(m)}{running && <span className="muted"> · läuft</span>}</td>
+                    <td>{fmtMonthLong(m)}{running && <span className="muted">{" "}{tr("· läuft")}</span>}</td>
                     <td className="r num">{f.due === null ? "–" : `${fmt1(f.due)} h`}</td>
-                    <td className="r num">{fmt1(f.hours)} h</td>
+                    <td className="r num">{fmt1(f.hours)}{" "}{tr("h")}</td>
                     <td className={`r num ${(f.balance ?? 0) < 0 ? "neg" : ""}`}>{f.balance === null ? "–" : signedH(f.balance)}</td>
-                    <td className="r num">{fmt1(f.billable)} h</td>
+                    <td className="r num">{fmt1(f.billable)}{" "}{tr("h")}</td>
                     <td className="r num">{fmtCHF2(f.expenses)}</td>
                     <td><Status s={s} /></td>
                     <td className="r">
@@ -251,10 +252,10 @@ export function Closing() {
                         <button
                           className="btn small primary"
                           disabled={running}
-                          title={running ? "Der laufende Monat kann erst nach Monatsende eingereicht werden." : undefined}
-                          onClick={() => act("submit", m, currentUserId, `${fmtMonthLong(m)} eingereicht`)}
+                          title={running ? tr("Der laufende Monat kann erst nach Monatsende eingereicht werden.") : undefined}
+                          onClick={() => act("submit", m, currentUserId, tr("{0} eingereicht", fmtMonthLong(m)))}
                         >
-                          Einreichen
+                          {tr("Einreichen")}
                         </button>
                       )}
                     </td>
@@ -273,19 +274,19 @@ export function Closing() {
       {lead && (
         <section className="card" style={{ marginTop: 16 }}>
           <div className="card-head" style={{ paddingBottom: 8, flexWrap: "wrap", gap: 12 }}>
-            <h2>Team · {fmtMonthLong(month)}</h2>
+            <h2>{tr("Team ·")}{" "}{fmtMonthLong(month)}</h2>
             <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <span className="muted" style={{ fontSize: "0.8rem" }}>
-                {counts.approved} freigegeben · {counts.submitted} eingereicht · {counts.open} offen
+                {counts.approved}{" "}{tr("freigegeben · {0} eingereicht · {1} offen", counts.submitted, counts.open)}
               </span>
-              {counts.submitted > 0 && <button id="c-approve-all" className="btn small" onClick={approveAll}>Alle {counts.submitted} eingereichten freigeben</button>}
-              <Select id="c-month" small ariaLabel="Monat" value={month} onChange={setMonth} options={months.map((m) => ({ value: m, label: fmtMonthLong(m) }))} />
+              {counts.submitted > 0 && <button id="c-approve-all" className="btn small" onClick={approveAll}>{tr("Alle {0} eingereichten freigeben", counts.submitted)}</button>}
+              <Select id="c-month" small ariaLabel={tr("Monat")} value={month} onChange={setMonth} options={months.map((m) => ({ value: m, label: fmtMonthLong(m) }))} />
             </div>
           </div>
           <div className="table-wrap">
             <table className="data">
               <thead>
-                <tr><th>Person</th><th className="r">Buchungen</th><th className="r">Soll</th><th className="r">Ist</th><th className="r">Saldo</th><th className="r">Verrechenbar</th><th className="r">Spesen</th><th>Status</th><th className="r">Aktion</th></tr>
+                <tr><th>{tr("Person")}</th><th className="r">{tr("Buchungen")}</th><th className="r">{tr("Soll")}</th><th className="r">{tr("Ist")}</th><th className="r">{tr("Saldo")}</th><th className="r">{tr("Verrechenbar")}</th><th className="r">{tr("Spesen")}</th><th>{tr("Status")}</th><th className="r">{tr("Aktion")}</th></tr>
               </thead>
               <tbody>
                 {people.map((p) => {
@@ -295,28 +296,28 @@ export function Closing() {
                     <tr key={p.id}>
                       <td>
                         {p.name}
-                        {s !== "approved" && f.due !== null && f.due - f.hours > 2 && <div className="muted" style={{ fontSize: "0.74rem" }}>fehlen {fmt1(f.due - f.hours)} h</div>}
+                        {s !== "approved" && f.due !== null && f.due - f.hours > 2 && <div className="muted" style={{ fontSize: "0.74rem" }}>{tr("fehlen {0} h", fmt1(f.due - f.hours))}</div>}
                       </td>
                       <td className="r num">{f.count}</td>
                       <td className="r num">{f.due === null ? "–" : `${fmt1(f.due)} h`}</td>
-                      <td className="r num">{fmt1(f.hours)} h</td>
+                      <td className="r num">{fmt1(f.hours)}{" "}{tr("h")}</td>
                       <td className={`r num ${(f.balance ?? 0) < 0 ? "neg" : ""}`}>{f.balance === null ? "–" : signedH(f.balance)}</td>
-                      <td className="r num">{fmt1(f.billable)} h</td>
+                      <td className="r num">{fmt1(f.billable)}{" "}{tr("h")}</td>
                       <td className="r num">{fmtCHF2(f.expenses)}</td>
                       <td><Status s={s} /></td>
                       <td>
                         <div className="closing-actions">
                           {s !== "approved" && (
-                            <button className="btn small primary" onClick={() => act("approve", month, p.id, `${p.name}: ${fmtMonthLong(month)} freigegeben`)}>Freigeben</button>
+                            <button className="btn small primary" onClick={() => act("approve", month, p.id, tr("{0}: {1} freigegeben", p.name, fmtMonthLong(month)))}>{tr("Freigeben")}</button>
                           )}
                           {s === "submitted" && (
-                            <button className="btn small ghost" onClick={() => act("reopen", month, p.id, `${p.name}: zur Korrektur zurückgegeben`)}>Zurückweisen</button>
+                            <button className="btn small ghost" onClick={() => act("reopen", month, p.id, tr("{0}: zur Korrektur zurückgegeben", p.name))}>{tr("Zurückweisen")}</button>
                           )}
                           {s === "open" && month !== current && (
-                            <button className="btn small ghost" title="Per E-Mail an den Monatsabschluss erinnern" onClick={() => remind(p)}>Erinnern</button>
+                            <button className="btn small ghost" title={tr("Per E-Mail an den Monatsabschluss erinnern")} onClick={() => remind(p)}>{tr("Erinnern")}</button>
                           )}
                           {s === "approved" && role === "admin" && (
-                            <button className="btn small ghost" onClick={() => act("reopen", month, p.id, `${p.name}: ${fmtMonthLong(month)} wieder geöffnet`)}>Wieder öffnen</button>
+                            <button className="btn small ghost" onClick={() => act("reopen", month, p.id, tr("{0}: {1} wieder geöffnet", p.name, fmtMonthLong(month)))}>{tr("Wieder öffnen")}</button>
                           )}
                         </div>
                       </td>

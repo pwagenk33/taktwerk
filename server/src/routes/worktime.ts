@@ -19,8 +19,10 @@ import { absences, organizations, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { assertBookable, audit } from "./billing";
 import { todayZurich } from "./data";
+import { tr } from "@taktwerk/domain";
+import { trn, withLocale } from "../i18n";
 
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT");
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, tr("Datum im Format JJJJ-MM-TT"));
 
 type AbsenceRow = typeof absences.$inferSelect;
 const toDomain = (a: AbsenceRow): Absence => ({
@@ -59,7 +61,7 @@ async function assertAbsenceEditable(ctx: AppContext, actor: SessionUser, ownerI
 }
 
 const range = (a: { startDate: string; endDate: string; halfDay: boolean }) =>
-  `${a.startDate === a.endDate ? fmtDate(a.startDate) : `${fmtDate(a.startDate)} bis ${fmtDate(a.endDate)}`}${a.halfDay ? " (halbe Tage)" : ""}`;
+  `${a.startDate === a.endDate ? fmtDate(a.startDate) : tr("{0} bis {1}", fmtDate(a.startDate), fmtDate(a.endDate))}${a.halfDay ? tr(" (halbe Tage)") : ""}`;
 
 export async function worktimeRoutes(app: FastifyInstance) {
   const ctx = app.ctx;
@@ -80,9 +82,9 @@ export async function worktimeRoutes(app: FastifyInstance) {
       })
       .parse(req.body);
     const ownerId = body.employeeId ?? user.id;
-    if (ownerId !== user.id && !(await managesUser(ctx, user, ownerId))) throw new HttpError(403, "Du kannst nur eigene Absenzen erfassen.");
+    if (ownerId !== user.id && !(await managesUser(ctx, user, ownerId))) throw new HttpError(403, tr("Du kannst nur eigene Absenzen erfassen."));
     const [owner] = await ctx.db.select().from(users).where(and(eq(users.id, ownerId), eq(users.organizationId, user.organizationId))).limit(1);
-    if (!owner) throw new HttpError(404, "Person nicht gefunden.");
+    if (!owner) throw new HttpError(404, tr("Person nicht gefunden."));
     await assertAbsenceEditable(ctx, user, ownerId, body);
 
     const data = await absenceContext(ctx, user.organizationId, ownerId);
@@ -118,15 +120,15 @@ export async function worktimeRoutes(app: FastifyInstance) {
       const days = absenceDays(data, body);
       for (const lead of leads) {
         await ctx.mailer.send(
-          actionMail(org.settings.branding, {
+          withLocale(lead.locale, () => actionMail(org.settings.branding, {
             to: lead.email,
-            subject: `${org.settings.branding.appName}: Antrag ${body.type} von ${owner.name}`,
-            greeting: `Hallo ${lead.name.split(" ")[0]}`,
-            lines: [`${owner.name} beantragt ${body.type}: ${range(body)}, ${days} ${days === 1 ? "Arbeitstag" : "Arbeitstage"}.`, ...(body.note ? [`Bemerkung: ${body.note}`] : [])],
-            action: "Antrag ansehen",
+            subject: tr("{0}: Antrag {1} von {2}", org.settings.branding.appName, tr(body.type), owner.name),
+            greeting: tr("Hallo {0}", lead.name.split(" ")[0]),
+            lines: [trn(days, "{1} beantragt {2}: {3}, {0} Arbeitstag.", "{1} beantragt {2}: {3}, {0} Arbeitstage.", owner.name, tr(body.type), range(body)), ...(body.note ? [tr("Bemerkung: {0}", body.note)] : [])],
+            action: tr("Antrag ansehen"),
             url: appUrl(),
-            footer: "Bewilligen oder ablehnen kannst du unter Absenzen.",
-          }),
+            footer: tr("Bewilligen oder ablehnen kannst du unter Absenzen."),
+          })),
         );
       }
     }
@@ -138,10 +140,10 @@ export async function worktimeRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { approve } = z.object({ approve: z.boolean() }).parse(req.body);
     const [row] = await ctx.db.select().from(absences).where(and(eq(absences.id, id), eq(absences.organizationId, lead.organizationId))).limit(1);
-    if (!row) throw new HttpError(404, "Absenz nicht gefunden.");
-    if (row.userId === lead.id && !isLead(lead)) throw new HttpError(403, "Über den eigenen Antrag entscheidet die vorgesetzte Person.");
+    if (!row) throw new HttpError(404, tr("Absenz nicht gefunden."));
+    if (row.userId === lead.id && !isLead(lead)) throw new HttpError(403, tr("Über den eigenen Antrag entscheidet die vorgesetzte Person."));
     await assertManages(ctx, lead, row.userId);
-    if (row.status !== "requested") throw new HttpError(409, "Über diesen Antrag wurde bereits entschieden.");
+    if (row.status !== "requested") throw new HttpError(409, tr("Über diesen Antrag wurde bereits entschieden."));
     await assertAbsenceEditable(ctx, lead, row.userId, row);
     const status = approve ? "approved" : "rejected";
     await ctx.db.update(absences).set({ status, decidedBy: lead.id, decidedAt: new Date() }).where(eq(absences.id, id));
@@ -151,15 +153,15 @@ export async function worktimeRoutes(app: FastifyInstance) {
     if (owner && owner.id !== lead.id) {
       const org = await orgOf(lead.organizationId);
       await ctx.mailer.send(
-        actionMail(org.settings.branding, {
+        withLocale(owner.locale, () => actionMail(org.settings.branding, {
           to: owner.email,
-          subject: `${org.settings.branding.appName}: ${row.type} ${approve ? "bewilligt" : "abgelehnt"}`,
-          greeting: `Hallo ${owner.name.split(" ")[0]}`,
-          lines: [`${lead.name} hat deinen Antrag ${row.type} (${range(row)}) ${approve ? "bewilligt" : "abgelehnt"}.`],
-          action: "Arbeitszeit öffnen",
+          subject: approve ? tr("{0}: {1} bewilligt", org.settings.branding.appName, tr(row.type)) : tr("{0}: {1} abgelehnt", org.settings.branding.appName, tr(row.type)),
+          greeting: tr("Hallo {0}", owner.name.split(" ")[0]),
+          lines: [approve ? tr("{0} hat deinen Antrag {1} ({2}) bewilligt.", lead.name, tr(row.type), range(row)) : tr("{0} hat deinen Antrag {1} ({2}) abgelehnt.", lead.name, tr(row.type), range(row))],
+          action: tr("Arbeitszeit öffnen"),
           url: appUrl(),
-          footer: approve ? "Die Absenz ist jetzt in deinem Saldo berücksichtigt." : "Bei Fragen melde dich direkt bei der Person, die entschieden hat.",
-        }),
+          footer: approve ? tr("Die Absenz ist jetzt in deinem Saldo berücksichtigt.") : tr("Bei Fragen melde dich direkt bei der Person, die entschieden hat."),
+        })),
       );
     }
     return { ...toDomain(row), status };
@@ -170,10 +172,10 @@ export async function worktimeRoutes(app: FastifyInstance) {
     const user = requireUser(req);
     const { id } = req.params as { id: string };
     const [row] = await ctx.db.select().from(absences).where(and(eq(absences.id, id), eq(absences.organizationId, user.organizationId))).limit(1);
-    if (!row) throw new HttpError(404, "Absenz nicht gefunden.");
+    if (!row) throw new HttpError(404, tr("Absenz nicht gefunden."));
     if (!isLead(user)) {
-      if (row.userId !== user.id && !(await managesUser(ctx, user, row.userId))) throw new HttpError(403, "Du kannst nur eigene Absenzen löschen.");
-      if (row.status === "approved" && row.userId === user.id) throw new HttpError(409, "Eine bewilligte Absenz kann nur die vorgesetzte Person entfernen.");
+      if (row.userId !== user.id && !(await managesUser(ctx, user, row.userId))) throw new HttpError(403, tr("Du kannst nur eigene Absenzen löschen."));
+      if (row.status === "approved" && row.userId === user.id) throw new HttpError(409, tr("Eine bewilligte Absenz kann nur die vorgesetzte Person entfernen."));
     }
     await assertAbsenceEditable(ctx, user, row.userId, row);
     await ctx.db.delete(absences).where(eq(absences.id, id));
@@ -194,7 +196,7 @@ export async function worktimeRoutes(app: FastifyInstance) {
       })
       .parse(req.body);
     const [row] = await ctx.db.select().from(users).where(and(eq(users.id, id), eq(users.organizationId, admin.organizationId))).limit(1);
-    if (!row) throw new HttpError(404, "Person nicht gefunden.");
+    if (!row) throw new HttpError(404, tr("Person nicht gefunden."));
     const pick = (u: typeof row) => ({ workload: u.workload, vacationDays: u.vacationDays, trackingStart: u.trackingStart, overtimeCarry: u.overtimeCarry, vacationCarry: u.vacationCarry });
     const next = { ...pick(row), ...body };
     await ctx.db.update(users).set(body).where(eq(users.id, id));

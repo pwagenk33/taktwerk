@@ -25,6 +25,7 @@ import { Select } from "./ui/Select";
 import { api } from "./api";
 import { loadLocal, saveLocal } from "./store";
 import { HelpPanel } from "./ui/Help";
+import { tr } from "./i18n";
 
 /** Minimal Markdown for CHANGELOG.md: headings, bullets and paragraphs. */
 function Changelog({ markdown }: { markdown: string }) {
@@ -57,20 +58,20 @@ function VersionInfo({ mode }: { mode: "demo" | "api" }) {
     saveLocal("rt.seenVersion", __BUILD__.version);
     setSeen(__BUILD__.version);
     if (md !== null) return;
-    if (mode === "api") setMd(await api<{ markdown: string }>("/api/changelog").then((r) => r.markdown).catch(() => "Die Änderungsliste konnte nicht geladen werden."));
+    if (mode === "api") setMd(await api<{ markdown: string }>("/api/changelog").then((r) => r.markdown).catch(() => tr("Die Änderungsliste konnte nicht geladen werden.")));
     else setMd(DEMO_CHANGELOG);
   };
   return (
     <>
-      <button className="version" id="version-btn" title="Was ist neu?" onClick={() => void show()}>
-        Version {__BUILD__.version} · {__BUILD__.hash}{fresh && <span className="new-dot" aria-label="Neue Version" />}
+      <button className="version" id="version-btn" title={tr("Was ist neu?")} onClick={() => void show()}>
+        {tr("Version {0} ·", __BUILD__.version)}{" "}{__BUILD__.hash}{fresh && <span className="new-dot" aria-label={tr("Neue Version")} />}
       </button>
       {open && (
         <div className="overlay" onMouseDown={(ev) => ev.target === ev.currentTarget && setOpen(false)}>
-          <div className="dialog" role="dialog" aria-label="Was ist neu" id="changelog-dialog">
-            <div className="dialog-head"><h2>Was ist neu</h2><button className="btn small ghost" onClick={() => setOpen(false)} aria-label="Schliessen"><Icon.close /></button></div>
-            <p className="muted" style={{ margin: 0 }}>Version {__BUILD__.version} · Build {__BUILD__.hash} vom {__BUILD__.date.split("-").reverse().join(".")}</p>
-            {md === null ? <p className="muted">Lade …</p> : <Changelog markdown={md} />}
+          <div className="dialog" role="dialog" aria-label={tr("Was ist neu")} id="changelog-dialog">
+            <div className="dialog-head"><h2>{tr("Was ist neu")}</h2><button className="btn small ghost" onClick={() => setOpen(false)} aria-label={tr("Schliessen")}><Icon.close /></button></div>
+            <p className="muted" style={{ margin: 0 }}>{tr("Version {0} · Build {1} vom", __BUILD__.version, __BUILD__.hash)}{" "}{__BUILD__.date.split("-").reverse().join(".")}</p>
+            {md === null ? <p className="muted">{tr("Lade …")}</p> : <Changelog markdown={md} />}
           </div>
         </div>
       )}
@@ -79,21 +80,21 @@ function VersionInfo({ mode }: { mode: "demo" | "api" }) {
 }
 
 const PAGES = [
-  { id: "eingang", label: "Eingang", icon: Icon.inbox, lead: false },
-  { id: "zeit", label: "Zeiterfassung", icon: Icon.clock, lead: false },
-  { id: "arbeitszeit", label: "Absenzen", icon: Icon.balance, lead: false },
-  { id: "abschluss", label: "Monatsabschluss", icon: Icon.check, lead: false },
-  { id: "projekte", label: "Kunden & Projekte", icon: Icon.folder, lead: true },
-  { id: "planung", label: "Planung", icon: Icon.plan, lead: true },
-  { id: "reports", label: "Reports", icon: Icon.report, lead: true },
-  { id: "velocity", label: "Velocity", icon: Icon.velocity, lead: true },
-  { id: "dashboard", label: "Dashboard", icon: Icon.dashboard, lead: false },
-  { id: "einstellungen", label: "Einstellungen", icon: Icon.settings, lead: true, admin: true },
-  { id: "profil", label: "Profil", icon: Icon.settings, lead: false, hidden: true },
+  { id: "eingang", label: tr("Eingang"), icon: Icon.inbox, lead: false },
+  { id: "zeit", label: tr("Zeiterfassung"), icon: Icon.clock, lead: false },
+  { id: "arbeitszeit", label: tr("Absenzen"), icon: Icon.balance, lead: false },
+  { id: "abschluss", label: tr("Monatsabschluss"), icon: Icon.check, lead: false },
+  { id: "projekte", label: tr("Kunden & Projekte"), icon: Icon.folder, lead: true },
+  { id: "planung", label: tr("Planung"), icon: Icon.plan, lead: true },
+  { id: "reports", label: tr("Reports"), icon: Icon.report, lead: true },
+  { id: "velocity", label: tr("Velocity"), icon: Icon.velocity, lead: true },
+  { id: "dashboard", label: tr("Dashboard"), icon: Icon.dashboard, lead: false },
+  { id: "einstellungen", label: tr("Einstellungen"), icon: Icon.settings, lead: true, admin: true },
+  { id: "profil", label: tr("Profil"), icon: Icon.settings, lead: false, hidden: true },
 ] as const;
 
 type PageId = (typeof PAGES)[number]["id"];
-const ROLE_LABEL: Record<Role, string> = { admin: "Admin · Anna Keller", consultant: "Consultant · Marco Brunner", employee: "Mitarbeiterin · Lea Meier", auditor: "Treuhand (nur lesen) · Anna Keller", customer: "Kundin · Claudia Steiner" };
+const ROLE_LABEL: Record<Role, string> = { admin: tr("Admin · Anna Keller"), consultant: tr("Consultant · Marco Brunner"), employee: tr("Mitarbeiterin · Lea Meier"), auditor: tr("Treuhand (nur lesen) · Anna Keller"), customer: tr("Kundin · Claudia Steiner") };
 /** Lead pages a project lead may open as well. */
 const PROJECT_LEAD_PAGES: PageId[] = ["projekte", "planung", "reports"];
 /** Pages shown in the phone tab bar; the rest sit behind "Mehr". */
@@ -106,9 +107,9 @@ const RAIL_PROJECTS = 6;
 const SEVERITY = { over: 0, risk: 1, ok: 2 } as const;
 
 const THEMES: { id: Theme; label: string; icon: () => JSX.Element }[] = [
-  { id: "light", label: "Hell", icon: Icon.sun },
-  { id: "dark", label: "Dunkel", icon: Icon.moon },
-  { id: "system", label: "Wie das System", icon: Icon.monitor },
+  { id: "light", label: tr("Hell"), icon: Icon.sun },
+  { id: "dark", label: tr("Dunkel"), icon: Icon.moon },
+  { id: "system", label: tr("Wie das System"), icon: Icon.monitor },
 ];
 
 /** "#projekte/c/abc" → page "projekte"; the rest of the hash is read by the page itself. */
@@ -133,7 +134,7 @@ function HeaderTimer() {
     const id = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [t?.runningSince]);
-  if (!t) return <button id="timer-start" className="btn timer-btn" title="Stoppuhr starten" onClick={() => timer.start()}><Icon.play /><span>Stoppuhr</span></button>;
+  if (!t) return <button id="timer-start" className="btn timer-btn" title={tr("Stoppuhr starten")} onClick={() => timer.start()}><Icon.play /><span>{tr("Stoppuhr")}</span></button>;
   const sec = elapsedOf(t);
   const stop = () => {
     const r = timer.stop();
@@ -143,13 +144,13 @@ function HeaderTimer() {
     requestNewEntry({ date: local.toISOString().slice(0, 10), startTime: `${String(d.getHours()).padStart(2, "0")}:${String(Math.floor(d.getMinutes() / 15) * 15).padStart(2, "0")}`, hours: hoursFromSeconds(r.seconds) });
   };
   return (
-    <div className={`timer-chip ${t.runningSince ? "running" : "paused"}`} role="group" aria-label="Stoppuhr">
+    <div className={`timer-chip ${t.runningSince ? "running" : "paused"}`} role="group" aria-label={tr("Stoppuhr")}>
       <span className="timer-dot" />
       <span className="timer-time num">{fmtTimer(sec)}</span>
       {t.runningSince
-        ? <button id="timer-pause" className="timer-ctl" title="Pause" aria-label="Pause" onClick={() => timer.pause()}>❚❚</button>
-        : <button id="timer-resume" className="timer-ctl" title="Weiter" aria-label="Weiter" onClick={() => timer.resume()}>▶</button>}
-      <button id="timer-stop" className="timer-ctl stop" title="Stoppen und buchen" aria-label="Stoppen und buchen" onClick={stop}>■</button>
+        ? <button id="timer-pause" className="timer-ctl" title={tr("Pause")} aria-label={tr("Pause")} onClick={() => timer.pause()}>❚❚</button>
+        : <button id="timer-resume" className="timer-ctl" title={tr("Weiter")} aria-label={tr("Weiter")} onClick={() => timer.resume()}>▶</button>}
+      <button id="timer-stop" className="timer-ctl stop" title={tr("Stoppen und buchen")} aria-label={tr("Stoppen und buchen")} onClick={stop}>■</button>
     </div>
   );
 }
@@ -221,14 +222,14 @@ export function App() {
     <div className="shell" data-readonly={scope.readOnly || locked || undefined}>
       <aside className="rail">
         <div className="brand"><BrandMark logo={branding.logo} size={22} /><span>{branding.appName}</span></div>
-        <nav className="nav" aria-label="Hauptnavigation">
+        <nav className="nav" aria-label={tr("Hauptnavigation")}>
           {visible.filter((p) => DAILY.includes(p.id)).map((p) => navLink(p, p.id === "eingang" ? inboxCount : undefined))}
         </nav>
         {railProjects.length > 0 && (
-          <nav className="nav" aria-label="Projekte">
-            <span className="nav-sec">Projekte</span>
+          <nav className="nav" aria-label={tr("Projekte")}>
+            <span className="nav-sec">{tr("Projekte")}</span>
             {railProjects.map((r) => (
-              <a key={r.project.id} href={`#projekte/p/${r.project.id}`} className={openProject === r.project.id ? "active" : ""} title={`${r.customer.name} · ${r.project.name} · ${r.status === "over" ? "über Budget" : r.status === "risk" ? "knapp" : "im Budget"}`}>
+              <a key={r.project.id} href={`#projekte/p/${r.project.id}`} className={openProject === r.project.id ? "active" : ""} title={`${r.customer.name} · ${r.project.name} · ${r.status === "over" ? tr("über Budget") : r.status === "risk" ? "knapp" : tr("im Budget")}`}>
                 <BudgetRing ratio={r.retainer ? Math.max(r.retainer.used, r.retainer.avg3) / r.retainer.hoursPerMonth : r.budget > 0 ? r.forecastCost / r.budget : 0} status={r.status} size={14} />
                 <span className="nm">{r.project.name}</span>
               </a>
@@ -236,23 +237,23 @@ export function App() {
           </nav>
         )}
         {evaluate.length > 0 && (
-          <nav className="nav" aria-label="Auswerten">
-            <span className="nav-sec">Auswerten</span>
+          <nav className="nav" aria-label={tr("Auswerten")}>
+            <span className="nav-sec">{tr("Auswerten")}</span>
             {evaluate.map((p) => navLink(p))}
           </nav>
         )}
         <div className="rail-foot">
           {settings && <nav className="nav">{navLink(settings)}</nav>}
           {mode === "demo" && (
-            <Select id="role-select" ariaLabel="Rolle" value={role} onChange={(v) => setRole(v as Role)} options={(Object.keys(ROLE_LABEL) as Role[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))} small />
+            <Select id="role-select" ariaLabel={tr("Rolle")} value={role} onChange={(v) => setRole(v as Role)} options={(Object.keys(ROLE_LABEL) as Role[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))} small />
           )}
           <div className="rail-tools">
-            <div className="seg theme-seg" role="radiogroup" aria-label="Darstellung">
+            <div className="seg theme-seg" role="radiogroup" aria-label={tr("Darstellung")}>
               {THEMES.map((t) => (
                 <button key={t.id} id={`theme-${t.id}`} role="radio" aria-checked={theme === t.id} className={theme === t.id ? "on" : ""} title={t.label} aria-label={t.label} onClick={() => setTheme(t.id)}><t.icon /></button>
               ))}
             </div>
-            <button className="btn small ghost logout" onClick={logout} title="Abmelden" aria-label="Abmelden"><Icon.logout /></button>
+            <button className="btn small ghost logout" onClick={logout} title={tr("Abmelden")} aria-label={tr("Abmelden")}><Icon.logout /></button>
           </div>
           <VersionInfo mode={mode} />
         </div>
@@ -260,25 +261,25 @@ export function App() {
 
       <div className="main-col">
         <header className="topbar">
-          <button className="brand brand-phone" onClick={() => (location.hash = "#eingang")} aria-label="Zum Eingang"><BrandMark logo={branding.logo} /></button>
-          <button id="open-palette" className="search-btn" onClick={() => setPalette(true)} aria-label="Suchen oder Befehl eingeben">
+          <button className="brand brand-phone" onClick={() => (location.hash = "#eingang")} aria-label={tr("Zum Eingang")}><BrandMark logo={branding.logo} /></button>
+          <button id="open-palette" className="search-btn" onClick={() => setPalette(true)} aria-label={tr("Suchen oder Befehl eingeben")}>
             <Icon.search />
-            <span>Suchen oder Befehl …</span>
-            <kbd>⌘K</kbd>
+            <span>{tr("Suchen oder Befehl …")}</span>
+            <kbd>{tr("⌘K")}</kbd>
           </button>
-          {pending > 0 && <button className="btn small offline-chip" title="Buchungen, die auf Netz warten. Klick versucht es erneut." onClick={() => void flushOutbox()}>⇅ {pending} offline</button>}
+          {pending > 0 && <button className="btn small offline-chip" title={tr("Buchungen, die auf Netz warten. Klick versucht es erneut.")} onClick={() => void flushOutbox()}>{tr("⇅ {0} offline", pending)}</button>}
           {scope.readOnly || locked ? (
-            <span className="ro-chip" title={locked ? "Ohne aktives Paket sind die Daten nur lesbar" : "Treuhand-Zugang: alles einsehen, nichts ändern"}>Nur lesen</span>
+            <span className="ro-chip" title={locked ? tr("Ohne aktives Paket sind die Daten nur lesbar") : tr("Treuhand-Zugang: alles einsehen, nichts ändern")}>{tr("Nur lesen")}</span>
           ) : (
             <>
               <HeaderTimer />
               <button id="topbar-new" className="btn primary new-btn" onClick={() => requestNewEntry()}>
-                <span className="plus">+</span><span>Zeit buchen</span><kbd>N</kbd>
+                <span className="plus">+</span><span>{tr("Zeit buchen")}</span><kbd>{tr("N")}</kbd>
               </button>
             </>
           )}
-          <button id="open-help" className="icon-btn help-btn" title="Hilfe (?)" aria-label="Hilfe" onClick={() => setHelp(true)}>?</button>
-          <a href="#profil" className={`avatar-link ${current === "profil" ? "active" : ""}`} title={`${name} · Profil`} aria-label="Profil">
+          <button id="open-help" className="icon-btn help-btn" title={tr("Hilfe (?)")} aria-label={tr("Hilfe")} onClick={() => setHelp(true)}>?</button>
+          <a href="#profil" className={`avatar-link ${current === "profil" ? "active" : ""}`} title={tr("{0} · Profil", name)} aria-label={tr("Profil")}>
             <span className="who">{initials}</span>
           </a>
         </header>
@@ -299,18 +300,18 @@ export function App() {
         </main>
       </div>
 
-      <nav className="tabbar" aria-label="Hauptnavigation">
+      <nav className="tabbar" aria-label={tr("Hauptnavigation")}>
         {tabs.map((p) => (
           <a key={p.id} href={`#${p.id}`} className={current === p.id ? "active" : ""}><p.icon /><span>{p.label.split(" ")[0]}</span></a>
         ))}
-        <button className={more ? "active" : ""} onClick={() => setMore((m) => !m)} aria-expanded={more}><Icon.grip /><span>Mehr</span></button>
+        <button className={more ? "active" : ""} onClick={() => setMore((m) => !m)} aria-expanded={more}><Icon.grip /><span>{tr("Mehr")}</span></button>
       </nav>
       {more && (
         <div className="more-sheet" onClick={() => setMore(false)}>
           <div className="sheet">
             {rest.map((p) => <a key={p.id} href={`#${p.id}`} className={current === p.id ? "active" : ""}><p.icon />{p.label}</a>)}
-            <a href="#profil"><span className="who small">{initials}</span>Profil</a>
-            <button onClick={logout}><Icon.logout />Abmelden</button>
+            <a href="#profil"><span className="who small">{initials}</span>{tr("Profil")}</a>
+            <button onClick={logout}><Icon.logout />{tr("Abmelden")}</button>
           </div>
         </div>
       )}

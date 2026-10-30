@@ -12,9 +12,10 @@ import { RESERVED_SLUGS, createOrganization, slugOf } from "../seed";
 import { requireFeature, saasOn, seatsUsed } from "../saas";
 import { createPasswordToken, passwordLink, signIn } from "./auth";
 import { periodEnd } from "./subscription";
+import { tr } from "@taktwerk/domain";
 
-const slug = z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/, "Kürzel: Kleinbuchstaben, Ziffern und Bindestriche, 2–60 Zeichen");
-const host = z.string().trim().toLowerCase().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/, "Domain wie zeit.firma.ch, ohne https://");
+const slug = z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/, tr("Kürzel: Kleinbuchstaben, Ziffern und Bindestriche, 2–60 Zeichen"));
+const host = z.string().trim().toLowerCase().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/, tr("Domain wie zeit.firma.ch, ohne https://"));
 
 /** New companies in SaaS mode start with a trial of the chosen package; without Stripe the operator bills by invoice. */
 const trialFor = (ctx: AppContext, plan: "start" | "team" | "business" = "team") =>
@@ -28,7 +29,7 @@ export async function platformRoutes(app: FastifyInstance) {
 
   const requirePlatformAdmin = (req: Parameters<typeof requireUser>[0]) => {
     const u = requireUser(req);
-    if (!u.platformAdmin) throw new HttpError(403, "Nur der Betreiber der Installation darf Firmen verwalten.");
+    if (!u.platformAdmin) throw new HttpError(403, tr("Nur der Betreiber der Installation darf Firmen verwalten."));
     return u;
   };
   const view = async (o: typeof organizations.$inferSelect) => {
@@ -46,7 +47,7 @@ export async function platformRoutes(app: FastifyInstance) {
   };
   const emailFree = async (email: string, username: string) => {
     const [clash] = await ctx.db.select({ id: users.id }).from(users).where(or(eq(users.username, username), sql`lower(${users.email}) = ${email}`)).limit(1);
-    if (clash) throw new HttpError(409, "Für diese E-Mail-Adresse gibt es bereits ein Konto.");
+    if (clash) throw new HttpError(409, tr("Für diese E-Mail-Adresse gibt es bereits ein Konto."));
   };
 
   app.get("/api/platform/orgs", async (req) => {
@@ -67,7 +68,7 @@ export async function platformRoutes(app: FastifyInstance) {
     await emailFree(body.adminEmail, body.adminEmail);
     if (body.domain) {
       const [d] = await ctx.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.domain, body.domain)).limit(1);
-      if (d) throw new HttpError(409, "Diese Domain ist bereits einer Firma zugeordnet.");
+      if (d) throw new HttpError(409, tr("Diese Domain ist bereits einer Firma zugeordnet."));
     }
     const { orgId, userId } = await createOrganization(ctx.db, { orgName: body.name, name: body.adminName, email: body.adminEmail, username: body.adminEmail, slug: body.slug, domain: body.domain, trial: trialFor(ctx), onboarding: true });
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
@@ -75,12 +76,12 @@ export async function platformRoutes(app: FastifyInstance) {
     await ctx.mailer.send(
       actionMail(DEFAULT_BRANDING, {
         to: body.adminEmail,
-        subject: `${DEFAULT_BRANDING.appName}: Zugang für ${body.name}`,
-        greeting: `Hallo ${body.adminName}`,
-        lines: [`${me.name} hat ${body.name} auf ${DEFAULT_BRANDING.appName} eingerichtet. Du bist Admin und lädst dein Team selbst ein.`, `Dein Benutzername ist «${body.adminEmail}». Lege über den Link ein Passwort fest.`],
-        action: "Passwort festlegen",
+        subject: tr("{0}: Zugang für {1}", DEFAULT_BRANDING.appName, body.name),
+        greeting: tr("Hallo {0}", body.adminName),
+        lines: [tr("{0} hat {1} auf {2} eingerichtet. Du bist Admin und lädst dein Team selbst ein.", me.name, body.name, DEFAULT_BRANDING.appName), tr("Dein Benutzername ist «{0}». Lege über den Link ein Passwort fest.", body.adminEmail)],
+        action: tr("Passwort festlegen"),
         url: passwordLink(ctx, token, org),
-        footer: "Der Link ist sieben Tage gültig.",
+        footer: tr("Der Link ist sieben Tage gültig."),
       }),
     );
     return reply.status(201).send(await view(org!));
@@ -103,15 +104,15 @@ export async function platformRoutes(app: FastifyInstance) {
       })
       .parse(req.body);
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, id)).limit(1);
-    if (!org) throw new HttpError(404, "Firma nicht gefunden.");
+    if (!org) throw new HttpError(404, tr("Firma nicht gefunden."));
     if (body.domain) {
       const [d] = await ctx.db.select({ id: organizations.id }).from(organizations).where(and(eq(organizations.domain, body.domain), ne(organizations.id, id))).limit(1);
-      if (d) throw new HttpError(409, "Diese Domain ist bereits einer Firma zugeordnet.");
+      if (d) throw new HttpError(409, tr("Diese Domain ist bereits einer Firma zugeordnet."));
     }
-    if (body.slug && RESERVED_SLUGS.includes(body.slug)) throw new HttpError(400, "Dieses Kürzel ist für die Installation reserviert.");
+    if (body.slug && RESERVED_SLUGS.includes(body.slug)) throw new HttpError(400, tr("Dieses Kürzel ist für die Installation reserviert."));
     if (body.slug) {
       const [d] = await ctx.db.select({ id: organizations.id }).from(organizations).where(and(eq(organizations.slug, body.slug), ne(organizations.id, id))).limit(1);
-      if (d) throw new HttpError(409, "Dieses Kürzel ist bereits vergeben.");
+      if (d) throw new HttpError(409, tr("Dieses Kürzel ist bereits vergeben."));
     }
     const { trialEndsAt, ...rest } = body;
     // «Paid, set active» by hand: a new period starts unless one is still running.
@@ -147,21 +148,21 @@ export async function platformRoutes(app: FastifyInstance) {
       const org = await organizationForHost(ctx.db, domain, base);
       ok = !!org && org.active && (org.domain === domain || (!!base && domain === `${org.slug}.${base}`));
     }
-    return reply.status(ok ? 200 : 404).send(ok ? "ok" : "unbekannt");
+    return reply.status(ok ? 200 : 404).send(ok ? "ok" : tr("unbekannt"));
   });
 
   /** Business: a company's own domain (e.g. zeit.firma.ch, CNAME to the installation). */
   app.put("/api/org/domain", async (req) => {
     const admin = requireUser(req);
-    if (admin.role !== "admin") throw new HttpError(403, "Nur Admins können die Adresse ändern.");
+    if (admin.role !== "admin") throw new HttpError(403, tr("Nur Admins können die Adresse ändern."));
     requireFeature(admin, "customDomain");
     const { domain } = z.object({ domain: host.nullable() }).parse(req.body);
     const base = ctx.config.SAAS_BASE_DOMAIN?.toLowerCase();
     if (domain && (domain === new URL(ctx.config.APP_URL).hostname || (base && (domain === base || domain.endsWith(`.${base}`)))))
-      throw new HttpError(400, "Bitte eine Domain deiner Firma verwenden, z. B. zeit.firma.ch.");
+      throw new HttpError(400, tr("Bitte eine Domain deiner Firma verwenden, z. B. zeit.firma.ch."));
     if (domain) {
       const [d] = await ctx.db.select({ id: organizations.id }).from(organizations).where(and(eq(organizations.domain, domain), ne(organizations.id, admin.organizationId))).limit(1);
-      if (d) throw new HttpError(409, "Diese Domain ist bereits einer Firma zugeordnet.");
+      if (d) throw new HttpError(409, tr("Diese Domain ist bereits einer Firma zugeordnet."));
     }
     await ctx.db.update(organizations).set({ domain }).where(eq(organizations.id, admin.organizationId));
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, admin.organizationId)).limit(1);
@@ -171,9 +172,9 @@ export async function platformRoutes(app: FastifyInstance) {
 
   /** Self-service: a company registers and its first admin is signed in right away. */
   app.post("/api/orgs/register", async (req, reply) => {
-    if (ctx.config.REGISTRATION_OPEN !== "true") throw new HttpError(404, "Die Registrierung ist auf dieser Installation nicht freigeschaltet.");
+    if (ctx.config.REGISTRATION_OPEN !== "true") throw new HttpError(404, tr("Die Registrierung ist auf dieser Installation nicht freigeschaltet."));
     const r = regs.get(req.ip);
-    if (r && r.count >= 5 && r.until > Date.now()) throw new HttpError(429, "Zu viele Registrierungen. Bitte später erneut versuchen.");
+    if (r && r.count >= 5 && r.until > Date.now()) throw new HttpError(429, tr("Zu viele Registrierungen. Bitte später erneut versuchen."));
     const body = z
       .object({ company: z.string().trim().min(2).max(200), name: z.string().trim().min(1).max(160), email: z.string().trim().toLowerCase().email(), password: z.string().max(500), plan: z.enum(["start", "team", "business"]).optional() })
       .parse(req.body);
@@ -188,14 +189,14 @@ export async function platformRoutes(app: FastifyInstance) {
     await ctx.mailer.send(
       actionMail(DEFAULT_BRANDING, {
         to: body.email,
-        subject: `Willkommen bei ${DEFAULT_BRANDING.appName}`,
-        greeting: `Hallo ${body.name}`,
+        subject: tr("Willkommen bei {0}", DEFAULT_BRANDING.appName),
+        greeting: tr("Hallo {0}", body.name),
         lines: [
-          `${body.company} ist eingerichtet. Du bist Admin: Lade dein Team unter Einstellungen → Benutzer ein und lege Kunden und Projekte an.`,
+          tr("{0} ist eingerichtet. Du bist Admin: Lade dein Team unter Einstellungen → Benutzer ein und lege Kunden und Projekte an.", body.company),
           `Anmeldung: ${origin} mit «${body.email}».`,
-          ...(saasOn(ctx) ? [`Du testest das Paket ${planById(body.plan ?? "team").name} ${TRIAL_DAYS} Tage lang kostenlos und unverbindlich. Ein Paket wählst du jederzeit unter Einstellungen → Abo.`] : []),
+          ...(saasOn(ctx) ? [tr("Du testest das Paket {0} {1} Tage lang kostenlos und unverbindlich. Ein Paket wählst du jederzeit unter Einstellungen → Abo.", planById(body.plan ?? "team").name, TRIAL_DAYS)] : []),
         ],
-        footer: "Fragen? Antworte einfach auf diese E-Mail.",
+        footer: tr("Fragen? Antworte einfach auf diese E-Mail."),
       }),
     );
     if (ctx.config.OPERATOR_EMAIL)
@@ -203,10 +204,10 @@ export async function platformRoutes(app: FastifyInstance) {
         .send(
           actionMail(DEFAULT_BRANDING, {
             to: ctx.config.OPERATOR_EMAIL,
-            subject: `Neue Firma: ${body.company}`,
-            greeting: "Hallo",
-            lines: [`${body.company} (${s}) hat sich registriert.`, `Admin: ${body.name}, ${body.email}`, `Paket: ${saasOn(ctx) ? `${planById(body.plan ?? "team").name}, Testphase` : "ohne Abo"}`, `Adresse: ${origin}`],
-            footer: "Diese Meldung geht an OPERATOR_EMAIL.",
+            subject: tr("Neue Firma: {0}", body.company),
+            greeting: tr("Hallo"),
+            lines: [tr("{0} ({1}) hat sich registriert.", body.company, s), `Admin: ${body.name}, ${body.email}`, `Paket: ${saasOn(ctx) ? tr("{0}, Testphase", planById(body.plan ?? "team").name) : tr("ohne Abo")}`, `Adresse: ${origin}`],
+            footer: tr("Diese Meldung geht an OPERATOR_EMAIL."),
           }),
         )
         .catch((e) => req.log.warn({ err: e }, "operator mail failed"));

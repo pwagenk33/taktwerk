@@ -1,6 +1,7 @@
 // Working time: target hours (Soll) from Pensum and holidays, worked hours (Ist), overtime balance and vacation.
 import { monthOf } from "./calc";
 import type { Absence, AbsenceType, Dataset, Employee, Holiday, WorkModel } from "./types";
+import { tr } from "./i18n";
 
 export const ABSENCE_TYPES: AbsenceType[] = ["Ferien", "Krankheit", "Unfall", "Militär/Zivildienst", "Weiterbildung", "Kompensation", "Sonstiges"];
 
@@ -58,15 +59,15 @@ export function defaultHolidays(year: number): Holiday[] {
   const e = easter(year);
   const h = (date: string, name: string, fraction = 1) => ({ date, name, fraction });
   return [
-    h(`${year}-01-01`, "Neujahr"),
-    h(`${year}-01-02`, "Berchtoldstag"),
-    h(addDays(e, -2), "Karfreitag"),
-    h(addDays(e, 1), "Ostermontag"),
-    h(addDays(e, 39), "Auffahrt"),
-    h(addDays(e, 50), "Pfingstmontag"),
-    h(`${year}-08-01`, "Bundesfeier"),
-    h(`${year}-12-25`, "Weihnachten"),
-    h(`${year}-12-26`, "Stephanstag"),
+    h(`${year}-01-01`, tr("Neujahr")),
+    h(`${year}-01-02`, tr("Berchtoldstag")),
+    h(addDays(e, -2), tr("Karfreitag")),
+    h(addDays(e, 1), tr("Ostermontag")),
+    h(addDays(e, 39), tr("Auffahrt")),
+    h(addDays(e, 50), tr("Pfingstmontag")),
+    h(`${year}-08-01`, tr("Bundesfeier")),
+    h(`${year}-12-25`, tr("Weihnachten")),
+    h(`${year}-12-26`, tr("Stephanstag")),
   ];
 }
 
@@ -241,13 +242,13 @@ export function vacationSummary(data: Dataset, employeeId: string, year = Number
 
 /** German error message if an absence is invalid or overlaps an existing one of the same person. */
 export function absenceProblem(data: Dataset, a: Omit<Absence, "id" | "status">, ignoreId?: string): string | null {
-  if (a.endDate < a.startDate) return "Das Enddatum liegt vor dem Startdatum.";
-  if (daysBetween(a.startDate, a.endDate).length > 366) return "Eine Absenz kann höchstens ein Jahr dauern.";
-  if (absenceDays(data, a) === 0) return "Im gewählten Zeitraum liegt kein Arbeitstag.";
+  if (a.endDate < a.startDate) return tr("Das Enddatum liegt vor dem Startdatum.");
+  if (daysBetween(a.startDate, a.endDate).length > 366) return tr("Eine Absenz kann höchstens ein Jahr dauern.");
+  if (absenceDays(data, a) === 0) return tr("Im gewählten Zeitraum liegt kein Arbeitstag.");
   const clash = (data.absences ?? []).find(
     (x) => x.id !== ignoreId && x.employeeId === a.employeeId && x.status !== "rejected" && x.startDate <= a.endDate && x.endDate >= a.startDate,
   );
-  if (clash) return `Überschneidet sich mit ${clash.type} vom ${fmtDate(clash.startDate)} bis ${fmtDate(clash.endDate)}.`;
+  if (clash) return tr("Überschneidet sich mit {0} vom {1} bis {2}.", tr(clash.type), fmtDate(clash.startDate), fmtDate(clash.endDate));
   return null;
 }
 

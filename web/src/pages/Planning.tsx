@@ -6,14 +6,15 @@ import { useStore } from "../store";
 import { Icon } from "../ui/components";
 import { Select } from "../ui/Select";
 import { Dialog } from "../ui/Dialog";
+import { tr } from "../i18n";
 
 const WEEKS = 12;
-const STATUS_TITLE: Record<LoadStatus, string> = { idle: "Noch Luft", ok: "Gut ausgelastet", tight: "Knapp", over: "Überplant", none: "Keine Kapazität" };
+const STATUS_TITLE: Record<LoadStatus, string> = { idle: tr("Noch Luft"), ok: tr("Gut ausgelastet"), tight: tr("Knapp"), over: tr("Überplant"), none: tr("Keine Kapazität") };
 
 const h = (v: number) => fmt1(v).replace(/[.,]0$/, "");
 
 function BottleneckStrip({ items, onPick }: { items: Bottleneck[]; onPick: (b: Bottleneck) => void }) {
-  if (items.length === 0) return <p className="plan-calm">Keine Engpässe in den nächsten {WEEKS} Wochen.</p>;
+  if (items.length === 0) return <p className="plan-calm">{tr("Keine Engpässe in den nächsten {0} Wochen.", WEEKS)}</p>;
   return (
     <div className="plan-warnings" id="plan-warnings">
       {items.slice(0, 8).map((b) => (
@@ -21,10 +22,10 @@ function BottleneckStrip({ items, onPick }: { items: Bottleneck[]; onPick: (b: B
           <strong>{b.kind === "person" ? `${weekLabel(b.week!)} · ${b.name}` : b.name}</strong>
           <span>
             {b.kind === "person"
-              ? `${h(b.planned)} h geplant bei ${h(b.limit)} h Kapazität (+${h(b.planned - b.limit)} h)`
-              : `${h(b.planned)} h geplant, Restbudget reicht für ${h(b.limit)} h`}
+              ? tr("{0} h geplant bei {1} h Kapazität (+{2} h)", h(b.planned), h(b.limit), h(b.planned - b.limit))
+              : tr("{0} h geplant, Restbudget reicht für {1} h", h(b.planned), h(b.limit))}
           </span>
-          <small>{b.inWeeks === null ? "Projekt überplant" : b.inWeeks === 0 ? "diese Woche" : b.inWeeks === 1 ? "nächste Woche" : `in ${b.inWeeks} Wochen`}</small>
+          <small>{b.inWeeks === null ? tr("Projekt überplant") : b.inWeeks === 0 ? tr("diese Woche") : b.inWeeks === 1 ? tr("nächste Woche") : tr("in {0} Wochen", b.inWeeks)}</small>
         </button>
       ))}
     </div>
@@ -34,7 +35,7 @@ function BottleneckStrip({ items, onPick }: { items: Bottleneck[]; onPick: (b: B
 function CellBar({ c }: { c: PlanCell }) {
   const pct = c.capacity > 0 ? Math.min(100, (c.planned / c.capacity) * 100) : c.planned > 0 ? 100 : 0;
   return (
-    <span className={`plan-cell ${c.status}`} title={`${STATUS_TITLE[c.status]} · ${h(c.planned)} h geplant, ${h(c.capacity)} h Kapazität${c.booked ? `, ${h(c.booked)} h gebucht` : ""}`}>
+    <span className={`plan-cell ${c.status}`} title={tr("{0} · {1} h geplant, {2} h Kapazität{3}", STATUS_TITLE[c.status], h(c.planned), h(c.capacity), c.booked ? tr(", {0} h gebucht", h(c.booked)) : "")}>
       <span className="plan-nums"><b>{h(c.planned)}</b><small>/{h(c.capacity)}</small></span>
       <span className="plan-bar"><span style={{ width: `${pct}%` }} /></span>
     </span>
@@ -56,23 +57,23 @@ function CellEditor({ employeeId, week, onClose }: { employeeId: string; week: s
   const { from, to } = weekRange(week);
   const save = async (projectId: string, hours: number) => {
     await setAllocation(employeeId, projectId, week, hours);
-    if (hours === 0) notify("Reservation entfernt");
+    if (hours === 0) notify(tr("Reservation entfernt"));
   };
   const total = rows.reduce((s, a) => s + a.hours, 0);
   return (
-    <Dialog id="plan-editor" title={`${person?.name} · ${weekLabel(week)}`} subtitle={`${fmtDate(from).slice(0, 5)} bis ${fmtDate(to).slice(0, 5)}. Stunden pro Projekt reservieren; Änderungen gelten sofort.`} onClose={onClose} footer={<><span className="muted num">Total {h(total)} h</span><button type="button" className="btn primary" onClick={onClose}>Fertig</button></>}>
+    <Dialog id="plan-editor" title={`${person?.name} · ${weekLabel(week)}`} subtitle={tr("{0} bis {1}. Stunden pro Projekt reservieren; Änderungen gelten sofort.", fmtDate(from).slice(0, 5), fmtDate(to).slice(0, 5))} onClose={onClose} footer={<><span className="muted num">{tr("Total {0} h", h(total))}</span><button type="button" className="btn primary" onClick={onClose}>{tr("Fertig")}</button></>}>
       <div className="plan-editor-rows">
-        {rows.length === 0 && <p className="muted">Noch nichts geplant. Projekt wählen und Stunden eintragen.</p>}
+        {rows.length === 0 && <p className="muted">{tr("Noch nichts geplant. Projekt wählen und Stunden eintragen.")}</p>}
         {rows.map((a) => (
           <div className="plan-editor-row" key={a.id}>
             <span>{projectName(a.projectId)}</span>
             <input id={`al-${a.projectId}`} type="number" step={0.5} min={0} max={100} defaultValue={a.hours} onBlur={(e) => { const v = Number(e.target.value); if (v !== a.hours) void save(a.projectId, v); }} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-            <span className="muted">h</span>
-            <button className="btn small ghost" onClick={() => void save(a.projectId, 0)} title="Entfernen" aria-label="Entfernen"><Icon.trash /></button>
+            <span className="muted">{tr("h")}</span>
+            <button className="btn small ghost" onClick={() => void save(a.projectId, 0)} title={tr("Entfernen")} aria-label={tr("Entfernen")}><Icon.trash /></button>
           </div>
         ))}
         <div className="plan-editor-add">
-          <Select id="al-project" ariaLabel="Projekt hinzufügen" placeholder="Projekt hinzufügen …" value={adding} onChange={(v) => { setAdding(""); if (v) void save(v, 8).then(() => notify("8 h reserviert, Stunden anpassen")); }} options={free.map((p) => ({ value: p.id, label: projectName(p.id) }))} small />
+          <Select id="al-project" ariaLabel={tr("Projekt hinzufügen")} placeholder={tr("Projekt hinzufügen …")} value={adding} onChange={(v) => { setAdding(""); if (v) void save(v, 8).then(() => notify(tr("8 h reserviert, Stunden anpassen"))); }} options={free.map((p) => ({ value: p.id, label: projectName(p.id) }))} small />
         </div>
       </div>
     </Dialog>
@@ -98,17 +99,17 @@ export function Planning() {
     <>
       <div className="page-head">
         <div>
-          <h1>Ressourcenplanung</h1>
-          <p className="sub">Geplante Stunden pro Person und Woche gegen die Kapazität nach Pensum, Ferien und Feiertagen.</p>
+          <h1>{tr("Ressourcenplanung")}</h1>
+          <p className="sub">{tr("Geplante Stunden pro Person und Woche gegen die Kapazität nach Pensum, Ferien und Feiertagen.")}</p>
         </div>
         <div className="toolbar">
-          <div className="seg" role="radiogroup" aria-label="Ansicht">
-            <button id="plan-people" role="radio" aria-checked={view === "people"} className={view === "people" ? "on" : ""} onClick={() => setView("people")}>Personen</button>
-            <button id="plan-projects" role="radio" aria-checked={view === "projects"} className={view === "projects" ? "on" : ""} onClick={() => setView("projects")}>Projekte</button>
+          <div className="seg" role="radiogroup" aria-label={tr("Ansicht")}>
+            <button id="plan-people" role="radio" aria-checked={view === "people"} className={view === "people" ? "on" : ""} onClick={() => setView("people")}>{tr("Personen")}</button>
+            <button id="plan-projects" role="radio" aria-checked={view === "projects"} className={view === "projects" ? "on" : ""} onClick={() => setView("projects")}>{tr("Projekte")}</button>
           </div>
-          <button className="btn small ghost step" onClick={() => setOffset((o) => o - 4)} aria-label="4 Wochen zurück">‹</button>
-          <button className="btn small" onClick={() => setOffset(0)} disabled={offset === 0}>Heute</button>
-          <button className="btn small ghost step" onClick={() => setOffset((o) => o + 4)} aria-label="4 Wochen vor">›</button>
+          <button className="btn small ghost step" onClick={() => setOffset((o) => o - 4)} aria-label={tr("4 Wochen zurück")}>‹</button>
+          <button className="btn small" onClick={() => setOffset(0)} disabled={offset === 0}>{tr("Heute")}</button>
+          <button className="btn small ghost step" onClick={() => setOffset((o) => o + 4)} aria-label={tr("4 Wochen vor")}>›</button>
         </div>
       </div>
 
@@ -120,7 +121,7 @@ export function Planning() {
         <section className="card">
           <div className="table-wrap">
             <table className="data plan" id="plan-grid">
-              <thead><tr><th>Person</th>{weeks.map(head)}<th className="r">Total</th></tr></thead>
+              <thead><tr><th>{tr("Person")}</th>{weeks.map(head)}<th className="r">{tr("Total")}</th></tr></thead>
               <tbody>
                 {plan.people.map((r) => (
                   <tr key={r.employeeId}>
@@ -130,47 +131,47 @@ export function Planning() {
                         {lead ? <button className="plan-cell-btn" id={`cell-${r.employeeId}-${c.week}`} onClick={() => setPick({ employeeId: r.employeeId, week: c.week })}><CellBar c={c} /></button> : <CellBar c={c} />}
                       </td>
                     ))}
-                    <td className="r num"><b>{h(r.plannedTotal)}</b> <small className="muted">/ {h(r.capacityTotal)} h</small></td>
+                    <td className="r num"><b>{h(r.plannedTotal)}</b> <small className="muted">{tr("/ {0} h", h(r.capacityTotal))}</small></td>
                   </tr>
                 ))}
                 <tr className="group">
-                  <td>Team</td>
+                  <td>{tr("Team")}</td>
                   {plan.team.map((t) => (
                     <td key={t.week} className={`r num ${t.week === thisWeek ? "wk-now" : ""} ${t.planned > t.capacity ? "wk-missing" : ""}`}>{h(t.planned)} <small className="muted">/ {h(t.capacity)}</small></td>
                   ))}
-                  <td className="r num">{h(plan.team.reduce((s, t) => s + t.planned, 0))} <small className="muted">/ {h(plan.team.reduce((s, t) => s + t.capacity, 0))} h</small></td>
+                  <td className="r num">{h(plan.team.reduce((s, t) => s + t.planned, 0))} <small className="muted">{tr("/ {0} h", h(plan.team.reduce((s, t) => s + t.capacity, 0)))}</small></td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p className="plan-legend">
-            <span className="plan-dot idle" /> unter 50 % <span className="plan-dot ok" /> 50–90 % <span className="plan-dot tight" /> über 90 % <span className="plan-dot over" /> überplant
-            {lead && <span className="muted"> · Zelle anklicken, um Stunden pro Projekt zu reservieren</span>}
+            <span className="plan-dot idle" />{" "}{tr("unter 50 %")}{" "}<span className="plan-dot ok" /> 50–90 % <span className="plan-dot tight" />{" "}{tr("über 90 %")}{" "}<span className="plan-dot over" />{" "}{tr("überplant")}
+            {lead && <span className="muted">{" "}{tr("· Zelle anklicken, um Stunden pro Projekt zu reservieren")}</span>}
           </p>
         </section>
       )}
 
       {view === "projects" && (
         <section className="card">
-          {plan.projects.length === 0 && <p className="muted card-pad">In diesem Zeitraum ist noch kein Projekt eingeplant.</p>}
+          {plan.projects.length === 0 && <p className="muted card-pad">{tr("In diesem Zeitraum ist noch kein Projekt eingeplant.")}</p>}
           {plan.projects.length > 0 && (
             <div className="table-wrap">
               <table className="data plan" id="plan-projects-grid">
-                <thead><tr><th>Projekt</th>{weeks.map(head)}<th className="r">Geplant</th><th className="r">Restbudget</th></tr></thead>
+                <thead><tr><th>{tr("Projekt")}</th>{weeks.map(head)}<th className="r">{tr("Geplant")}</th><th className="r">{tr("Restbudget")}</th></tr></thead>
                 <tbody>
                   {plan.projects.map((p) => (
                     <tr key={p.projectId} className={p.overPlanned ? "plan-over" : ""}>
                       <td><a href={`#projekte/p/${p.projectId}`}>{p.name}</a><div className="muted" style={{ fontSize: "0.78rem" }}>{p.customerName}</div></td>
                       {p.cells.map((c) => <td key={c.week} className={`r num ${c.week === thisWeek ? "wk-now" : ""}`}>{c.planned ? h(c.planned) : <span className="muted">–</span>}</td>)}
-                      <td className="r num"><b>{h(p.plannedTotal)} h</b></td>
-                      <td className="r num">{p.remainingHours === null ? <span className="muted">–</span> : <span className={p.overPlanned ? "wk-missing" : ""}>{h(p.remainingHours)} h</span>}</td>
+                      <td className="r num"><b>{h(p.plannedTotal)}{" "}{tr("h")}</b></td>
+                      <td className="r num">{p.remainingHours === null ? <span className="muted">–</span> : <span className={p.overPlanned ? "wk-missing" : ""}>{h(p.remainingHours)}{" "}{tr("h")}</span>}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
-          <p className="plan-legend muted">Restbudget in Stunden zum aktuellen Stundensatz; Retainer und Projekte ohne Budget zeigen keinen Wert.</p>
+          <p className="plan-legend muted">{tr("Restbudget in Stunden zum aktuellen Stundensatz; Retainer und Projekte ohne Budget zeigen keinen Wert.")}</p>
         </section>
       )}
     </>

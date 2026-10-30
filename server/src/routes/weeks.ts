@@ -5,8 +5,9 @@ import { z } from "zod";
 import { HttpError, managedUserIds, managesPeople, requireUser, seesAll } from "../app";
 import { users, weekSubmissions } from "../db/schema";
 import { detailStart, loadDataset, todayZurich } from "./data";
+import { tr } from "@taktwerk/domain";
 
-const weekParam = z.string().regex(/^\d{4}-W\d{2}$/, "Ungültige Woche");
+const weekParam = z.string().regex(/^\d{4}-W\d{2}$/, tr("Ungültige Woche"));
 
 /** Weekly submission: people confirm a week is complete, leads see at a glance who is missing hours. */
 export async function weekRoutes(app: FastifyInstance) {
@@ -27,7 +28,7 @@ export async function weekRoutes(app: FastifyInstance) {
   /** Team overview for leads: per person and week, hours due, worked and whether submitted. */
   app.get("/api/weeks/overview", async (req) => {
     const user = requireUser(req);
-    if (!managesPeople(user) && !seesAll(user)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+    if (!managesPeople(user) && !seesAll(user)) throw new HttpError(403, tr("Dafür fehlt dir die Berechtigung."));
     const q = z.object({ from: weekParam, to: weekParam }).parse(req.query);
     const start = weekRange(q.from).from;
     const window = detailStart(todayZurich());
@@ -63,7 +64,7 @@ export async function weekRoutes(app: FastifyInstance) {
     const user = requireUser(req);
     const week = weekParam.parse((req.params as { week: string }).week);
     const today = new Date().toISOString().slice(0, 10);
-    if (week > isoWeekKey(today)) throw new HttpError(400, "Zukünftige Wochen können nicht eingereicht werden.");
+    if (week > isoWeekKey(today)) throw new HttpError(400, tr("Zukünftige Wochen können nicht eingereicht werden."));
     const start = weekRange(week).from;
     const window = detailStart(todayZurich());
     const data = await loadDataset(ctx, user, { detailFrom: start < window ? start : window });

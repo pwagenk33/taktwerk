@@ -1,4 +1,5 @@
 // Core domain model. Money is in CHF, durations in hours, months as "YYYY-MM".
+import { tr } from "./i18n";
 
 /** auditor = Treuhand / Revision: sees everything of the organization, changes nothing. */
 export type Role = "admin" | "consultant" | "employee" | "auditor" | "customer";
@@ -58,9 +59,9 @@ export interface FxRates {
 
 export type ProjectKind = "tm" | "fixed" | "retainer";
 export const PROJECT_KINDS: { id: ProjectKind; label: string; hint: string }[] = [
-  { id: "tm", label: "Zeit und Material", hint: "Jede Stunde wird zum Kundensatz verrechnet, das Budget ist die Obergrenze." },
-  { id: "fixed", label: "Fixpreis", hint: "Der Kunde zahlt den Festpreis, Mehraufwand geht zulasten der Marge." },
-  { id: "retainer", label: "Retainer", hint: "Monatliches Stundenkontingent, verrechnet wird der Monatsbetrag." },
+  { id: "tm", label: tr("Zeit und Material"), hint: tr("Jede Stunde wird zum Kundensatz verrechnet, das Budget ist die Obergrenze.") },
+  { id: "fixed", label: tr("Fixpreis"), hint: tr("Der Kunde zahlt den Festpreis, Mehraufwand geht zulasten der Marge.") },
+  { id: "retainer", label: tr("Retainer"), hint: tr("Monatliches Stundenkontingent, verrechnet wird der Monatsbetrag.") },
 ];
 
 export interface Customer {
@@ -71,6 +72,8 @@ export interface Customer {
   currency?: Currency;
   /** Postal address printed on invoices. */
   address?: PostalAddress;
+  /** Language of reports, invoices and portal e-mails (de, fr, en). Default de. */
+  locale?: "de" | "fr" | "en";
 }
 
 export interface Project {

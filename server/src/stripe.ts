@@ -2,6 +2,7 @@
 import type { BillingInterval, PlanId } from "@taktwerk/domain";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { HttpError, type AppContext } from "./app";
+import { tr } from "@taktwerk/domain";
 
 export const stripeOn = (ctx: AppContext) => !!ctx.config.STRIPE_SECRET_KEY;
 
@@ -36,7 +37,7 @@ function encode(params: Record<string, unknown>, prefix = "", out = new URLSearc
 }
 
 export async function stripe<T = Record<string, any>>(ctx: AppContext, method: "GET" | "POST" | "DELETE", path: string, params: Record<string, unknown> = {}): Promise<T> {
-  if (!ctx.config.STRIPE_SECRET_KEY) throw new HttpError(400, "Kartenzahlung ist auf dieser Installation nicht eingerichtet.");
+  if (!ctx.config.STRIPE_SECRET_KEY) throw new HttpError(400, tr("Kartenzahlung ist auf dieser Installation nicht eingerichtet."));
   const body = encode(params);
   const url = `https://api.stripe.com/v1${path}${method === "GET" && body.size ? `?${body}` : ""}`;
   const res = await fetch(url, {

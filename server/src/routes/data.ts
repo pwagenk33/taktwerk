@@ -23,13 +23,15 @@ import {
 } from "../db/schema";
 import { assertBookable, audit } from "./billing";
 import { postalAddress } from "./admin";
+import { isLocale, tr, type Locale } from "@taktwerk/domain";
 
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT");
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, tr("Datum im Format JJJJ-MM-TT"));
 const projectKind = z.enum(["tm", "fixed", "retainer"]);
 const currency = z.enum(["CHF", "EUR", "USD"]);
+const localeParam = z.enum(["de", "fr", "en"]);
 
 /** Today in Swiss time, as YYYY-MM-DD. */
-export const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Uhrzeit im Format HH:MM");
+export const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, tr("Uhrzeit im Format HH:MM"));
 export const todayZurich = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Zurich" }).format(new Date());
 
 const initials = (name: string) =>
@@ -148,6 +150,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser, opts: { de
       id: c.id,
       name: c.name,
       currency: c.currency,
+      locale: (isLocale(c.locale) ? c.locale : "de") as Locale,
       rates: rateRows.filter((r) => r.r.customerId === c.id).map((r) => ({ validFrom: r.r.validFrom, hourlyRate: r.r.hourlyRate })),
       ...(isLead(user) && c.billingAddress ? { address: c.billingAddress } : {}),
     })),
@@ -161,7 +164,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser, opts: { de
         subProjectId: r.subProjectId,
         date: r.month,
         hours: Number(r.hours),
-        reason: "Monatssumme",
+        reason: tr("Monatssumme"),
         billable: Boolean(r.billable),
         hourlyRate: Number(r.hourlyRate),
         jiraIssueKey: r.jiraIssueKey ?? undefined,
@@ -235,16 +238,16 @@ async function subProjectInOrg(ctx: AppContext, org: string, subProjectId: strin
     .innerJoin(projects, eq(projects.id, subProjects.projectId))
     .where(and(eq(subProjects.id, subProjectId), eq(subProjects.organizationId, org)))
     .limit(1);
-  if (!row) throw new HttpError(404, "Subprojekt nicht gefunden.");
+  if (!row) throw new HttpError(404, tr("Subprojekt nicht gefunden."));
   return row;
 }
 
 /** Admins and consultants may book for others; employees only for themselves. */
 async function bookingUser(ctx: AppContext, user: SessionUser, employeeId?: string) {
   if (!employeeId || employeeId === user.id) return user.id;
-  if (user.role === "employee") throw new HttpError(403, "Du kannst nur für dich selbst buchen.");
+  if (user.role === "employee") throw new HttpError(403, tr("Du kannst nur für dich selbst buchen."));
   const [u] = await ctx.db.select({ id: users.id }).from(users).where(and(eq(users.id, employeeId), eq(users.organizationId, user.organizationId))).limit(1);
-  if (!u) throw new HttpError(404, "Mitarbeitende Person nicht gefunden.");
+  if (!u) throw new HttpError(404, tr("Mitarbeitende Person nicht gefunden."));
   return u.id;
 }
 
@@ -264,7 +267,7 @@ export async function dataRoutes(app: FastifyInstance) {
   app.get("/api/reports", async (req) => {
     const user = requireUser(req);
     const led = user.leadsProjects ?? [];
-    if (!seesAll(user) && led.length === 0) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+    if (!seesAll(user) && led.length === 0) throw new HttpError(403, tr("Dafür fehlt dir die Berechtigung."));
     const q = z
       .object({ customerId: z.string().optional(), method: z.enum(["rolling", "ewma"]).default("rolling"), window: z.coerce.number().int().min(1).max(12).default(3) })
       .parse(req.query);
@@ -281,7 +284,7 @@ export async function dataRoutes(app: FastifyInstance) {
         subProjectId: z.string(),
         date: isoDate,
         hours: z.number().positive().max(24),
-        reason: z.string().trim().min(1, "Grund fehlt").max(1000),
+        reason: z.string().trim().min(1, tr("Grund fehlt")).max(1000),
         billable: z.boolean().default(true),
         jiraIssueKey: z.string().max(40).optional(),
         startTime: clockTime.optional(),
@@ -320,9 +323,9 @@ export async function dataRoutes(app: FastifyInstance) {
         date: isoDate,
         amount: z.number().min(0).max(100000),
         category: z.enum(EXPENSE_CATEGORIES),
-        reason: z.string().trim().min(1, "Grund fehlt").max(1000),
+        reason: z.string().trim().min(1, tr("Grund fehlt")).max(1000),
         billable: z.boolean().default(true),
-        vatRate: z.number().refine((v) => (VAT_RATES as readonly number[]).includes(v), "Ungültiger MwSt-Satz").optional(),
+        vatRate: z.number().refine((v) => (VAT_RATES as readonly number[]).includes(v), tr("Ungültiger MwSt-Satz")).optional(),
         km: z.number().positive().max(10000).optional(),
       })
       .parse(req.body);
@@ -333,10 +336,10 @@ export async function dataRoutes(app: FastifyInstance) {
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
     // Kilometres are priced with the organization's rate; the client only sends the distance.
     if (body.category === "Kilometer") {
-      if (!body.km) throw new HttpError(400, "Bitte die Kilometer angeben.");
+      if (!body.km) throw new HttpError(400, tr("Bitte die Kilometer angeben."));
       rest.amount = Math.round(body.km * (org?.settings.kmRate ?? DEFAULT_RATES.kmRate) * 20) / 20;
       rest.vatRate = 0;
-    } else if (!(body.amount > 0)) throw new HttpError(400, "Bitte einen Betrag grösser als 0 eingeben.");
+    } else if (!(body.amount > 0)) throw new HttpError(400, tr("Bitte einen Betrag grösser als 0 eingeben."));
     // Employees' expenses wait for approval; consultants and admins record them as approved.
     const approved = user.role !== "employee";
     const row = {
@@ -359,9 +362,9 @@ export async function dataRoutes(app: FastifyInstance) {
 
   app.post("/api/customers", async (req, reply) => {
     const user = requireRole(req, "admin");
-    const body = z.object({ name: z.string().trim().min(1).max(200), hourlyRate: z.number().positive(), validFrom: isoDate.optional(), currency: currency.optional(), address: postalAddress.optional() }).parse(req.body);
+    const body = z.object({ name: z.string().trim().min(1).max(200), hourlyRate: z.number().positive(), validFrom: isoDate.optional(), currency: currency.optional(), address: postalAddress.optional(), locale: localeParam.optional() }).parse(req.body);
     const id = randomUUID();
-    await ctx.db.insert(customers).values({ id, organizationId: user.organizationId, name: body.name, currency: body.currency ?? "CHF", billingAddress: body.address ?? null });
+    await ctx.db.insert(customers).values({ id, organizationId: user.organizationId, name: body.name, currency: body.currency ?? "CHF", billingAddress: body.address ?? null, locale: body.locale ?? "de" });
     await ctx.db.insert(customerRates).values({ customerId: id, validFrom: body.validFrom ?? "2000-01-01", hourlyRate: body.hourlyRate });
     return reply.status(201).send({ id });
   });
@@ -374,12 +377,12 @@ export async function dataRoutes(app: FastifyInstance) {
     const user = requireRole(req, "admin", "consultant");
     const { id } = req.params as { id: string };
     const body = z
-      .object({ name: z.string().trim().min(1).max(200).optional(), currency: currency.optional(), address: postalAddress.optional(), rate: z.object({ hourlyRate: z.number().positive(), validFrom: isoDate }).optional() })
+      .object({ name: z.string().trim().min(1).max(200).optional(), currency: currency.optional(), locale: localeParam.optional(), address: postalAddress.optional(), rate: z.object({ hourlyRate: z.number().positive(), validFrom: isoDate }).optional() })
       .parse(req.body);
     const [c] = await ctx.db.select().from(customers).where(and(eq(customers.id, id), eq(customers.organizationId, user.organizationId))).limit(1);
-    if (!c) throw new HttpError(404, "Kunde nicht gefunden.");
-    if (body.rate && user.role !== "admin") throw new HttpError(403, "Stundensätze ändern nur Admins.");
-    const next = { name: body.name ?? c.name, currency: body.currency ?? c.currency, ...(body.address ? { billingAddress: body.address } : {}) };
+    if (!c) throw new HttpError(404, tr("Kunde nicht gefunden."));
+    if (body.rate && user.role !== "admin") throw new HttpError(403, tr("Stundensätze ändern nur Admins."));
+    const next = { name: body.name ?? c.name, currency: body.currency ?? c.currency, locale: body.locale ?? c.locale, ...(body.address ? { billingAddress: body.address } : {}) };
     await ctx.db.update(customers).set(next).where(eq(customers.id, id));
     if (body.rate) await ctx.db.insert(customerRates).values({ customerId: id, ...body.rate }).onDuplicateKeyUpdate({ set: { hourlyRate: body.rate.hourlyRate } });
     return { id, name: next.name, currency: next.currency };
@@ -390,7 +393,7 @@ export async function dataRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const body = z.object({ hourlyRate: z.number().positive(), validFrom: isoDate }).parse(req.body);
     const [c] = await ctx.db.select().from(customers).where(and(eq(customers.id, id), eq(customers.organizationId, user.organizationId))).limit(1);
-    if (!c) throw new HttpError(404, "Kunde nicht gefunden.");
+    if (!c) throw new HttpError(404, tr("Kunde nicht gefunden."));
     await ctx.db.insert(customerRates).values({ customerId: id, ...body }).onDuplicateKeyUpdate({ set: { hourlyRate: body.hourlyRate } });
     return reply.status(201).send({ ok: true });
   });
@@ -399,10 +402,10 @@ export async function dataRoutes(app: FastifyInstance) {
     const user = requireRole(req, "admin");
     const body = z.object({ customerId: z.string(), name: z.string().trim().min(1).max(200), budget: z.number().min(0), jiraProjectKey: z.string().max(20).optional(), kind: projectKind.optional(), retainerHours: z.number().min(0).max(10000).optional(), leadUserId: z.string().optional() }).parse(req.body);
     const [c] = await ctx.db.select().from(customers).where(and(eq(customers.id, body.customerId), eq(customers.organizationId, user.organizationId))).limit(1);
-    if (!c) throw new HttpError(404, "Kunde nicht gefunden.");
+    if (!c) throw new HttpError(404, tr("Kunde nicht gefunden."));
     if (body.leadUserId) {
       const [lead] = await ctx.db.select({ role: users.role }).from(users).where(and(eq(users.id, body.leadUserId), eq(users.organizationId, user.organizationId), eq(users.active, true))).limit(1);
-      if (!lead || lead.role === "customer" || lead.role === "auditor") throw new HttpError(404, "Person für die Projektleitung nicht gefunden.");
+      if (!lead || lead.role === "customer" || lead.role === "auditor") throw new HttpError(404, tr("Person für die Projektleitung nicht gefunden."));
     }
     const id = randomUUID();
     await ctx.db.insert(projects).values({ id, organizationId: user.organizationId, ...body, jiraProjectKey: body.jiraProjectKey || null, kind: body.kind ?? "tm", retainerHours: body.kind === "retainer" ? body.retainerHours ?? null : null, leadUserId: body.leadUserId || null });
@@ -413,7 +416,7 @@ export async function dataRoutes(app: FastifyInstance) {
     const user = requireRole(req, "admin");
     const body = z.object({ projectId: z.string(), name: z.string().trim().min(1).max(200), budget: z.number().min(0), jiraEpicKey: z.string().max(40).optional() }).parse(req.body);
     const [p] = await ctx.db.select().from(projects).where(and(eq(projects.id, body.projectId), eq(projects.organizationId, user.organizationId))).limit(1);
-    if (!p) throw new HttpError(404, "Projekt nicht gefunden.");
+    if (!p) throw new HttpError(404, tr("Projekt nicht gefunden."));
     const id = randomUUID();
     await ctx.db.insert(subProjects).values({ id, organizationId: user.organizationId, ...body, jiraEpicKey: body.jiraEpicKey || null });
     return reply.status(201).send({ id });
@@ -423,7 +426,7 @@ export async function dataRoutes(app: FastifyInstance) {
   app.patch("/api/projects/:id", async (req) => {
     const user = requireUser(req);
     const { id } = req.params as { id: string };
-    if (!leadsProject(user, id)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+    if (!leadsProject(user, id)) throw new HttpError(403, tr("Dafür fehlt dir die Berechtigung."));
     const body = z
       .object({
         name: z.string().trim().min(1).max(200).optional(),
@@ -435,11 +438,11 @@ export async function dataRoutes(app: FastifyInstance) {
       })
       .parse(req.body);
     const [p] = await ctx.db.select().from(projects).where(and(eq(projects.id, id), eq(projects.organizationId, user.organizationId))).limit(1);
-    if (!p) throw new HttpError(404, "Projekt nicht gefunden.");
-    if (body.leadUserId !== undefined && !isLead(user)) throw new HttpError(403, "Die Projektleitung vergeben Admins und Consultants.");
+    if (!p) throw new HttpError(404, tr("Projekt nicht gefunden."));
+    if (body.leadUserId !== undefined && !isLead(user)) throw new HttpError(403, tr("Die Projektleitung vergeben Admins und Consultants."));
     if (body.leadUserId) {
       const [lead] = await ctx.db.select({ id: users.id, role: users.role }).from(users).where(and(eq(users.id, body.leadUserId), eq(users.organizationId, user.organizationId), eq(users.active, true))).limit(1);
-      if (!lead || lead.role === "customer" || lead.role === "auditor") throw new HttpError(404, "Person für die Projektleitung nicht gefunden.");
+      if (!lead || lead.role === "customer" || lead.role === "auditor") throw new HttpError(404, tr("Person für die Projektleitung nicht gefunden."));
     }
     const kind = body.kind ?? p.kind;
     const next = {
@@ -459,8 +462,8 @@ export async function dataRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const body = z.object({ name: z.string().trim().min(1).max(200).optional(), budget: z.number().min(0).optional(), jiraEpicKey: z.string().max(40).nullable().optional() }).parse(req.body);
     const [sp] = await ctx.db.select().from(subProjects).where(and(eq(subProjects.id, id), eq(subProjects.organizationId, user.organizationId))).limit(1);
-    if (!sp) throw new HttpError(404, "Subprojekt nicht gefunden.");
-    if (!leadsProject(user, sp.projectId)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+    if (!sp) throw new HttpError(404, tr("Subprojekt nicht gefunden."));
+    if (!leadsProject(user, sp.projectId)) throw new HttpError(403, tr("Dafür fehlt dir die Berechtigung."));
     const next = { name: body.name ?? sp.name, budget: body.budget ?? sp.budget, jiraEpicKey: body.jiraEpicKey === undefined ? sp.jiraEpicKey : body.jiraEpicKey || null };
     await ctx.db.update(subProjects).set(next).where(eq(subProjects.id, id));
     return { id, ...next };
@@ -477,7 +480,7 @@ export async function dataRoutes(app: FastifyInstance) {
   app.put("/api/dashboard", async (req) => {
     const user = requireUser(req);
     const { layout } = z.object({ layout: z.unknown() }).parse(req.body);
-    if (JSON.stringify(layout).length > 100_000) throw new HttpError(400, "Dashboard-Konfiguration ist zu gross.");
+    if (JSON.stringify(layout).length > 100_000) throw new HttpError(400, tr("Dashboard-Konfiguration ist zu gross."));
     await ctx.db.insert(dashboards).values({ userId: user.id, layout }).onDuplicateKeyUpdate({ set: { layout } });
     return { ok: true };
   });

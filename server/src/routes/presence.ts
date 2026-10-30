@@ -7,8 +7,9 @@ import { HttpError, managedUserIds, managesUser, requireUser, type AppContext, t
 import { organizations, workPeriods } from "../db/schema";
 import { assertBookable } from "./billing";
 import { clockTime, todayZurich } from "./data";
+import { tr } from "@taktwerk/domain";
 
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT");
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, tr("Datum im Format JJJJ-MM-TT"));
 export const nowZurich = () => new Intl.DateTimeFormat("de-CH", { timeZone: "Europe/Zurich", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()).replace(".", ":");
 
 type Row = typeof workPeriods.$inferSelect;
@@ -16,7 +17,7 @@ const toDomain = (p: Row): WorkPeriod => ({ id: p.id, employeeId: p.userId, date
 
 async function assertFullModel(ctx: AppContext, user: SessionUser) {
   const [org] = await ctx.db.select({ settings: organizations.settings }).from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
-  if (org?.settings.timeModel !== "full") throw new HttpError(409, "Kommen/Gehen ist für diese Firma nicht eingeschaltet (Einstellungen → Arbeitszeit).");
+  if (org?.settings.timeModel !== "full") throw new HttpError(409, tr("Kommen/Gehen ist für diese Firma nicht eingeschaltet (Einstellungen → Arbeitszeit)."));
 }
 
 /** Come/go recording with breaks (Art. 73 ArGV 1), switched on per organization. */
@@ -66,11 +67,11 @@ export async function presenceRoutes(app: FastifyInstance) {
     await assertFullModel(ctx, user);
     const body = z.object({ employeeId: z.string().optional(), date: isoDate, kind: z.enum(["work", "break"]).default("work"), start: clockTime, end: clockTime }).parse(req.body);
     const ownerId = body.employeeId ?? user.id;
-    if (ownerId !== user.id && !(await managesUser(ctx, user, ownerId))) throw new HttpError(403, "Du kannst nur eigene Zeiten erfassen.");
-    if (toMinutes(body.end) <= toMinutes(body.start)) throw new HttpError(400, "Ende muss nach dem Beginn liegen.");
+    if (ownerId !== user.id && !(await managesUser(ctx, user, ownerId))) throw new HttpError(403, tr("Du kannst nur eigene Zeiten erfassen."));
+    if (toMinutes(body.end) <= toMinutes(body.start)) throw new HttpError(400, tr("Ende muss nach dem Beginn liegen."));
     await assertBookable(ctx, user, ownerId, body.date);
     const overlap = (await dayOf(ownerId, body.date)).some((p) => p.end && toMinutes(p.start) < toMinutes(body.end) && toMinutes(p.end) > toMinutes(body.start));
-    if (overlap) throw new HttpError(409, "Die Zeit überschneidet sich mit einem bestehenden Abschnitt.");
+    if (overlap) throw new HttpError(409, tr("Die Zeit überschneidet sich mit einem bestehenden Abschnitt."));
     const id = randomUUID();
     await ctx.db.insert(workPeriods).values({ id, organizationId: user.organizationId, userId: ownerId, date: body.date, kind: body.kind, start: body.start, end: body.end });
     return reply.status(201).send({ id, employeeId: ownerId, date: body.date, kind: body.kind, start: body.start, end: body.end });
@@ -81,10 +82,10 @@ export async function presenceRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const body = z.object({ kind: z.enum(["work", "break"]).optional(), start: clockTime.optional(), end: clockTime.nullable().optional() }).parse(req.body);
     const [row] = await ctx.db.select().from(workPeriods).where(and(eq(workPeriods.id, id), eq(workPeriods.organizationId, user.organizationId))).limit(1);
-    if (!row) throw new HttpError(404, "Abschnitt nicht gefunden.");
+    if (!row) throw new HttpError(404, tr("Abschnitt nicht gefunden."));
     await assertBookable(ctx, user, row.userId, row.date);
     const next = { kind: body.kind ?? row.kind, start: body.start ?? row.start, end: body.end === undefined ? row.end : body.end };
-    if (next.end && toMinutes(next.end) <= toMinutes(next.start)) throw new HttpError(400, "Ende muss nach dem Beginn liegen.");
+    if (next.end && toMinutes(next.end) <= toMinutes(next.start)) throw new HttpError(400, tr("Ende muss nach dem Beginn liegen."));
     await ctx.db.update(workPeriods).set(next).where(eq(workPeriods.id, id));
     return toDomain({ ...row, ...next });
   });
@@ -93,7 +94,7 @@ export async function presenceRoutes(app: FastifyInstance) {
     const user = requireUser(req);
     const { id } = req.params as { id: string };
     const [row] = await ctx.db.select().from(workPeriods).where(and(eq(workPeriods.id, id), eq(workPeriods.organizationId, user.organizationId))).limit(1);
-    if (!row) throw new HttpError(404, "Abschnitt nicht gefunden.");
+    if (!row) throw new HttpError(404, tr("Abschnitt nicht gefunden."));
     await assertBookable(ctx, user, row.userId, row.date);
     await ctx.db.delete(workPeriods).where(eq(workPeriods.id, id));
     return { ok: true };

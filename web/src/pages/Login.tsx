@@ -4,13 +4,14 @@ import { PLANS, type PlanId } from "@taktwerk/domain";
 import { api, type Branding, type Providers } from "../api";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
 import { Icon } from "../ui/components";
+import { LOCALES, locale, setLocale, tr } from "../i18n";
 
 const SSO_ERRORS: Record<string, string> = {
-  abgebrochen: "Die Anmeldung wurde abgebrochen. Bitte erneut versuchen.",
-  fehlgeschlagen: "Die Anmeldung beim Anbieter ist fehlgeschlagen. Bitte erneut versuchen.",
-  unbekannt: "Zu diesem Konto gibt es keinen Zugang. Bitte lass dich von einer Admin-Person einladen.",
-  email_unbestaetigt: "Die E-Mail-Adresse des Google-Kontos ist nicht bestätigt.",
-  abgelaufen: "Der Anmeldelink ist abgelaufen. Bitte melde dich hier noch einmal an.",
+  abgebrochen: tr("Die Anmeldung wurde abgebrochen. Bitte erneut versuchen."),
+  fehlgeschlagen: tr("Die Anmeldung beim Anbieter ist fehlgeschlagen. Bitte erneut versuchen."),
+  unbekannt: tr("Zu diesem Konto gibt es keinen Zugang. Bitte lass dich von einer Admin-Person einladen."),
+  email_unbestaetigt: tr("Die E-Mail-Adresse des Google-Kontos ist nicht bestätigt."),
+  abgelaufen: tr("Der Anmeldelink ist abgelaufen. Bitte melde dich hier noch einmal an."),
 };
 
 /** SaaS: a sign-in on the shared address continues on the company's own address. */
@@ -29,8 +30,8 @@ function BrandPanel({ branding }: { branding: Branding }) {
         <span>{branding.appName}</span>
       </div>
       <div className="login-claim">
-        <h1>Zeit erfassen.<br />Budgets im Griff.</h1>
-        <p>Zeiterfassung, Spesen und Kundenreports mit Forecast aus JIRA, an einem Ort.</p>
+        <h1>{tr("Zeit erfassen.")}<br />{tr("Budgets im Griff.")}</h1>
+        <p>{tr("Zeiterfassung, Spesen und Kundenreports mit Forecast aus JIRA, an einem Ort.")}</p>
       </div>
       {branding.showMotif && <MatterhornRidge className="login-motif" snow="var(--brand)" />}
     </aside>
@@ -43,6 +44,11 @@ export function AuthLayout({ branding, children }: { branding: Branding; childre
       <BrandPanel branding={branding} />
       <main className="login-main">
         <div className="login-card">{children}</div>
+        <nav className="login-langs" aria-label={tr("Sprache")}>
+          {LOCALES.map((l) => (
+            <button key={l.id} type="button" lang={l.id} aria-current={locale === l.id ? "true" : undefined} onClick={() => setLocale(l.id)}>{l.label}</button>
+          ))}
+        </nav>
       </main>
     </div>
   );
@@ -132,8 +138,8 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
   /** Passkey: as second step (token) or passwordless from the login form. */
   const withPasskey = async (token?: string) => {
     setError("");
-    if (demo) return setError("Im Prototyp gibt es keine Passkeys. Bitte mit Benutzername und Passwort anmelden.");
-    if (!passkeysSupported()) return setError("Dieser Browser unterstützt keine Passkeys.");
+    if (demo) return setError(tr("Im Prototyp gibt es keine Passkeys. Bitte mit Benutzername und Passwort anmelden."));
+    if (!passkeysSupported()) return setError(tr("Dieser Browser unterstützt keine Passkeys."));
     setBusy(true);
     try {
       const options = await api<Record<string, unknown>>("/api/auth/passkey/options", { body: token ? { token } : {} });
@@ -142,7 +148,7 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
       history.replaceState(null, "", "/");
       onLoggedIn();
     } catch (err) {
-      setError((err as Error).name === "NotAllowedError" ? "Abgebrochen oder kein passender Passkey." : (err as Error).message);
+      setError((err as Error).name === "NotAllowedError" ? tr("Abgebrochen oder kein passender Passkey.") : (err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -151,7 +157,7 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
   const register = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
-    if (demo) return setError("Im Prototyp gibt es keine Registrierung. Melde dich mit den Beispieldaten an.");
+    if (demo) return setError(tr("Im Prototyp gibt es keine Registrierung. Melde dich mit den Beispieldaten an."));
     setBusy(true);
     try {
       if (follow(await api<SignedIn>("/api/orgs/register", { body: { company, name: fullName, email, password, ...(providers.saas ? { plan } : {}) } }))) return;
@@ -165,7 +171,7 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
   };
 
   const sso = (provider: "microsoft" | "google") => {
-    if (demo) return setError("Im Prototyp ist die Anmeldung mit Microsoft und Google nicht verbunden. Bitte mit Benutzername und Passwort anmelden.");
+    if (demo) return setError(tr("Im Prototyp ist die Anmeldung mit Microsoft und Google nicht verbunden. Bitte mit Benutzername und Passwort anmelden."));
     location.href = `/api/auth/${provider}`;
   };
   const showMs = demo || providers.microsoft;
@@ -176,81 +182,81 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
       {view === "login" && (
         <form onSubmit={submit} className="login-form">
           <div>
-            <h2>Anmelden</h2>
-            <p className="muted">Mit deinem Firmenkonto oder Benutzername und Passwort.</p>
+            <h2>{tr("Anmelden")}</h2>
+            <p className="muted">{tr("Mit deinem Firmenkonto oder Benutzername und Passwort.")}</p>
           </div>
           {(showMs || showGoogle) && (
             <div className="sso">
-              {showMs && <button type="button" className="btn sso-btn" onClick={() => sso("microsoft")}><MicrosoftIcon />Mit Microsoft anmelden</button>}
-              {showGoogle && <button type="button" className="btn sso-btn" onClick={() => sso("google")}><GoogleIcon />Mit Google anmelden</button>}
+              {showMs && <button type="button" className="btn sso-btn" onClick={() => sso("microsoft")}><MicrosoftIcon />{tr("Mit Microsoft anmelden")}</button>}
+              {showGoogle && <button type="button" className="btn sso-btn" onClick={() => sso("google")}><GoogleIcon />{tr("Mit Google anmelden")}</button>}
             </div>
           )}
-          {(showMs || showGoogle) && <div className="divider"><span>oder</span></div>}
-          <label className="field"><span>Benutzername oder E-Mail</span>
+          {(showMs || showGoogle) && <div className="divider"><span>{tr("oder")}</span></div>}
+          <label className="field"><span>{tr("Benutzername oder E-Mail")}</span>
             <input id="l-user" className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
           </label>
-          <label className="field"><span>Passwort</span>
+          <label className="field"><span>{tr("Passwort")}</span>
             <input id="l-pass" className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </label>
           {error && <p className="error" role="alert">{error}</p>}
-          <button className="btn primary block" disabled={busy}>{busy ? "Anmelden …" : "Anmelden"}</button>
-          {!demo && <button type="button" id="l-passkey" className="btn block" disabled={busy} onClick={() => void withPasskey()}><Icon.key />Mit Passkey anmelden</button>}
-          <button type="button" className="link" onClick={() => { setView("forgot"); setError(""); }}>Passwort vergessen?</button>
-          {providers.registration && !demo && <button type="button" id="to-register" className="link" onClick={() => { setView("register"); setError(""); }}>Neue Firma registrieren</button>}
-          {demo && <p className="notice">Prototyp mit Beispieldaten: Die Felder sind vorausgefüllt, einfach auf «Anmelden» klicken.</p>}
+          <button className="btn primary block" disabled={busy}>{busy ? tr("Anmelden …") : tr("Anmelden")}</button>
+          {!demo && <button type="button" id="l-passkey" className="btn block" disabled={busy} onClick={() => void withPasskey()}><Icon.key />{tr("Mit Passkey anmelden")}</button>}
+          <button type="button" className="link" onClick={() => { setView("forgot"); setError(""); }}>{tr("Passwort vergessen?")}</button>
+          {providers.registration && !demo && <button type="button" id="to-register" className="link" onClick={() => { setView("register"); setError(""); }}>{tr("Neue Firma registrieren")}</button>}
+          {demo && <p className="notice">{tr("Prototyp mit Beispieldaten: Die Felder sind vorausgefüllt, einfach auf «Anmelden» klicken.")}</p>}
         </form>
       )}
       {view === "forgot" && (
         <form onSubmit={forgot} className="login-form">
           <div>
-            <h2>Passwort zurücksetzen</h2>
-            <p className="muted">Wir senden dir einen Link, mit dem du ein neues Passwort festlegst.</p>
+            <h2>{tr("Passwort zurücksetzen")}</h2>
+            <p className="muted">{tr("Wir senden dir einen Link, mit dem du ein neues Passwort festlegst.")}</p>
           </div>
-          <label className="field"><span>E-Mail-Adresse</span>
+          <label className="field"><span>{tr("E-Mail-Adresse")}</span>
             <input id="f-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </label>
           {error && <p className="error" role="alert">{error}</p>}
-          <button className="btn primary block">Link senden</button>
-          <button type="button" className="link" onClick={() => setView("login")}>Zurück zur Anmeldung</button>
+          <button className="btn primary block">{tr("Link senden")}</button>
+          <button type="button" className="link" onClick={() => setView("login")}>{tr("Zurück zur Anmeldung")}</button>
         </form>
       )}
       {view === "second" && second && (
         <form onSubmit={finishTotp} className="login-form">
           <div>
-            <h2>Zweiter Schritt</h2>
-            <p className="muted">{second.totp ? "Gib den sechsstelligen Code aus deiner Authenticator-App ein, oder einen deiner Wiederherstellungscodes." : "Bestätige die Anmeldung mit deinem Passkey."}</p>
+            <h2>{tr("Zweiter Schritt")}</h2>
+            <p className="muted">{second.totp ? tr("Gib den sechsstelligen Code aus deiner Authenticator-App ein, oder einen deiner Wiederherstellungscodes.") : tr("Bestätige die Anmeldung mit deinem Passkey.")}</p>
           </div>
           {second.totp && (
-            <label className="field"><span>Code</span>
+            <label className="field"><span>{tr("Code")}</span>
               <input id="l-code" className="input" inputMode="numeric" autoComplete="one-time-code" autoFocus value={code} onChange={(e) => setCode(e.target.value)} required />
             </label>
           )}
           {error && <p className="error" role="alert">{error}</p>}
-          {second.totp && <button id="l-code-submit" className="btn primary block" disabled={busy || code.trim().length < 6}>{busy ? "Prüfe …" : "Bestätigen"}</button>}
-          {second.passkey && <button type="button" className={`btn block ${second.totp ? "" : "primary"}`} disabled={busy} onClick={() => void withPasskey(second.token)}><Icon.key />Mit Passkey bestätigen</button>}
-          <button type="button" className="link" onClick={() => { setView("login"); setSecond(null); setError(""); }}>Abbrechen</button>
+          {second.totp && <button id="l-code-submit" className="btn primary block" disabled={busy || code.trim().length < 6}>{busy ? tr("Prüfe …") : tr("Bestätigen")}</button>}
+          {second.passkey && <button type="button" className={`btn block ${second.totp ? "" : "primary"}`} disabled={busy} onClick={() => void withPasskey(second.token)}><Icon.key />{tr("Mit Passkey bestätigen")}</button>}
+          <button type="button" className="link" onClick={() => { setView("login"); setSecond(null); setError(""); }}>{tr("Abbrechen")}</button>
         </form>
       )}
       {view === "register" && (
         <form onSubmit={register} className="login-form">
           <div>
-            <h2>Firma registrieren</h2>
-            <p className="muted">Deine Firma bekommt einen eigenen, getrennten Bereich. Du bist Admin und lädst dein Team selbst ein.</p>
+            <h2>{tr("Firma registrieren")}</h2>
+            <p className="muted">{tr("Deine Firma bekommt einen eigenen, getrennten Bereich. Du bist Admin und lädst dein Team selbst ein.")}</p>
           </div>
-          <label className="field"><span>Firma</span><input id="r-company" className="input" value={company} onChange={(e) => setCompany(e.target.value)} required minLength={2} /></label>
-          <label className="field"><span>Dein Name</span><input id="r-name" className="input" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required /></label>
-          <label className="field"><span>E-Mail (ist dein Benutzername)</span><input id="r-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-          <label className="field"><span>Passwort (mindestens 10 Zeichen)</span><input id="r-pass" className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} /></label>
+          <label className="field"><span>{tr("Firma")}</span><input id="r-company" className="input" value={company} onChange={(e) => setCompany(e.target.value)} required minLength={2} /></label>
+          <label className="field"><span>{tr("Dein Name")}</span><input id="r-name" className="input" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required /></label>
+          <label className="field"><span>{tr("E-Mail (ist dein Benutzername)")}</span><input id="r-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+          <label className="field"><span>{tr("Passwort (mindestens 10 Zeichen)")}</span><input id="r-pass" className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} /></label>
           {error && <p className="error" role="alert">{error}</p>}
-          <button id="r-submit" className="btn primary block" disabled={busy}>{busy ? "Richte ein …" : "Firma anlegen"}</button>
-          <button type="button" className="link" onClick={() => { setView("login"); setError(""); }}>Zurück zur Anmeldung</button>
+          <button id="r-submit" className="btn primary block" disabled={busy}>{busy ? tr("Richte ein …") : tr("Firma anlegen")}</button>
+          <button type="button" className="link" onClick={() => { setView("login"); setError(""); }}>{tr("Zurück zur Anmeldung")}</button>
         </form>
       )}
       {view === "sent" && (
         <div className="login-form">
-          <h2>E-Mail ist unterwegs</h2>
-          <p className="muted">Falls zu {email} ein Konto existiert, erhältst du in den nächsten Minuten einen Link. Er ist eine Stunde gültig.</p>
-          <button type="button" className="btn block" onClick={() => setView("login")}>Zurück zur Anmeldung</button>
+          <h2>{tr("E-Mail ist unterwegs")}</h2>
+          <p className="muted">{tr("Falls zu {0} ein Konto existiert, erhältst du in den nächsten Minuten einen Link. Er ist eine Stunde gültig.", email)}</p>
+          <button type="button" className="btn block" onClick={() => setView("login")}>{tr("Zurück zur Anmeldung")}</button>
         </div>
       )}
     </AuthLayout>
@@ -264,7 +270,7 @@ export function SetPassword({ branding, onDone }: { branding: Branding; onDone: 
   const [error, setError] = useState("");
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (pw !== pw2) return setError("Die beiden Passwörter stimmen nicht überein.");
+    if (pw !== pw2) return setError(tr("Die beiden Passwörter stimmen nicht überein."));
     try {
       await api("/api/auth/password/set", { body: { token, password: pw } });
       history.replaceState(null, "", "/");
@@ -277,17 +283,17 @@ export function SetPassword({ branding, onDone }: { branding: Branding; onDone: 
     <AuthLayout branding={branding}>
       <form onSubmit={submit} className="login-form">
         <div>
-          <h2>Passwort festlegen</h2>
-          <p className="muted">Mindestens 10 Zeichen. Danach bist du direkt angemeldet.</p>
+          <h2>{tr("Passwort festlegen")}</h2>
+          <p className="muted">{tr("Mindestens 10 Zeichen. Danach bist du direkt angemeldet.")}</p>
         </div>
-        <label className="field"><span>Neues Passwort</span>
+        <label className="field"><span>{tr("Neues Passwort")}</span>
           <input id="p-1" className="input" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} required minLength={10} />
         </label>
-        <label className="field"><span>Passwort wiederholen</span>
+        <label className="field"><span>{tr("Passwort wiederholen")}</span>
           <input id="p-2" className="input" type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} required />
         </label>
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="btn primary block">Speichern und anmelden</button>
+        <button className="btn primary block">{tr("Speichern und anmelden")}</button>
       </form>
     </AuthLayout>
   );

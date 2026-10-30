@@ -36,6 +36,8 @@ import { securityRoutes } from "./routes/security";
 import { privacyRoutes } from "./routes/privacy";
 import { subscriptionRoutes } from "./routes/subscription";
 import { presenceRoutes } from "./routes/presence";
+import { tr } from "@taktwerk/domain";
+import { currentLocale, requestLocale, withLocale } from "./i18n";
 
 /** auditor (Treuhand/Revision) reads everything of the organization and changes nothing. */
 export type Role = "admin" | "consultant" | "employee" | "auditor" | "customer";
@@ -53,6 +55,8 @@ export interface SessionUser {
   platformAdmin?: boolean;
   /** Hash of the current session token (for the session overview). */
   sessionId?: string;
+  /** Chosen language (de, fr, en); null = browser language. */
+  locale?: string | null;
   /** Projects this person leads (employees only; admins and consultants lead everything). */
   leadsProjects?: string[];
   /** Teams this person leads (employees only). */
@@ -92,7 +96,7 @@ export async function managesUser(ctx: AppContext, actor: SessionUser, userId: s
 }
 
 export async function assertManages(ctx: AppContext, actor: SessionUser, userId: string) {
-  if (actor.role === "auditor" || !(await managesUser(ctx, actor, userId))) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+  if (actor.role === "auditor" || !(await managesUser(ctx, actor, userId))) throw new HttpError(403, tr("Dafür fehlt dir die Berechtigung."));
 }
 
 /** Portal accounts only reach the portal, auth and branding routes. */
@@ -123,7 +127,7 @@ export class HttpError extends Error {
 }
 
 export function requireUser(req: FastifyRequest): SessionUser {
-  if (!req.user) throw new HttpError(401, "Bitte melde dich an.");
+  if (!req.user) throw new HttpError(401, tr("Bitte melde dich an."));
   return req.user;
 }
 
@@ -134,7 +138,7 @@ export function requireUser(req: FastifyRequest): SessionUser {
 export function requireRole(req: FastifyRequest, ...roles: Role[]): SessionUser {
   const user = requireUser(req);
   const ok = roles.includes(user.role) || (user.role === "auditor" && roles.includes("consultant"));
-  if (!ok) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+  if (!ok) throw new HttpError(403, tr("Dafür fehlt dir die Berechtigung."));
   return user;
 }
 
@@ -189,6 +193,9 @@ export async function buildApp(ctx: AppContext) {
   app.decorateRequest("user", null);
   await app.register(cookie);
 
+  // Language of answers (error messages, generated files): the one the app sends, else the browser's.
+  app.addHook("onRequest", (req, _reply, done) => withLocale(requestLocale(req.headers["accept-language"]), done));
+
   const mainOrigin = new URL(ctx.config.APP_URL).origin;
 
   // The public website on the base domain answers before sessions and tenants are looked at.
@@ -201,7 +208,7 @@ export async function buildApp(ctx: AppContext) {
     const origin = req.headers.origin;
     if (!origin) return;
     const originHost = (() => { try { return new URL(origin).host; } catch { return ""; } })();
-    if (origin !== mainOrigin && originHost !== req.headers.host) throw new HttpError(403, "Ungültige Herkunft der Anfrage.");
+    if (origin !== mainOrigin && originHost !== req.headers.host) throw new HttpError(403, tr("Ungültige Herkunft der Anfrage."));
   });
 
   app.addHook("preHandler", async (req) => {
@@ -216,7 +223,9 @@ export async function buildApp(ctx: AppContext) {
       .limit(1);
     if (row) {
       const u = row.user;
-      req.user = { id: u.id, organizationId: u.organizationId, name: u.name, username: u.username, email: u.email, role: u.role, customerId: u.customerId, platformAdmin: u.platformAdmin, sessionId: sid };
+      req.user = { id: u.id, organizationId: u.organizationId, name: u.name, username: u.username, email: u.email, role: u.role, customerId: u.customerId, platformAdmin: u.platformAdmin, sessionId: sid, locale: u.locale };
+      // Until someone picks a language, e-mails follow the language their app runs in.
+      if (!u.locale && req.headers["accept-language"]) await ctx.db.update(users).set({ locale: currentLocale() }).where(eq(users.id, u.id));
       if (u.role === "employee") {
         const [led, teamRows] = await Promise.all([
           ctx.db.select({ id: projects.id }).from(projects).where(and(eq(projects.organizationId, u.organizationId), eq(projects.leadUserId, u.id))),
@@ -232,18 +241,18 @@ export async function buildApp(ctx: AppContext) {
         if (writing && !LOCKED_WRITE_PREFIXES.some((p) => req.url.startsWith(p))) assertWritable(req.user.subscription);
       }
       if (u.role === "auditor" && req.url.startsWith("/api/") && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !AUDITOR_WRITE_PREFIXES.some((p) => req.url.startsWith(p)))
-        throw new HttpError(403, "Dein Zugang ist nur lesend (Treuhand).");
+        throw new HttpError(403, tr("Dein Zugang ist nur lesend (Treuhand)."));
       if (!row.lastSeenAt || Date.now() - row.lastSeenAt.getTime() > 5 * 60_000) await ctx.db.update(sessions).set({ lastSeenAt: new Date(), ip: req.ip }).where(eq(sessions.id, sid));
-      if (u.role === "customer" && req.url.startsWith("/api/") && !PORTAL_PREFIXES.some((p) => req.url.startsWith(p))) throw new HttpError(403, "Dieser Bereich ist für das Kundenportal nicht zugänglich.");
+      if (u.role === "customer" && req.url.startsWith("/api/") && !PORTAL_PREFIXES.some((p) => req.url.startsWith(p))) throw new HttpError(403, tr("Dieser Bereich ist für das Kundenportal nicht zugänglich."));
     }
   });
 
   app.setErrorHandler((err: Error & { statusCode?: number; validation?: unknown }, req, reply: FastifyReply) => {
     if (err instanceof HttpError) return reply.status(err.statusCode).send({ error: err.message });
-    if (err.name === "ZodError") return reply.status(400).send({ error: "Eingaben sind unvollständig oder ungültig.", details: JSON.parse(err.message) });
+    if (err.name === "ZodError") return reply.status(400).send({ error: tr("Eingaben sind unvollständig oder ungültig."), details: JSON.parse(err.message) });
     if (err.statusCode && err.statusCode < 500) return reply.status(err.statusCode).send({ error: err.message });
     req.log.error(err);
-    return reply.status(500).send({ error: "Interner Fehler. Bitte später erneut versuchen." });
+    return reply.status(500).send({ error: tr("Interner Fehler. Bitte später erneut versuchen.") });
   });
 
   // Large API answers (the dataset) are gzip-compressed when the client accepts it; behind Caddy this
@@ -286,7 +295,7 @@ export async function buildApp(ctx: AppContext) {
   if (webDist && existsSync(webDist)) {
     await app.register(fastifyStatic, { root: webDist });
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith("/api/")) return reply.status(404).send({ error: "Nicht gefunden." });
+      if (req.url.startsWith("/api/")) return reply.status(404).send({ error: tr("Nicht gefunden.") });
       return reply.sendFile("index.html");
     });
   }

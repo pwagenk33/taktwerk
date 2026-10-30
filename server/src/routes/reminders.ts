@@ -5,12 +5,13 @@ import { HttpError, requireUser } from "../app";
 import { organizations, users, type ReminderSettings } from "../db/schema";
 import { reminderMessage, sendReminderTo } from "../jobs";
 import { webhookProblem } from "../notify/webhooks";
+import { tr } from "@taktwerk/domain";
 
 export const DEFAULT_REMINDER: ReminderSettings = { channel: "off", time: "17:00", days: [1, 2, 3, 4, 5] };
 
 const body = z.object({
   channel: z.enum(["off", "mail", "teams", "slack"]),
-  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Uhrzeit als HH:MM"),
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, tr("Uhrzeit als HH:MM")),
   days: z.array(z.number().int().min(1).max(7)).max(7),
   webhookUrl: z.string().trim().max(1000).optional(),
 });
@@ -28,7 +29,7 @@ export async function reminderRoutes(app: FastifyInstance) {
   app.put("/api/me/reminder", async (req) => {
     const user = requireUser(req);
     const r = body.parse(req.body);
-    if ((r.channel === "teams" || r.channel === "slack") && !r.webhookUrl) throw new HttpError(400, "Für Teams oder Slack brauchst du die Webhook-URL deines Kanals.");
+    if ((r.channel === "teams" || r.channel === "slack") && !r.webhookUrl) throw new HttpError(400, tr("Für Teams oder Slack brauchst du die Webhook-URL deines Kanals."));
     if ((r.channel === "teams" || r.channel === "slack") && r.webhookUrl) {
       const problem = webhookProblem(r.channel, r.webhookUrl);
       if (problem) throw new HttpError(400, problem);
@@ -42,9 +43,9 @@ export async function reminderRoutes(app: FastifyInstance) {
   app.post("/api/me/reminder/test", async (req) => {
     const user = requireUser(req);
     const [row] = await ctx.db.select().from(users).where(eq(users.id, user.id));
-    if (!row?.reminder || row.reminder.channel === "off") throw new HttpError(400, "Zuerst einen Kanal wählen und speichern.");
+    if (!row?.reminder || row.reminder.channel === "off") throw new HttpError(400, tr("Zuerst einen Kanal wählen und speichern."));
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
-    if (!org) throw new HttpError(404, "Nicht gefunden.");
+    if (!org) throw new HttpError(404, tr("Nicht gefunden."));
     await sendReminderTo(ctx, org.settings, row, reminderMessage(org.settings, row, 0, ctx.config.APP_URL, true));
     return { ok: true, channel: row.reminder.channel };
   });

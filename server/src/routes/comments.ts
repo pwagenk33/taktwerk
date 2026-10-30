@@ -6,6 +6,8 @@ import { z } from "zod";
 import { HttpError, requireUser, type SessionUser } from "../app";
 import { entryComments, organizations, timeEntries, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
+import { tr } from "@taktwerk/domain";
+import { withLocale } from "../i18n";
 
 const isLead = (u: SessionUser) => u.role === "admin" || u.role === "consultant";
 
@@ -15,8 +17,8 @@ export async function commentRoutes(app: FastifyInstance) {
 
   const entryFor = async (user: SessionUser, entryId: string) => {
     const [e] = await ctx.db.select().from(timeEntries).where(and(eq(timeEntries.id, entryId), eq(timeEntries.organizationId, user.organizationId))).limit(1);
-    if (!e) throw new HttpError(404, "Buchung nicht gefunden.");
-    if (e.userId !== user.id && !isLead(user)) throw new HttpError(403, "Dafür fehlt dir die Berechtigung.");
+    if (!e) throw new HttpError(404, tr("Buchung nicht gefunden."));
+    if (e.userId !== user.id && !isLead(user)) throw new HttpError(403, tr("Dafür fehlt dir die Berechtigung."));
     return e;
   };
 
@@ -51,15 +53,15 @@ export async function commentRoutes(app: FastifyInstance) {
       const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
       if (owner && org) {
         await ctx.mailer.send(
-          actionMail(org.settings.branding, {
+          withLocale(owner.locale, () => actionMail(org.settings.branding, {
             to: owner.email,
-            subject: `${org.settings.branding.appName}: Rückfrage zu deiner Buchung vom ${fmtDate(e.date)}`,
-            greeting: `Hallo ${owner.name.split(" ")[0]}`,
-            lines: [`${user.name} fragt zu «${e.reason}» (${e.hours.toFixed(2).replace(".", ",")} h am ${fmtDate(e.date)}):`, `«${body.text}»`, "Antworte direkt in der Buchung, dann ist die Rückfrage erledigt."],
-            action: "Buchung öffnen",
+            subject: tr("{0}: Rückfrage zu deiner Buchung vom {1}", org.settings.branding.appName, fmtDate(e.date)),
+            greeting: tr("Hallo {0}", owner.name.split(" ")[0]),
+            lines: [tr("{0} fragt zu «{1}» ({2} h am {3}):", user.name, e.reason, e.hours.toFixed(2).replace(".", ","), fmtDate(e.date)), `«${body.text}»`, tr("Antworte direkt in der Buchung, dann ist die Rückfrage erledigt.")],
+            action: tr("Buchung öffnen"),
             url: new URL(`/#zeit/e/${e.id}`, ctx.config.APP_URL).toString(),
-            footer: "Rückfragen stellen Consultants und Admins im Monatsabschluss oder im Kalender.",
-          }),
+            footer: tr("Rückfragen stellen Consultants und Admins im Monatsabschluss oder im Kalender."),
+          })),
         );
       }
     }

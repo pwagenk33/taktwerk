@@ -16,7 +16,8 @@
     "test": "npm test -w @taktwerk/domain && npm test -w server",
     "typecheck": "npm run typecheck -ws",
     "db:migrate": "npm run db:migrate -w server",
-    "db:seed": "npm run db:seed -w server"
+    "db:seed": "npm run db:seed -w server",
+    "i18n": "tsx scripts/i18n-keys.ts"
   },
   "devDependencies": {
     "drizzle-orm": "^0.45.4",

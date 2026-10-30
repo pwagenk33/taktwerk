@@ -9,6 +9,7 @@ import { hashPassword, newToken, passwordProblem, sha256, verifyPassword } from 
 import { DEFAULT_BRANDING, oauthAccounts, organizations, passkeys, passwordTokens, sessions, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { syncSeats } from "../saas";
+import { tr } from "@taktwerk/domain";
 
 type Provider = "microsoft" | "google";
 
@@ -88,7 +89,7 @@ export async function authRoutes(app: FastifyInstance) {
     const body = z.object({ username: z.string().trim().min(1).max(254), password: z.string().min(1).max(500) }).parse(req.body);
     const key = `${req.ip}|${body.username.toLowerCase()}`;
     const f = failures.get(key);
-    if (f && f.count >= 10 && f.until > Date.now()) throw new HttpError(429, "Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen.");
+    if (f && f.count >= 10 && f.until > Date.now()) throw new HttpError(429, tr("Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen."));
 
     const [user] = await ctx.db
       .select()
@@ -99,14 +100,14 @@ export async function authRoutes(app: FastifyInstance) {
     if (!ok || !user) {
       const prev = f && f.until > Date.now() ? f.count : 0;
       failures.set(key, { count: prev + 1, until: Date.now() + WINDOW_MS });
-      throw new HttpError(401, "Benutzername oder Passwort ist falsch.");
+      throw new HttpError(401, tr("Benutzername oder Passwort ist falsch."));
     }
     failures.delete(key);
     // Strict tenant separation: on an organization's own domain only its users may sign in; inactive organizations are closed.
     const hostOrg = await organizationForHost(ctx.db, req.headers.host, ctx.config.SAAS_BASE_DOMAIN);
-    if (hostOrg && (hostOrg.domain || ctx.config.SAAS_BASE_DOMAIN) && hostOrg.id !== user.organizationId) throw new HttpError(403, "Dieses Konto gehört zu einer anderen Firma. Bitte die Adresse deiner Firma verwenden.");
+    if (hostOrg && (hostOrg.domain || ctx.config.SAAS_BASE_DOMAIN) && hostOrg.id !== user.organizationId) throw new HttpError(403, tr("Dieses Konto gehört zu einer anderen Firma. Bitte die Adresse deiner Firma verwenden."));
     const [own] = await ctx.db.select({ active: organizations.active }).from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
-    if (own && !own.active) throw new HttpError(403, "Diese Firma ist deaktiviert. Bitte den Betreiber kontaktieren.");
+    if (own && !own.active) throw new HttpError(403, tr("Diese Firma ist deaktiviert. Bitte den Betreiber kontaktieren."));
     // Second factor: the password alone opens no session; the client completes with a code or a passkey.
     const keys = await ctx.db.select({ id: passkeys.id }).from(passkeys).where(eq(passkeys.userId, user.id));
     if (user.totpEnabledAt || keys.length > 0) {
@@ -145,12 +146,20 @@ export async function authRoutes(app: FastifyInstance) {
     return user;
   });
 
+  /** Language of the app and of e-mails to this person. */
+  app.put("/api/me/locale", async (req) => {
+    const me = requireUser(req);
+    const { locale } = z.object({ locale: z.enum(["de", "fr", "en"]) }).parse(req.body);
+    await ctx.db.update(users).set({ locale }).where(eq(users.id, me.id));
+    return { locale };
+  });
+
   /** Change the own password: current password required, same rules as for a new one. */
   app.post("/api/auth/password/change", async (req) => {
     const me = requireUser(req);
     const body = z.object({ current: z.string().max(500), next: z.string().max(500) }).parse(req.body);
     const [user] = await ctx.db.select().from(users).where(eq(users.id, me.id)).limit(1);
-    if (!user || !(await verifyPassword(body.current, user.passwordHash))) throw new HttpError(400, "Das aktuelle Passwort ist falsch.");
+    if (!user || !(await verifyPassword(body.current, user.passwordHash))) throw new HttpError(400, tr("Das aktuelle Passwort ist falsch."));
     const problem = passwordProblem(body.next);
     if (problem) throw new HttpError(400, problem);
     await ctx.db.update(users).set({ passwordHash: await hashPassword(body.next) }).where(eq(users.id, user.id));
@@ -169,12 +178,12 @@ export async function authRoutes(app: FastifyInstance) {
       await ctx.mailer.send(
         actionMail(branding, {
           to: user.email,
-          subject: `${branding.appName}: Passwort zurücksetzen`,
-          greeting: `Hallo ${user.name}`,
-          lines: ["Du hast ein neues Passwort angefordert. Der Link ist eine Stunde gültig."],
-          action: "Neues Passwort setzen",
+          subject: tr("{0}: Passwort zurücksetzen", branding.appName),
+          greeting: tr("Hallo {0}", user.name),
+          lines: [tr("Du hast ein neues Passwort angefordert. Der Link ist eine Stunde gültig.")],
+          action: tr("Neues Passwort setzen"),
           url: passwordLink(ctx, token, org),
-          footer: "Wenn du das nicht warst, kannst du diese E-Mail ignorieren. Dein Passwort bleibt unverändert.",
+          footer: tr("Wenn du das nicht warst, kannst du diese E-Mail ignorieren. Dein Passwort bleibt unverändert."),
         }),
       );
     }
@@ -191,7 +200,7 @@ export async function authRoutes(app: FastifyInstance) {
       .from(passwordTokens)
       .where(and(eq(passwordTokens.id, sha256(body.token)), isNull(passwordTokens.usedAt), gt(passwordTokens.expiresAt, new Date()), notInArray(passwordTokens.purpose, ["2fa", "handoff"])))
       .limit(1);
-    if (!row) throw new HttpError(400, "Der Link ist abgelaufen oder wurde schon verwendet. Bitte fordere einen neuen an.");
+    if (!row) throw new HttpError(400, tr("Der Link ist abgelaufen oder wurde schon verwendet. Bitte fordere einen neuen an."));
     await ctx.db.update(passwordTokens).set({ usedAt: new Date() }).where(eq(passwordTokens.id, row.id));
     await ctx.db.update(users).set({ passwordHash: await hashPassword(body.password) }).where(eq(users.id, row.userId));
     await ctx.db.delete(sessions).where(eq(sessions.userId, row.userId)); // sign out everywhere else
@@ -204,7 +213,7 @@ export async function authRoutes(app: FastifyInstance) {
   for (const provider of ["microsoft", "google"] as const) {
     app.get(`/api/auth/${provider}`, async (_req, reply) => {
       const client = oauthClient(ctx, provider);
-      if (!client) throw new HttpError(404, "Diese Anmeldeart ist nicht eingerichtet.");
+      if (!client) throw new HttpError(404, tr("Diese Anmeldeart ist nicht eingerichtet."));
       const state = generateState();
       const verifier = generateCodeVerifier();
       const url = client.createAuthorizationURL(state, verifier, ["openid", "profile", "email"]);
@@ -237,7 +246,7 @@ export async function authRoutes(app: FastifyInstance) {
       if (provider === "google" && claims.email_verified !== true) return fail("email_unbestaetigt");
 
       const userId = await resolveOAuthUser(ctx, provider, subject, email, name);
-      if (!userId) return fail("unbekannt");
+      if (!userId) return fail(tr("unbekannt"));
       const done = await signIn(ctx, req, reply, userId);
       return reply.redirect(done.redirect ?? `${new URL(ctx.config.APP_URL).origin}/`);
     });

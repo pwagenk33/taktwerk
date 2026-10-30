@@ -1,5 +1,6 @@
 import { cloneElement, createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { Icon } from "./components";
+import { tr } from "../i18n";
 
 /**
  * One pattern for every create and edit in the app: a popup with a title, a line saying what it is for,
@@ -43,7 +44,7 @@ export function Dialog({ title, subtitle, onClose, children, footer, wide, id }:
             <h2 id={titleId}>{title}</h2>
             {subtitle && <p className="dialog-sub">{subtitle}</p>}
           </div>
-          <button type="button" className="icon-btn" aria-label="Schliessen" onClick={onClose}><Icon.close /></button>
+          <button type="button" className="icon-btn" aria-label={tr("Schliessen")} onClick={onClose}><Icon.close /></button>
         </div>
         <div className="dialog-body">{children}</div>
         {footer && <div className="dialog-foot">{footer}</div>}
@@ -56,7 +57,7 @@ export function Dialog({ title, subtitle, onClose, children, footer, wide, id }:
  * A dialog with a form. `onSubmit` returns field errors ({ name: "…" }) to keep the dialog open,
  * or nothing when it saved; thrown errors are shown at the bottom.
  */
-export function FormDialog({ title, subtitle, onClose, onSubmit, submitLabel = "Speichern", children, wide, id, danger, readOnly }: {
+export function FormDialog({ title, subtitle, onClose, onSubmit, submitLabel = tr("Speichern"), children, wide, id, danger, readOnly }: {
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   onClose: () => void;
@@ -104,11 +105,11 @@ export function FormDialog({ title, subtitle, onClose, onSubmit, submitLabel = "
         <>
           <div className="dialog-foot-left">
             {danger}
-            {!readOnly && <span className="req-note"><span className="req" aria-hidden="true">*</span> Pflichtfeld</span>}
+            {!readOnly && <span className="req-note"><span className="req" aria-hidden="true">*</span>{" "}{tr("Pflichtfeld")}</span>}
           </div>
           <div className="dialog-foot-right">
-            <button type="button" className="btn ghost" onClick={onClose}>{readOnly ? "Schliessen" : "Abbrechen"}</button>
-            {!readOnly && <button type="submit" form={formId} className="btn primary" disabled={busy}>{busy ? "Einen Moment …" : submitLabel}</button>}
+            <button type="button" className="btn ghost" onClick={onClose}>{readOnly ? tr("Schliessen") : tr("Abbrechen")}</button>
+            {!readOnly && <button type="submit" form={formId} className="btn primary" disabled={busy}>{busy ? tr("Einen Moment …") : submitLabel}</button>}
           </div>
         </>
       }
@@ -139,7 +140,7 @@ export function Field({ label, name, required, hint, children, wide }: {
   const hintId = useId();
   return (
     <div className={`field ${wide ? "wide" : ""} ${error ? "has-error" : ""}`} data-field={name}>
-      <span className="field-label">{label}{required && <span className="req" aria-label="Pflichtfeld"> *</span>}</span>
+      <span className="field-label">{label}{required && <span className="req" aria-label={tr("Pflichtfeld")}> *</span>}</span>
       <FieldControl invalid={!!error} describedBy={error || hint ? hintId : undefined}>{children}</FieldControl>
       {error ? <span className="field-error" id={hintId}>{error}</span> : hint ? <span className="field-hint" id={hintId}>{hint}</span> : null}
     </div>

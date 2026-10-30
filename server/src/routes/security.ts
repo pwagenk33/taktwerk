@@ -10,6 +10,7 @@ import { sha256, verifyPassword } from "../auth/crypto";
 import { newRecoveryCodes, newTotpSecret, otpauthUrl, verifyTotp } from "../auth/totp";
 import { organizations, passkeys, passwordTokens, sessions, users } from "../db/schema";
 import { signIn } from "./auth";
+import { tr } from "@taktwerk/domain";
 
 const code = z.string().trim().min(6).max(20);
 
@@ -47,7 +48,7 @@ export async function securityRoutes(app: FastifyInstance) {
 
   const loadUser = async (id: string) => {
     const [u] = await ctx.db.select().from(users).where(eq(users.id, id)).limit(1);
-    if (!u) throw new HttpError(404, "Benutzer nicht gefunden.");
+    if (!u) throw new HttpError(404, tr("Benutzer nicht gefunden."));
     return u;
   };
   const appName = async (orgId: string) => (await ctx.db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1))[0]?.settings.branding.appName ?? "TrackInsight";
@@ -59,7 +60,7 @@ export async function securityRoutes(app: FastifyInstance) {
       .from(passwordTokens)
       .where(and(eq(passwordTokens.id, sha256(token)), eq(passwordTokens.purpose, "2fa"), isNull(passwordTokens.usedAt), gt(passwordTokens.expiresAt, new Date())))
       .limit(1);
-    if (!row) throw new HttpError(401, "Die Anmeldung ist abgelaufen. Bitte erneut mit Passwort anmelden.");
+    if (!row) throw new HttpError(401, tr("Die Anmeldung ist abgelaufen. Bitte erneut mit Passwort anmelden."));
     return row;
   };
   const consume = (id: string) => ctx.db.update(passwordTokens).set({ usedAt: new Date() }).where(eq(passwordTokens.id, id));
@@ -92,8 +93,8 @@ export async function securityRoutes(app: FastifyInstance) {
     const me = requireUser(req);
     const { code: c } = z.object({ code }).parse(req.body);
     const u = await loadUser(me.id);
-    if (!u.totpSecret || u.totpEnabledAt) throw new HttpError(400, "Zuerst die Einrichtung starten.");
-    if (!verifyTotp(u.totpSecret, c)) throw new HttpError(400, "Der Code stimmt nicht. Bitte den aktuellen Code aus der App eingeben.");
+    if (!u.totpSecret || u.totpEnabledAt) throw new HttpError(400, tr("Zuerst die Einrichtung starten."));
+    if (!verifyTotp(u.totpSecret, c)) throw new HttpError(400, tr("Der Code stimmt nicht. Bitte den aktuellen Code aus der App eingeben."));
     const codes = newRecoveryCodes();
     await ctx.db.update(users).set({ totpEnabledAt: new Date(), recoveryCodes: codes.map(sha256) }).where(eq(users.id, me.id));
     return { ok: true, recoveryCodes: codes };
@@ -103,8 +104,8 @@ export async function securityRoutes(app: FastifyInstance) {
     const me = requireUser(req);
     const { password } = z.object({ password: z.string().max(500) }).parse(req.body);
     const u = await loadUser(me.id);
-    if (!u.totpEnabledAt) throw new HttpError(400, "Die Authenticator-App ist nicht eingerichtet.");
-    if (!(await verifyPassword(password, u.passwordHash))) throw new HttpError(400, "Das Passwort ist falsch.");
+    if (!u.totpEnabledAt) throw new HttpError(400, tr("Die Authenticator-App ist nicht eingerichtet."));
+    if (!(await verifyPassword(password, u.passwordHash))) throw new HttpError(400, tr("Das Passwort ist falsch."));
     const codes = newRecoveryCodes();
     await ctx.db.update(users).set({ recoveryCodes: codes.map(sha256) }).where(eq(users.id, me.id));
     return { recoveryCodes: codes };
@@ -114,7 +115,7 @@ export async function securityRoutes(app: FastifyInstance) {
     const me = requireUser(req);
     const { password } = z.object({ password: z.string().max(500) }).parse(req.body);
     const u = await loadUser(me.id);
-    if (u.passwordHash && !(await verifyPassword(password, u.passwordHash))) throw new HttpError(400, "Das Passwort ist falsch.");
+    if (u.passwordHash && !(await verifyPassword(password, u.passwordHash))) throw new HttpError(400, tr("Das Passwort ist falsch."));
     await ctx.db.update(users).set({ totpSecret: null, totpEnabledAt: null, recoveryCodes: null }).where(eq(users.id, me.id));
     return { ok: true };
   });
@@ -130,7 +131,7 @@ export async function securityRoutes(app: FastifyInstance) {
       ok = true;
       await ctx.db.update(users).set({ recoveryCodes: u.recoveryCodes.filter((h) => h !== sha256(c)) }).where(eq(users.id, u.id));
     }
-    if (!ok) throw new HttpError(401, "Der Code stimmt nicht.");
+    if (!ok) throw new HttpError(401, tr("Der Code stimmt nicht."));
     await consume(row.id);
     return signIn(ctx, req, reply, u.id);
   });
@@ -162,14 +163,14 @@ export async function securityRoutes(app: FastifyInstance) {
     const body = z.object({ name: z.string().trim().min(1).max(80), response: z.custom<RegistrationResponseJSON>((v) => typeof v === "object" && v !== null) }).parse(req.body);
     const { rpID, origin } = rp(req, ctx);
     const ch = takeChallenge(challengeOf(body.response));
-    if (!ch || ch.userId !== me.id) throw new HttpError(400, "Die Registrierung ist abgelaufen. Bitte erneut versuchen.");
+    if (!ch || ch.userId !== me.id) throw new HttpError(400, tr("Die Registrierung ist abgelaufen. Bitte erneut versuchen."));
     let v;
     try {
       v = await verifyRegistrationResponse({ response: body.response, expectedChallenge: (c) => c === challengeOf(body.response), expectedOrigin: origin, expectedRPID: rpID, requireUserVerification: false });
     } catch (e) {
-      throw new HttpError(400, `Passkey konnte nicht geprüft werden: ${(e as Error).message}`);
+      throw new HttpError(400, tr("Passkey konnte nicht geprüft werden: {0}", (e as Error).message));
     }
-    if (!v.verified) throw new HttpError(400, "Passkey konnte nicht geprüft werden.");
+    if (!v.verified) throw new HttpError(400, tr("Passkey konnte nicht geprüft werden."));
     const c = v.registrationInfo.credential;
     await ctx.db.insert(passkeys).values({ id: c.id, userId: me.id, publicKey: b64(c.publicKey), counter: c.counter, transports: c.transports ?? null, name: body.name, backedUp: v.registrationInfo.credentialBackedUp });
     return reply.status(201).send({ id: c.id, name: body.name });
@@ -179,7 +180,7 @@ export async function securityRoutes(app: FastifyInstance) {
     const me = requireUser(req);
     const { id } = req.params as { id: string };
     const res = await ctx.db.delete(passkeys).where(and(eq(passkeys.id, id), eq(passkeys.userId, me.id)));
-    if (!res[0].affectedRows) throw new HttpError(404, "Passkey nicht gefunden.");
+    if (!res[0].affectedRows) throw new HttpError(404, tr("Passkey nicht gefunden."));
     return { ok: true };
   });
 
@@ -202,19 +203,19 @@ export async function securityRoutes(app: FastifyInstance) {
   const verifyPasskey = async (req: FastifyRequest, reply: FastifyReply, response: AuthenticationResponseJSON, expectUser: string | null) => {
     const { rpID, origin } = rp(req, ctx);
     const ch = takeChallenge(challengeOf(response));
-    if (!ch) throw new HttpError(401, "Die Anmeldung ist abgelaufen. Bitte erneut versuchen.");
+    if (!ch) throw new HttpError(401, tr("Die Anmeldung ist abgelaufen. Bitte erneut versuchen."));
     const [k] = await ctx.db.select().from(passkeys).where(eq(passkeys.id, response.id)).limit(1);
-    if (!k || (expectUser && k.userId !== expectUser) || (ch.userId && ch.userId !== k.userId)) throw new HttpError(401, "Dieser Passkey ist nicht bekannt.");
+    if (!k || (expectUser && k.userId !== expectUser) || (ch.userId && ch.userId !== k.userId)) throw new HttpError(401, tr("Dieser Passkey ist nicht bekannt."));
     let v;
     try {
       v = await verifyAuthenticationResponse({ response, expectedChallenge: (c) => c === challengeOf(response), expectedOrigin: origin, expectedRPID: rpID, credential: toCredential(k), requireUserVerification: !expectUser });
     } catch (e) {
-      throw new HttpError(401, `Passkey konnte nicht geprüft werden: ${(e as Error).message}`);
+      throw new HttpError(401, tr("Passkey konnte nicht geprüft werden: {0}", (e as Error).message));
     }
-    if (!v.verified) throw new HttpError(401, "Passkey konnte nicht geprüft werden.");
+    if (!v.verified) throw new HttpError(401, tr("Passkey konnte nicht geprüft werden."));
     await ctx.db.update(passkeys).set({ counter: v.authenticationInfo.newCounter, lastUsedAt: new Date() }).where(eq(passkeys.id, k.id));
     const u = await loadUser(k.userId);
-    if (!u.active) throw new HttpError(403, "Dieses Konto ist deaktiviert.");
+    if (!u.active) throw new HttpError(403, tr("Dieses Konto ist deaktiviert."));
     return signIn(ctx, req, reply, u.id);
   };
 
@@ -243,7 +244,7 @@ export async function securityRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const rows = await ctx.db.select({ id: sessions.id }).from(sessions).where(eq(sessions.userId, me.id));
     const target = rows.find((s) => s.id.startsWith(id));
-    if (!target) throw new HttpError(404, "Sitzung nicht gefunden.");
+    if (!target) throw new HttpError(404, tr("Sitzung nicht gefunden."));
     await ctx.db.delete(sessions).where(eq(sessions.id, target.id));
     return { ok: true, current: target.id === me.sessionId };
   });
@@ -260,7 +261,7 @@ export async function securityRoutes(app: FastifyInstance) {
     const admin = requireRole(req, "admin");
     const { id } = req.params as { id: string };
     const [u] = await ctx.db.select({ id: users.id }).from(users).where(and(eq(users.id, id), eq(users.organizationId, admin.organizationId))).limit(1);
-    if (!u) throw new HttpError(404, "Benutzer nicht gefunden.");
+    if (!u) throw new HttpError(404, tr("Benutzer nicht gefunden."));
     await ctx.db.update(users).set({ totpSecret: null, totpEnabledAt: null, recoveryCodes: null }).where(eq(users.id, id));
     await ctx.db.delete(passkeys).where(eq(passkeys.userId, id));
     await ctx.db.delete(sessions).where(eq(sessions.userId, id));
@@ -270,8 +271,8 @@ export async function securityRoutes(app: FastifyInstance) {
 
 /** «Chrome auf Windows», «Safari auf iPhone» from a user agent string. */
 export function describe(ua: string | null): string {
-  if (!ua) return "Unbekanntes Gerät";
-  const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "macOS" : /Linux/.test(ua) ? "Linux" : "";
-  const browser = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
+  if (!ua) return tr("Unbekanntes Gerät");
+  const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "macOS" : /Linux/.test(ua) ? tr("Linux") : "";
+  const browser = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : tr("Browser");
   return os ? `${browser} auf ${os}` : browser;
 }

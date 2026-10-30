@@ -24,8 +24,9 @@ import {
   type VelocityMonth,
 } from "@taktwerk/domain";
 import { useStore, useThemeColors } from "../store";
+import { tr } from "../i18n";
 
-const STATUS_LABEL: Record<BudgetStatus, string> = { ok: "Im Plan", risk: "Knapp", over: "Überschreitung" };
+const STATUS_LABEL: Record<BudgetStatus, string> = { ok: tr("Im Plan"), risk: tr("Knapp"), over: tr("Überschreitung") };
 
 export function StatusPill({ status }: { status: BudgetStatus }) {
   return <span className={`pill ${status}`}>{STATUS_LABEL[status]}</span>;
@@ -62,7 +63,7 @@ export function BulletBars({ items, onSelect }: { items: BulletItem[]; onSelect?
             key={i.id}
             onClick={onSelect ? () => onSelect(i.id) : undefined}
             style={onSelect ? { cursor: "pointer" } : undefined}
-            title={`${i.name}\nBudget ${fmtCHF(i.budget)}\nVerbraucht ${fmtCHF(i.actual)}\nForecast ${fmtCHF(i.forecast)} (${fmtCHF(i.low)} – ${fmtCHF(i.high)})`}
+            title={tr("{0}\nBudget {1}\nVerbraucht {2}\nForecast {3} ({4} – {5})", i.name, fmtCHF(i.budget), fmtCHF(i.actual), fmtCHF(i.forecast), fmtCHF(i.low), fmtCHF(i.high))}
           >
             <div className="bullet-name">
               <strong>{i.name}</strong>
@@ -76,7 +77,7 @@ export function BulletBars({ items, onSelect }: { items: BulletItem[]; onSelect?
                 <div className="bullet-budget" style={{ left: pct(i.budget) }} />
               </div>
               <div className="bullet-meta num">
-                <span>{fmtKCHF(i.actual)} / {fmtKCHF(i.budget)} CHF</span>
+                <span>{fmtKCHF(i.actual)}{" "}{tr("/ {0} CHF", fmtKCHF(i.budget))}</span>
                 <StatusPill status={i.status} />
               </div>
             </div>
@@ -84,10 +85,10 @@ export function BulletBars({ items, onSelect }: { items: BulletItem[]; onSelect?
         ))}
       </div>
       <div className="bullet-legend">
-        <span><i className="sw" style={{ background: "var(--series-1)" }} />Verbraucht</span>
-        <span><i className="sw" style={{ background: "var(--series-1-soft)" }} />Restaufwand (Forecast)</span>
-        <span><i className="sw line" style={{ background: "var(--ink-2)" }} />Bandbreite</span>
-        <span><i className="sw" style={{ background: "var(--ink)", width: 2 }} />Budget</span>
+        <span><i className="sw" style={{ background: "var(--series-1)" }} />{tr("Verbraucht")}</span>
+        <span><i className="sw" style={{ background: "var(--series-1-soft)" }} />{tr("Restaufwand (Forecast)")}</span>
+        <span><i className="sw line" style={{ background: "var(--ink-2)" }} />{tr("Bandbreite")}</span>
+        <span><i className="sw" style={{ background: "var(--ink)", width: 2 }} />{tr("Budget")}</span>
       </div>
     </>
   );
@@ -151,11 +152,11 @@ export function VelocityChart({ months, height = "100%" }: { months: VelocityMon
   const c = useThemeColors();
   const { velocitySettings } = useStore();
   const rows = months.map((m) => ({ ...m, label: m.month }));
-  const smoothName = velocitySettings.method === "rolling" ? `Gleitend (${velocitySettings.window} Mt.)` : `EWMA (${velocitySettings.window} Mt.)`;
+  const smoothName = velocitySettings.method === "rolling" ? tr("Gleitend ({0} Mt.)", velocitySettings.window) : tr("EWMA ({0} Mt.)", velocitySettings.window);
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div className="chart-legend">
-        <span><i className="sw" style={{ background: c.s1soft }} />h/SP im Monat</span>
+        <span><i className="sw" style={{ background: c.s1soft }} />{tr("h/SP im Monat")}</span>
         <span><i className="sw line" style={{ background: c.s1 }} />{smoothName}</span>
       </div>
       <div style={{ flex: 1, minHeight: 160 }}>
@@ -166,9 +167,9 @@ export function VelocityChart({ months, height = "100%" }: { months: VelocityMon
             <YAxis tick={{ fill: c.muted, fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, "auto"]} unit=" h" width={52} />
             <Tooltip
               cursor={{ fill: c.grid, opacity: 0.5 }}
-              content={<ChartTip format={(v) => `${fmt1(v)} h/SP`} title={(l) => `${fmtMonthLong(l)}${l === months.at(-1)?.month ? " (laufend)" : ""}`} />}
+              content={<ChartTip format={(v) => `${fmt1(v)} h/SP`} title={(l) => `${fmtMonthLong(l)}${l === months.at(-1)?.month ? tr(" (laufend)") : ""}`} />}
             />
-            <Bar dataKey="hoursPerSp" name="h/SP im Monat" fill={c.s1soft} radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar dataKey="hoursPerSp" name={tr("h/SP im Monat")} fill={c.s1soft} radius={[4, 4, 0, 0]} maxBarSize={28} />
             <Line dataKey="smoothed" name={smoothName} stroke={c.s1} strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: c.surface, strokeWidth: 2 }} />
           </ComposedChart>
         </ResponsiveContainer>
@@ -186,9 +187,9 @@ export function BurnUpChart({ report }: { report: ProjectReport }) {
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div className="chart-legend">
-        <span><i className="sw line" style={{ background: c.s1 }} />Kosten kumuliert</span>
-        <span><i className="sw line" style={{ background: c.s2 }} />Forecast</span>
-        <span><i className="sw line" style={{ background: c.ink }} />Budget {fmtCHF(report.budget)}</span>
+        <span><i className="sw line" style={{ background: c.s1 }} />{tr("Kosten kumuliert")}</span>
+        <span><i className="sw line" style={{ background: c.s2 }} />{tr("Forecast")}</span>
+        <span><i className="sw line" style={{ background: c.ink }} />{tr("Budget")}{" "}{fmtCHF(report.budget)}</span>
       </div>
       <div style={{ flex: 1, minHeight: 160 }}>
         <ResponsiveContainer width="100%" height="100%">

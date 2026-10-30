@@ -9,6 +9,8 @@ import { DEFAULT_BRANDING, organizations, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { saasOn, seatsUsed, subscriptionOf } from "../saas";
 import { stripe, stripeOn, stripePrices, verifyStripeSignature } from "../stripe";
+import { tr } from "@taktwerk/domain";
+import { withLocale } from "../i18n";
 
 type OrgRow = typeof organizations.$inferSelect;
 
@@ -21,29 +23,36 @@ export function periodEnd(from: Date, interval: BillingInterval) {
 }
 
 const chf = (n: number) => `CHF ${n.toLocaleString("de-CH")}`;
-export const intervalLabel = (i: BillingInterval) => (i === "year" ? "jährlich" : "monatlich");
+export const intervalLabel = (i: BillingInterval) => (i === "year" ? tr("jährlich") : tr("monatlich"));
 
-/** Notice to the operator (OPERATOR_EMAIL); never fails the request. */
-export async function notifyOperator(ctx: AppContext, subject: string, lines: string[]) {
+type MailContent = () => { subject: string; lines: string[]; action?: { label: string; path: string } };
+
+/** Notice to the operator (OPERATOR_EMAIL), always in German; never fails the request. */
+export async function notifyOperator(ctx: AppContext, content: MailContent) {
   if (!ctx.config.OPERATOR_EMAIL) return;
-  await ctx.mailer
-    .send(actionMail(DEFAULT_BRANDING, { to: ctx.config.OPERATOR_EMAIL, subject, greeting: "Hallo", lines, footer: "Diese Meldung geht an OPERATOR_EMAIL." }))
-    .catch(() => {});
+  const mail = withLocale("de", () => {
+    const { subject, lines } = content();
+    return actionMail(DEFAULT_BRANDING, { to: ctx.config.OPERATOR_EMAIL!, subject, greeting: tr("Hallo"), lines, footer: tr("Diese Meldung geht an OPERATOR_EMAIL.") });
+  });
+  await ctx.mailer.send(mail).catch(() => {});
 }
 
-/** Mail to every active admin of a company. */
-export async function mailAdmins(ctx: AppContext, org: OrgRow, subject: string, lines: string[], action?: { label: string; path: string }) {
+/** Mail to every active admin of a company, each in their own language. */
+export async function mailAdmins(ctx: AppContext, org: OrgRow, content: MailContent) {
   const admins = await ctx.db.select().from(users).where(and(eq(users.organizationId, org.id), eq(users.role, "admin"), eq(users.active, true)));
   const branding = org.settings.branding ?? DEFAULT_BRANDING;
   for (const a of admins)
     await ctx.mailer.send(
-      actionMail(branding, {
-        to: a.email,
-        subject,
-        greeting: `Hallo ${a.name}`,
-        lines,
-        ...(action ? { action: action.label, url: `${appOrigin(ctx.config, org)}${action.path}` } : {}),
-        footer: "Du erhältst diese E-Mail als Admin deiner Firma.",
+      withLocale(a.locale, () => {
+        const { subject, lines, action } = content();
+        return actionMail(branding, {
+          to: a.email,
+          subject,
+          greeting: tr("Hallo {0}", a.name),
+          lines,
+          ...(action ? { action: action.label, url: `${appOrigin(ctx.config, org)}${action.path}` } : {}),
+          footer: tr("Du erhältst diese E-Mail als Admin deiner Firma."),
+        });
       }),
     );
 }
@@ -54,9 +63,9 @@ export async function subscriptionRoutes(app: FastifyInstance) {
 
   const adminOrg = async (req: Parameters<typeof requireRole>[0]) => {
     const admin = requireRole(req, "admin");
-    if (!saasOn(ctx)) throw new HttpError(404, "Diese Installation läuft ohne Abo.");
+    if (!saasOn(ctx)) throw new HttpError(404, tr("Diese Installation läuft ohne Abo."));
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, admin.organizationId)).limit(1);
-    if (!org) throw new HttpError(404, "Firma nicht gefunden.");
+    if (!org) throw new HttpError(404, tr("Firma nicht gefunden."));
     return { admin, org };
   };
   const view = async (org: OrgRow) => ({
@@ -77,7 +86,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     const body = choice.parse(req.body);
     const plan = planById(body.plan);
     const seats = billableSeats(await seatsUsed(ctx, org.id));
-    const price = `${chf(priceOf(plan, body.interval, seats))} ${intervalLabel(body.interval)} für ${seats} Personen`;
+    const price = tr("{0} {1} für {2} Personen", chf(priceOf(plan, body.interval, seats)), intervalLabel(body.interval), seats);
 
     if (!stripeOn(ctx)) {
       const now = new Date();
@@ -87,23 +96,23 @@ export async function subscriptionRoutes(app: FastifyInstance) {
         .set({ plan: body.plan, billingInterval: body.interval, subStatus: "active", billingMode: "invoice", trialEndsAt: null, canceledAt: null, currentPeriodEnd: keepPeriod ? org.currentPeriodEnd : periodEnd(now, body.interval) })
         .where(eq(organizations.id, org.id));
       const address = org.settings.billing?.address;
-      await notifyOperator(ctx, `Rechnung stellen: ${org.name}, ${plan.name}`, [
-        `${admin.name} (${admin.email}) hat für ${org.name} das Paket ${plan.name} gewählt: ${price}, zahlbar auf Rechnung.`,
-        address ? `Rechnungsadresse: ${[address.name, address.street, `${address.zip} ${address.city}`].filter(Boolean).join(", ")}` : "Rechnungsadresse: noch nicht erfasst (Einstellungen → Rechnung).",
-      ]);
-      await mailAdmins(ctx, org, `Abo ${plan.name} ist aktiv`, [`Danke! ${org.name} nutzt jetzt das Paket ${plan.name} (${price}, zzgl. MWST). Die Rechnung folgt per E-Mail.`]);
+      await notifyOperator(ctx, () => ({ subject: tr("Rechnung stellen: {0}, {1}", org.name, plan.name), lines: [
+        tr("{0} ({1}) hat für {2} das Paket {3} gewählt: {4}, zahlbar auf Rechnung.", admin.name, admin.email, org.name, plan.name, price),
+        address ? `Rechnungsadresse: ${[address.name, address.street, `${address.zip} ${address.city}`].filter(Boolean).join(", ")}` : tr("Rechnungsadresse: noch nicht erfasst (Einstellungen → Rechnung)."),
+      ] }));
+      await mailAdmins(ctx, org, () => ({ subject: tr("Abo {0} ist aktiv", plan.name), lines: [tr("Danke! {0} nutzt jetzt das Paket {1} ({2}, zzgl. MWST). Die Rechnung folgt per E-Mail.", org.name, plan.name, price)] }));
       const [after] = await ctx.db.select().from(organizations).where(eq(organizations.id, org.id)).limit(1);
       return { ...(await view(after!)), done: true };
     }
 
     const priceId = prices().priceFor(body.plan, body.interval);
-    if (!priceId) throw new HttpError(500, `Für ${plan.name} ${intervalLabel(body.interval)} ist kein Stripe-Preis hinterlegt (STRIPE_PRICES).`);
+    if (!priceId) throw new HttpError(500, tr("Für {0} {1} ist kein Stripe-Preis hinterlegt (STRIPE_PRICES).", plan.name, intervalLabel(body.interval)));
 
     // A running card subscription is switched directly; Stripe prorates the difference.
     if (org.stripeSubscriptionId && (org.subStatus === "active" || org.subStatus === "past_due")) {
       const sub = await stripe(ctx, "GET", `/subscriptions/${org.stripeSubscriptionId}`);
       const item = sub.items?.data?.[0]?.id;
-      if (!item) throw new HttpError(502, "Das Abo beim Zahlungsanbieter konnte nicht gelesen werden.");
+      if (!item) throw new HttpError(502, tr("Das Abo beim Zahlungsanbieter konnte nicht gelesen werden."));
       await stripe(ctx, "POST", `/subscriptions/${org.stripeSubscriptionId}`, { items: [{ id: item, price: priceId, quantity: seats }], proration_behavior: "create_prorations", cancel_at_period_end: false });
       await ctx.db.update(organizations).set({ plan: body.plan, billingInterval: body.interval, canceledAt: null }).where(eq(organizations.id, org.id));
       const [after] = await ctx.db.select().from(organizations).where(eq(organizations.id, org.id)).limit(1);
@@ -130,7 +139,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   /** Stripe's own page for card, invoices and receipts. */
   app.post("/api/subscription/portal", async (req) => {
     const { org } = await adminOrg(req);
-    if (!org.stripeCustomerId) throw new HttpError(400, "Es sind noch keine Zahlungsdaten hinterlegt.");
+    if (!org.stripeCustomerId) throw new HttpError(400, tr("Es sind noch keine Zahlungsdaten hinterlegt."));
     const session = await stripe(ctx, "POST", "/billing_portal/sessions", { customer: org.stripeCustomerId, return_url: `${appOrigin(ctx.config, org)}/einstellungen` });
     return { url: session.url as string };
   });
@@ -138,22 +147,22 @@ export async function subscriptionRoutes(app: FastifyInstance) {
   /** Ends the subscription at the end of the paid period; until then everything keeps working. */
   app.post("/api/subscription/cancel", async (req) => {
     const { admin, org } = await adminOrg(req);
-    if (org.subStatus !== "active" && org.subStatus !== "past_due") throw new HttpError(400, "Es läuft kein Abo, das gekündigt werden könnte.");
+    if (org.subStatus !== "active" && org.subStatus !== "past_due") throw new HttpError(400, tr("Es läuft kein Abo, das gekündigt werden könnte."));
     if (org.billingMode === "stripe" && org.stripeSubscriptionId) await stripe(ctx, "POST", `/subscriptions/${org.stripeSubscriptionId}`, { cancel_at_period_end: true });
     await ctx.db.update(organizations).set({ canceledAt: new Date() }).where(eq(organizations.id, org.id));
-    const until = org.currentPeriodEnd ? fmtDate(org.currentPeriodEnd.toISOString().slice(0, 10)) : "zum Ende der Periode";
-    await notifyOperator(ctx, `Kündigung: ${org.name}`, [`${admin.name} hat das Abo von ${org.name} (${planById(org.plan).name}) gekündigt, gültig bis ${until}.`]);
-    await mailAdmins(ctx, org, "Abo gekündigt", [`Das Abo von ${org.name} endet am ${until}. Bis dahin funktioniert alles wie gewohnt; danach bleiben die Daten lesbar und exportierbar.`, "Falls das ein Versehen war: unter Einstellungen → Abo lässt sich die Kündigung zurücknehmen."]);
+    const until = org.currentPeriodEnd ? fmtDate(org.currentPeriodEnd.toISOString().slice(0, 10)) : tr("zum Ende der Periode");
+    await notifyOperator(ctx, () => ({ subject: tr("Kündigung: {0}", org.name), lines: [tr("{0} hat das Abo von {1} ({2}) gekündigt, gültig bis {3}.", admin.name, org.name, planById(org.plan).name, until)] }));
+    await mailAdmins(ctx, org, () => ({ subject: tr("Abo gekündigt"), lines: [tr("Das Abo von {0} endet am {1}. Bis dahin funktioniert alles wie gewohnt; danach bleiben die Daten lesbar und exportierbar.", org.name, until), tr("Falls das ein Versehen war: unter Einstellungen → Abo lässt sich die Kündigung zurücknehmen.")] }));
     const [after] = await ctx.db.select().from(organizations).where(eq(organizations.id, org.id)).limit(1);
     return view(after!);
   });
 
   app.post("/api/subscription/resume", async (req) => {
     const { org } = await adminOrg(req);
-    if (!org.canceledAt || org.subStatus !== "active") throw new HttpError(400, "Es gibt keine Kündigung zum Zurücknehmen.");
+    if (!org.canceledAt || org.subStatus !== "active") throw new HttpError(400, tr("Es gibt keine Kündigung zum Zurücknehmen."));
     if (org.billingMode === "stripe" && org.stripeSubscriptionId) await stripe(ctx, "POST", `/subscriptions/${org.stripeSubscriptionId}`, { cancel_at_period_end: false });
     await ctx.db.update(organizations).set({ canceledAt: null }).where(eq(organizations.id, org.id));
-    await notifyOperator(ctx, `Kündigung zurückgenommen: ${org.name}`, [`${org.name} bleibt beim Paket ${planById(org.plan).name}.`]);
+    await notifyOperator(ctx, () => ({ subject: tr("Kündigung zurückgenommen: {0}", org.name), lines: [tr("{0} bleibt beim Paket {1}.", org.name, planById(org.plan).name)] }));
     const [after] = await ctx.db.select().from(organizations).where(eq(organizations.id, org.id)).limit(1);
     return view(after!);
   });
@@ -164,7 +173,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     hook.post("/api/billing/webhook", async (req, reply) => {
       const secret = ctx.config.STRIPE_WEBHOOK_SECRET;
       const raw = String(req.body ?? "");
-      if (!secret || !verifyStripeSignature(raw, req.headers["stripe-signature"] as string | undefined, secret)) throw new HttpError(400, "Ungültige Signatur.");
+      if (!secret || !verifyStripeSignature(raw, req.headers["stripe-signature"] as string | undefined, secret)) throw new HttpError(400, tr("Ungültige Signatur."));
       const event = JSON.parse(raw) as { type: string; data: { object: Record<string, any> } };
       await handleStripeEvent(ctx, event);
       return reply.send({ received: true });
@@ -193,8 +202,8 @@ export async function handleStripeEvent(ctx: AppContext, event: { type: string; 
       .update(organizations)
       .set({ plan, billingInterval: interval, subStatus: "active", billingMode: "stripe", stripeCustomerId: o.customer ?? org.stripeCustomerId, stripeSubscriptionId: o.subscription ?? org.stripeSubscriptionId, trialEndsAt: null, canceledAt: null })
       .where(eq(organizations.id, org.id));
-    await notifyOperator(ctx, `Neues Abo: ${org.name}`, [`${org.name} zahlt jetzt per Karte: ${planById(plan).name}, ${intervalLabel(interval)}.`]);
-    await mailAdmins(ctx, org, `Abo ${planById(plan).name} ist aktiv`, [`Danke! ${org.name} nutzt jetzt das Paket ${planById(plan).name}. Quittungen und Zahlungsdaten findest du unter Einstellungen → Abo.`]);
+    await notifyOperator(ctx, () => ({ subject: tr("Neues Abo: {0}", org.name), lines: [tr("{0} zahlt jetzt per Karte: {1}, {2}.", org.name, planById(plan).name, intervalLabel(interval))] }));
+    await mailAdmins(ctx, org, () => ({ subject: tr("Abo {0} ist aktiv", planById(plan).name), lines: [tr("Danke! {0} nutzt jetzt das Paket {1}. Quittungen und Zahlungsdaten findest du unter Einstellungen → Abo.", org.name, planById(plan).name)] }));
     return;
   }
 
@@ -218,7 +227,7 @@ export async function handleStripeEvent(ctx: AppContext, event: { type: string; 
       })
       .where(eq(organizations.id, org.id));
     if (status === "canceled" && org.subStatus !== "canceled")
-      await mailAdmins(ctx, org, "Abo beendet", [`Das Abo von ${org.name} ist beendet. Die Daten bleiben lesbar und exportierbar; unter Einstellungen → Abo kannst du jederzeit wieder einsteigen.`], { label: "Abo ansehen", path: "/einstellungen" });
+      await mailAdmins(ctx, org, () => ({ subject: tr("Abo beendet"), lines: [tr("Das Abo von {0} ist beendet. Die Daten bleiben lesbar und exportierbar; unter Einstellungen → Abo kannst du jederzeit wieder einsteigen.", org.name)], action: { label: tr("Abo ansehen"), path: "/einstellungen" } }));
     return;
   }
 
@@ -233,10 +242,6 @@ export async function handleStripeEvent(ctx: AppContext, event: { type: string; 
     await ctx.db.update(organizations).set({ subStatus: "past_due" }).where(eq(organizations.id, org.id));
     await mailAdmins(
       ctx,
-      org,
-      "Zahlung fehlgeschlagen",
-      [`Die letzte Zahlung für ${org.name} hat nicht geklappt. Bitte die Kartendaten prüfen; alles läuft noch eine Woche normal weiter.`],
-      { label: "Zahlungsdaten prüfen", path: "/einstellungen" },
-    );
+      org, () => ({ subject: tr("Zahlung fehlgeschlagen"), lines: [tr("Die letzte Zahlung für {0} hat nicht geklappt. Bitte die Kartendaten prüfen; alles läuft noch eine Woche normal weiter.", org.name)], action: { label: tr("Zahlungsdaten prüfen"), path: "/einstellungen" } }));
   }
 }

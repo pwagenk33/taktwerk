@@ -4,6 +4,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { z } from "zod";
 import { HttpError, type AppContext } from "../app";
 import { notifyOperator } from "./subscription";
+import { tr } from "@taktwerk/domain";
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -96,18 +97,18 @@ export async function contactRoutes(app: FastifyInstance) {
       .parse(req.body);
     if (body.website) return { ok: true }; // bots fill the hidden field; pretend success
     const r = sent.get(req.ip);
-    if (r && r.count >= 5 && r.until > Date.now()) throw new HttpError(429, "Zu viele Anfragen");
+    if (r && r.count >= 5 && r.until > Date.now()) throw new HttpError(429, tr("Zu viele Anfragen"));
     sent.set(req.ip, { count: (r && r.until > Date.now() ? r.count : 0) + 1, until: Date.now() + 3600_000 });
-    if (!ctx.config.OPERATOR_EMAIL) throw new HttpError(503, "Das Formular ist noch nicht eingerichtet");
-    await notifyOperator(ctx, `Anfrage über die Website: ${body.company || body.name}`, [
+    if (!ctx.config.OPERATOR_EMAIL) throw new HttpError(503, tr("Das Formular ist noch nicht eingerichtet"));
+    await notifyOperator(ctx, () => ({ subject: tr("Anfrage über die Website: {0}", body.company || body.name), lines: [
       `Name: ${body.name}`,
       `Firma: ${body.company || "–"}`,
-      `E-Mail: ${body.email}`,
+      tr("E-Mail: {0}", body.email),
       `Telefon: ${body.phone || "–"}`,
       `Personen: ${body.size || "–"}`,
       "",
       body.message,
-    ]);
+    ] }));
     return { ok: true };
   });
 }

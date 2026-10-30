@@ -385,28 +385,40 @@ export function burnUp(data: Dataset, report: ProjectReport): BurnPoint[] {
   });
 }
 
-// ---------- formatting (de-CH) ----------
+// ---------- formatting (de-CH by default; fr-CH or en-CH per browser or per server request) ----------
 
-const chf = new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF", maximumFractionDigits: 0 });
-const num1 = new Intl.NumberFormat("de-CH", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
-const num0 = new Intl.NumberFormat("de-CH", { maximumFractionDigits: 0 });
-const monthFmt = new Intl.DateTimeFormat("de-CH", { month: "short", year: "2-digit", timeZone: "UTC" });
-const monthLong = new Intl.DateTimeFormat("de-CH", { month: "long", year: "numeric", timeZone: "UTC" });
-const dayFmt = new Intl.DateTimeFormat("de-CH", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" });
+let resolveTag: () => string = () => "de-CH";
+/** Fixed language for all fmt* helpers ("de-CH", "fr-CH", "en-CH"); the browser sets it once at start. */
+export function setFormatLocale(tag: string) { resolveTag = () => tag; }
+/** The server decides per request (or per recipient of an e-mail). */
+export function setFormatLocaleResolver(fn: () => string) { resolveTag = fn; }
+export const formatLocale = () => resolveTag();
+const formats = new Map<string, Intl.NumberFormat | Intl.DateTimeFormat>();
+function nf(key: string, opts: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const tag = resolveTag();
+  let f = formats.get(`${tag}|${key}`);
+  if (!f) formats.set(`${tag}|${key}`, (f = new Intl.NumberFormat(tag, opts)));
+  return f as Intl.NumberFormat;
+}
+function df(key: string, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const tag = resolveTag();
+  let f = formats.get(`${tag}|${key}`);
+  if (!f) formats.set(`${tag}|${key}`, (f = new Intl.DateTimeFormat(tag, opts)));
+  return f as Intl.DateTimeFormat;
+}
+const chf = { format: (v: number) => nf("chf", { style: "currency", currency: "CHF", maximumFractionDigits: 0 }).format(v) };
+const chf2 = { format: (v: number) => nf("chf2", { style: "currency", currency: "CHF", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) };
+const num1 = { format: (v: number) => nf("num1", { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(v) };
+const num0 = { format: (v: number) => nf("num0", { maximumFractionDigits: 0 }).format(v) };
+const monthFmt = { format: (d: Date) => df("month", { month: "short", year: "2-digit", timeZone: "UTC" }).format(d) };
+const monthLong = { format: (d: Date) => df("monthLong", { month: "long", year: "numeric", timeZone: "UTC" }).format(d) };
+const dayFmt = { format: (d: Date) => df("day", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" }).format(d) };
 
 export const fmtCHF = (v: number) => chf.format(v);
-const moneyFmt = new Map<string, Intl.NumberFormat>();
 /** Whole amounts in the given currency (CHF 12’300, € 9’800, $ 4’100). */
 export function fmtMoney(v: number, currency: Currency = "CHF", fraction = 0): string {
-  const key = `${currency}:${fraction}`;
-  let f = moneyFmt.get(key);
-  if (!f) {
-    f = new Intl.NumberFormat("de-CH", { style: "currency", currency, minimumFractionDigits: fraction, maximumFractionDigits: fraction });
-    moneyFmt.set(key, f);
-  }
-  return f.format(v);
+  return nf(`${currency}:${fraction}`, { style: "currency", currency, minimumFractionDigits: fraction, maximumFractionDigits: fraction }).format(v);
 }
-const chf2 = new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** Amounts where the Rappen matter (expenses, invoices, rates per km). */
 export const fmtCHF2 = (v: number) => chf2.format(v);
 export const fmtKCHF = (v: number) => `${num0.format(v / 1000)}k`;
