@@ -98,6 +98,8 @@ Die Buttons erscheinen auf der Anmeldeseite, sobald die Werte gesetzt sind.
 - **Datenschutz:** Auskunft unter Profil → Meine Daten, Anonymisieren in der Benutzerliste, Fristen und Ablauf in [docs/DATENSCHUTZ.md](docs/DATENSCHUTZ.md).
 - **Arbeitszeitmodell** (Einstellungen → Arbeitszeit): vereinfacht nach Art. 73b ArGV 1 oder Kommen/Gehen mit Pausen; bei Kommen/Gehen erscheint in der Zeiterfassung die Stempelleiste.
 - **Lasttest:** `npm run loadtest -w server`, Ergebnisse in [docs/LASTTEST.md](docs/LASTTEST.md).
+- **Offene API und Webhooks:** [docs/API.md](docs/API.md), OpenAPI unter `/api/v1/openapi.json`.
+- **Atlassian Marketplace:** [docs/MARKETPLACE.md](docs/MARKETPLACE.md).
 
 ## SaaS mit Abo
 

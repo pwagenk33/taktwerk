@@ -176,6 +176,13 @@
       "when": 1793322951543,
       "tag": "0024_bexio",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1793323405900,
+      "tag": "0025_api_webhooks",
+      "breakpoints": true
     }
   ]
 }

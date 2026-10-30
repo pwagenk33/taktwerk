@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { resolve } from "node:path";
 import { sha256 } from "./auth/crypto";
+import { INTERNAL_HEADER, INTERNAL_TOKEN, authenticateApiKey, bearerKey } from "./apikeys";
 import type { Config } from "./config";
 import type { Db } from "./db/client";
 import { organizations, projects, sessions, teams, users } from "./db/schema";
@@ -33,6 +34,7 @@ import { contactRoutes, serveWebsite } from "./routes/website";
 import { jiraRoutes } from "./routes/jira";
 import { calendarRoutes } from "./routes/calendar";
 import { bexioRoutes } from "./routes/bexio";
+import { v1Routes } from "./routes/v1";
 import { importRoutes } from "./routes/import";
 import { securityRoutes } from "./routes/security";
 import { privacyRoutes } from "./routes/privacy";
@@ -65,6 +67,8 @@ export interface SessionUser {
   leadsTeams?: string[];
   /** SaaS mode: package and status of the company (absent on self-hosted installations). */
   subscription?: Subscription;
+  /** Set when the request came with an API key instead of a session. */
+  apiKey?: { id: string; scope: "read" | "write" };
 }
 
 /** Admins and consultants: full read and write access to the organization. */
@@ -214,6 +218,9 @@ export async function buildApp(ctx: AppContext) {
   });
 
   app.addHook("preHandler", async (req) => {
+    // API keys: only on the public API, or on internal routes reached from it.
+    const key = bearerKey(req);
+    if (key && (req.url.startsWith("/api/v1/") || req.headers[INTERNAL_HEADER] === INTERNAL_TOKEN)) return authenticateApiKey(ctx, req, key);
     const token = req.cookies[SESSION_COOKIE];
     if (!token) return;
     const sid = sha256(token);
@@ -292,6 +299,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(jiraRoutes);
   await app.register(calendarRoutes);
   await app.register(bexioRoutes);
+  await app.register(v1Routes);
   await app.register(importRoutes);
 
   // Production: serve the built web app with SPA fallback.

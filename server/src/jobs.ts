@@ -1,4 +1,5 @@
 import { WorkCalendar, addMonths, fmt1, billableSeats, canWrite, fmtCHF, fmtDate, fmtMonthLong, planById, priceOf, projectReports, trialDaysLeft } from "@taktwerk/domain";
+import { deliverDue, purgeDeliveries } from "./events";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import type { AppContext } from "./app";
 import { purgeExpired } from "./routes/privacy";
@@ -421,6 +422,7 @@ export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: stri
     ["Aufräumen", () => purgeExpired(ctx, now)],
     ["Abo", () => runSubscriptionJobs(ctx, now)],
     ["Jira-Abgleich", () => syncAllJira(ctx, now, log)],
+    ["Webhooks aufräumen", () => purgeDeliveries(ctx, now)],
   ] as const) {
     try {
       await job();
@@ -444,8 +446,11 @@ export function startScheduler(ctx: AppContext, log?: (msg: string, err?: unknow
   };
   const first = setTimeout(tick, 60_000);
   const every = setInterval(tick, 15 * 60_000);
+  // Webhook retries need a shorter beat than the other jobs.
+  const hooks = setInterval(() => void deliverDue(ctx).catch((err) => log?.("[jobs] Webhooks fehlgeschlagen", err)), 60_000);
   return () => {
     clearTimeout(first);
     clearInterval(every);
+    clearInterval(hooks);
   };
 }

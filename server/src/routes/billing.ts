@@ -9,6 +9,7 @@ import { auditLog, customerRates, customers, expenses, monthClosings, organizati
 import { reportFile, sendCustomerReport } from "../reports/export";
 import { closingReminderMail } from "../jobs";
 import { tr } from "@taktwerk/domain";
+import { emit, eventOfAudit } from "../events";
 
 const monthParam = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, tr("Monat im Format JJJJ-MM"));
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, tr("Datum im Format JJJJ-MM-TT"));
@@ -24,6 +25,11 @@ export async function audit(
   after: unknown,
 ) {
   await ctx.db.insert(auditLog).values({ id: randomUUID(), organizationId: actor.organizationId, actorId: actor.id, entity, entityId, action, before, after });
+  const type = eventOfAudit(entity, action);
+  if (!type) return;
+  const { organizationId: _o, receiptPath: _r, ...object } = ((after ?? before ?? {}) as Record<string, unknown>);
+  const [userId, month] = entity === "month" ? entityId.split(":") : [];
+  await emit(ctx, actor.organizationId, type, { id: entityId, ...object, ...(month ? { userId, month } : {}), actorId: actor.id });
 }
 
 export async function monthStatus(ctx: AppContext, userId: string, month: string) {

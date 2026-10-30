@@ -5,6 +5,7 @@ import { HttpError, requireRole } from "../app";
 import { customers, invoices, organizations } from "../db/schema";
 import { billingProblem, createInvoice, invoicePositions, renderInvoicePdf, sendInvoice } from "../reports/invoice";
 import { todayZurich } from "./data";
+import { emit } from "../events";
 import { tr } from "@taktwerk/domain";
 
 const monthParam = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, tr("Monat im Format JJJJ-MM"));
@@ -49,6 +50,7 @@ export async function invoiceRoutes(app: FastifyInstance) {
     const user = requireRole(req, "admin", "consultant");
     const body = z.object({ customerId: z.string(), month: monthParam }).parse(req.body);
     const inv = await createInvoice(ctx, user.organizationId, body.customerId, body.month, todayZurich());
+    await emit(ctx, user.organizationId, "invoice.created", summary(inv));
     return reply.status(201).send(summary(inv));
   });
 
@@ -74,7 +76,10 @@ export async function invoiceRoutes(app: FastifyInstance) {
     const to = c?.reportRecipients ?? [];
     if (to.length === 0) throw new HttpError(400, tr("Für diesen Kunden sind keine Empfänger hinterlegt (Reports → Empfänger)."));
     await sendInvoice(ctx, inv, to);
-    if (inv.status === "draft") await ctx.db.update(invoices).set({ status: "sent", sentAt: new Date() }).where(eq(invoices.id, inv.id));
+    if (inv.status === "draft") {
+      await ctx.db.update(invoices).set({ status: "sent", sentAt: new Date() }).where(eq(invoices.id, inv.id));
+      await emit(ctx, user.organizationId, "invoice.sent", { ...summary(inv), status: "sent" });
+    }
     return { sentTo: to, status: inv.status === "draft" ? "sent" : inv.status };
   });
 
@@ -88,6 +93,7 @@ export async function invoiceRoutes(app: FastifyInstance) {
       .update(invoices)
       .set({ status, paidAt: status === "paid" ? new Date() : null, sentAt: status === "draft" ? null : inv.sentAt ?? (status === "sent" ? new Date() : null) })
       .where(eq(invoices.id, inv.id));
+    if (status !== "draft" && status !== inv.status) await emit(ctx, user.organizationId, `invoice.${status}`, { ...summary(inv), status });
     return { id: inv.id, status };
   });
 

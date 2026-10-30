@@ -4,7 +4,7 @@
  * Self-hosted installations run without packages and limits.
  */
 export type PlanId = "start" | "team" | "business";
-export type Feature = "planning" | "portal" | "forecast" | "auditor" | "customDomain" | "prioritySupport";
+export type Feature = "planning" | "portal" | "forecast" | "auditor" | "customDomain" | "prioritySupport" | "api";
 export type BillingInterval = "month" | "year";
 export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled" | "expired";
 
@@ -31,12 +31,13 @@ export const FEATURE_LABEL: Record<Feature, string> = {
   auditor: "Treuhand-Zugang (nur lesen)",
   customDomain: "Eigene Domain",
   prioritySupport: "Prioritäts-Support",
+  api: "Offene API und Webhooks",
 };
 
 export const PLANS: Plan[] = [
   { id: "start", name: "Start", tagline: "Zeiterfassung für kleine Teams", perUser: 9, features: [], highlights: ["Zeiterfassung und Arbeitszeit", "Absenzen und Spesen", "Kundenreports und QR-Rechnung"] },
   { id: "team", name: "Team", tagline: "Für Agenturen und IT-Dienstleister", perUser: 15, features: ["planning", "portal", "forecast"], highlights: ["Alles aus Start", "JIRA-Forecast und Velocity", "Ressourcenplanung", "Kundenportal"] },
-  { id: "business", name: "Business", tagline: "Für grössere Firmen und Treuhand", perUser: 22, features: ["planning", "portal", "forecast", "auditor", "customDomain", "prioritySupport"], highlights: ["Alles aus Team", "Treuhand-Zugang", "Eigene Domain", "Prioritäts-Support"] },
+  { id: "business", name: "Business", tagline: "Für grössere Firmen und Treuhand", perUser: 22, features: ["planning", "portal", "forecast", "auditor", "customDomain", "prioritySupport", "api"], highlights: ["Alles aus Team", "Treuhand-Zugang", "Offene API und Webhooks", "Eigene Domain", "Prioritäts-Support"] },
 ];
 
 export const planById = (id: PlanId | string | null | undefined) => PLANS.find((p) => p.id === id) ?? PLANS[1]!;

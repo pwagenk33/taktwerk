@@ -4,6 +4,7 @@ import { api, type BillingSettings, type Branding, type PlatformOrg, type Platfo
 import { useStore } from "../store";
 import { BexioCard } from "./Bexio";
 import { JiraTab } from "./Jira";
+import { IntegrationsTab } from "./Integrations";
 import { ImportTab } from "./Import";
 import { STATUS_LABEL, SubscriptionTab, statusPill, useSubscription } from "./Subscription";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
@@ -710,7 +711,7 @@ function Operator() {
   );
 }
 
-type Tab = "look" | "users" | "signin" | "work" | "billing" | "reports" | "import" | "jira" | "abo" | "operator";
+type Tab = "look" | "users" | "signin" | "work" | "billing" | "reports" | "import" | "jira" | "api" | "abo" | "operator";
 const tabOfHash = (): Tab | null => (location.hash.startsWith("#einstellungen/") ? (location.hash.split("/")[1] as Tab) : null);
 
 export function Settings() {
@@ -728,7 +729,7 @@ export function Settings() {
       <div className="page-head">
         <div>
           <h1>{tr("Einstellungen")}</h1>
-          <p className="sub">{tr("Corporate Design, Benutzer, Anmeldung, Arbeitszeitmodell, Rechnungsstellung, Berichte, Export, Import und Jira.")}</p>
+          <p className="sub">{tr("Corporate Design, Benutzer, Anmeldung, Arbeitszeitmodell, Rechnungsstellung, Berichte, Export, Import, Jira und API.")}</p>
         </div>
       </div>
       <div className="tabs" role="tablist">
@@ -740,6 +741,7 @@ export function Settings() {
         <button role="tab" className={tab === "reports" ? "on" : ""} onClick={() => setTab("reports")}>{tr("Berichte & Export")}</button>
         {role === "admin" && <button role="tab" id="tab-import" className={tab === "import" ? "on" : ""} onClick={() => setTab("import")}>{tr("Import")}</button>}
         <button role="tab" id="tab-jira" className={tab === "jira" ? "on" : ""} onClick={() => setTab("jira")}>{tr("Jira")}</button>
+        {role === "admin" && <button role="tab" id="tab-api" className={tab === "api" ? "on" : ""} onClick={() => setTab("api")}>{tr("API")}</button>}
         {sub && <button role="tab" id="tab-abo" className={tab === "abo" ? "on" : ""} onClick={() => setTab("abo")}>{tr("Abo")}</button>}
         {operator && <button role="tab" id="tab-operator" className={tab === "operator" ? "on" : ""} onClick={() => setTab("operator")}>{tr("Betreiber")}</button>}
       </div>
@@ -751,6 +753,7 @@ export function Settings() {
       {tab === "reports" && <ReportsAndExport />}
       {tab === "import" && role === "admin" && <ImportTab />}
       {tab === "jira" && <JiraTab />}
+      {tab === "api" && role === "admin" && <IntegrationsTab />}
       {tab === "abo" && sub && <SubscriptionTab onSetup={() => window.dispatchEvent(new CustomEvent("ti:setup"))} />}
       {tab === "operator" && operator && <Operator />}
     </>

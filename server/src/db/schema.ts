@@ -620,3 +620,64 @@ export const bexioConnections = mysqlTable("bexio_connections", {
   connectedBy: id("connected_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 });
+
+/** Keys for the public API (/api/v1). Only the SHA-256 of the key is stored; a key acts with the rights of the admin who made it. */
+export const apiKeys = mysqlTable(
+  "api_keys",
+  {
+    id: id().primaryKey(),
+    organizationId: orgId(),
+    name: varchar("name", { length: 80 }).notNull(),
+    /** First characters of the key, so people can tell keys apart. */
+    prefix: varchar("prefix", { length: 16 }).notNull(),
+    hash: char("hash", { length: 64 }).notNull(),
+    scope: mysqlEnum("scope", ["read", "write"]).notNull(),
+    userId: id("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    lastUsedAt: datetime("last_used_at", { mode: "date" }),
+    revokedAt: datetime("revoked_at", { mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("api_key_hash_uq").on(t.hash), index("api_key_org_idx").on(t.organizationId)],
+);
+
+/** Endpoints that receive events (bookings, absences, expenses, months, invoices) as signed HTTPS POSTs. */
+export const webhookEndpoints = mysqlTable(
+  "webhook_endpoints",
+  {
+    id: id().primaryKey(),
+    organizationId: orgId(),
+    url: varchar("url", { length: 500 }).notNull(),
+    description: varchar("description", { length: 120 }),
+    /** Event types, or ["*"] for all. */
+    events: json<string[]>("events").notNull(),
+    /** Signing secret (HMAC-SHA256); shown to the admin once at creation and on request. */
+    secret: varchar("secret", { length: 80 }).notNull(),
+    active: boolean("active").notNull().default(true),
+    /** Failed deliveries in a row; the endpoint is switched off at 50. */
+    failures: int("failures").notNull().default(0),
+    lastStatus: int("last_status"),
+    lastDeliveryAt: datetime("last_delivery_at", { mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("wh_org_idx").on(t.organizationId)],
+);
+
+export const webhookDeliveries = mysqlTable(
+  "webhook_deliveries",
+  {
+    id: id().primaryKey(),
+    organizationId: orgId(),
+    endpointId: id("endpoint_id").notNull().references(() => webhookEndpoints.id, { onDelete: "cascade" }),
+    event: varchar("event", { length: 60 }).notNull(),
+    payload: json<unknown>("payload").notNull(),
+    attempts: int("attempts").notNull().default(0),
+    nextAttemptAt: datetime("next_attempt_at", { mode: "date" }).notNull(),
+    deliveredAt: datetime("delivered_at", { mode: "date" }),
+    /** Given up after the last retry. */
+    failedAt: datetime("failed_at", { mode: "date" }),
+    lastStatus: int("last_status"),
+    lastError: varchar("last_error", { length: 500 }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("whd_due_idx").on(t.deliveredAt, t.failedAt, t.nextAttemptAt), index("whd_endpoint_idx").on(t.endpointId, t.createdAt)],
+);

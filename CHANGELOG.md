@@ -5,6 +5,7 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 ## Unveröffentlicht
 
 ### Neu
+- Offene API und Webhooks (Einstellungen → API, Paket Business): API-Schlüssel nur lesend oder lesend und schreibend, Endpunkte /api/v1 für Kunden, Projekte, Personen, Buchungen (auch anlegen, ändern, löschen), Spesen, Absenzen, Budgets mit Forecast und Rechnungen, Beschreibung als OpenAPI unter /api/v1/openapi.json. Webhooks schicken Änderungen an Buchungen, Spesen, Absenzen, Monatsabschlüssen und Rechnungen signiert per HTTPS, mit Wiederholungen und Verlauf. Anleitung in docs/API.md.
 - Lohnexport (Monatsabschluss → Lohnexport): pro Person und Monat Stunden, Soll, Überzeit, Absenztage nach Art und Spesen zur Rückerstattung als CSV mit den eigenen Lohnarten und der Personalnummer (neu im Arbeitsmodell). Für den Import in Lohnprogramme, keine Swissdec-Übermittlung.
 - bexio (Einstellungen → Rechnung): Rechnungen gehen auf Knopfdruck als Entwurf nach bexio, mit Kunde als Kontakt, Positionen und MWST-Satz. Braucht eine bexio-App des Betreibers (docs/BETRIEB.md, Abschnitt 18).
 - Termine aus Outlook (Microsoft 365) oder Google Kalender als Buchungsvorschläge: im Profil den eigenen Kalender verbinden, danach stehen noch nicht gebuchte Termine gestrichelt in der Zeiterfassung. Ein Klick bucht mit Zeit, Dauer, Titel und vorgeschlagenem Subprojekt. TrackInsight liest nur und speichert keine Termine.

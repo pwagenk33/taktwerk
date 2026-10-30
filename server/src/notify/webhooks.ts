@@ -1,5 +1,7 @@
 
-import { tr } from "@taktwerk/domain";/** Posts chat messages to Microsoft Teams and Slack incoming webhooks. */
+import { tr } from "@taktwerk/domain";
+
+/** Posts chat messages to Microsoft Teams and Slack incoming webhooks. */
 export interface ChatMessage {
   title: string;
   text: string;
