@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 const [src = "dist-single/index.html", out = "dist-single/artifact.html"] = process.argv.slice(2);
 const html = readFileSync(src, "utf8");
 const head = html.match(/<head>([\s\S]*?)<\/head>/)[1].replace(/<meta charset[^>]*>|<meta name="viewport"[^>]*>/g, "");
+// The minifier folds escapes back into a literal U+FFFD (in the import's encoding check), which the publisher rejects.
 const body = html.match(/<body>([\s\S]*?)<\/body>/)[1];
-writeFileSync(out, `<meta name="claude:viewport-fit-sides" content="cover">\n${head.trim()}\n${body.trim()}\n`);
+writeFileSync(out, `<meta name="claude:viewport-fit-sides" content="cover">\n${head.trim()}\n${body.trim()}\n`.replaceAll("\uFFFD", "\\uFFFD"));
 console.log(`wrote ${out}`);
