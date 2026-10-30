@@ -418,7 +418,18 @@ Zum Testen gibt es Jira Cloud bis 10 Personen gratis: [atlassian.com/software/ji
 
 Für den Eintrag im Atlassian Marketplace siehe [MARKETPLACE.md](MARKETPLACE.md).
 
-## 17. Kurzreferenz
+## 17. Kalender (Outlook und Google) als Buchungsvorschläge
+
+Jede Person kann im Profil ihren Outlook- oder Google-Kalender verbinden. Danach erscheinen ihre Termine in der Zeiterfassung gestrichelt als Vorschläge. Ein Klick bucht einen Termin mit Zeit, Dauer und Titel. Das Subprojekt schlägt TrackInsight aus früheren Buchungen mit gleichem Text vor oder aus Kunden- und Projektnamen im Titel. TrackInsight liest nur und speichert keine Termine. Die Termine der sichtbaren Woche werden jeweils direkt geholt. Ganztägige, abgesagte, abgelehnte und als «frei» markierte Termine fallen weg.
+
+Es werden dieselben App-Registrierungen verwendet wie für die Anmeldung mit Microsoft und Google (`MICROSOFT_CLIENT_ID`/`_SECRET`, `GOOGLE_CLIENT_ID`/`_SECRET`). Bei beiden kommt je eine zusätzliche Weiterleitungsadresse dazu:
+
+- **Microsoft Entra ID:** Unter App-Registrierung → Authentifizierung die Umleitungs-URI `https://app.trackinsight.ch/api/calendar/microsoft/callback` hinzufügen. Unter API-Berechtigungen die delegierte Berechtigung `Calendars.Read` (Microsoft Graph) hinzufügen. Je nach Einstellung der Kundenfirma muss deren IT-Admin einmal zustimmen.
+- **Google Cloud:** In der OAuth-Client-ID die Weiterleitungs-URI `https://app.trackinsight.ch/api/calendar/google/callback` eintragen und die Google Calendar API aktivieren. Unter OAuth-Zustimmungsbildschirm → Bereiche `.../auth/calendar.events.readonly` hinzufügen. Dieser Bereich gilt bei Google als «sensibel»: Solange die App nicht von Google bestätigt ist, sehen Nutzer eine Warnung, und es sind höchstens 100 Testnutzer möglich. Vor dem öffentlichen Start die Bestätigung bei Google beantragen.
+
+Lokal gilt dasselbe mit `http://localhost:3000/...`. Ohne Microsoft- bzw. Google-Konfiguration wird die jeweilige Kalenderoption nicht angezeigt.
+
+## 18. Kurzreferenz
 
 | Aufgabe | Befehl (im Ordner `~/trackinsight`) |
 |---|---|

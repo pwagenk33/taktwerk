@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Role } from "@taktwerk/domain";
+import { loadCalendarStatus, providerLabel, setDemoCalendar, type CalendarStatus } from "../calendar";
 import { api } from "../api";
 import { loadLocal, saveLocal, useStore } from "../store";
 import { Select } from "../ui/Select";
@@ -324,6 +325,7 @@ export function Profile() {
           <p className="muted" style={{ fontSize: "0.82rem" }}>{tr("Gilt für diesen Browser. Das Logo und die Hauptfarbe legen Admins unter Einstellungen → Erscheinungsbild fest.")}</p>
         </section>
         <LanguageCard />
+        <CalendarCard />
         <ReminderCard />
         {mode === "api" && <SecurityCard />}
         <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }} id="my-data">
@@ -386,6 +388,52 @@ function LanguageCard() {
         ))}
       </div>
       <p className="muted" style={{ fontSize: "0.82rem" }}>{tr("Gilt für die App und für E-Mails an dich. Reports und Rechnungen erhalten Kunden in der Sprache, die beim Kunden eingestellt ist.")}</p>
+    </section>
+  );
+}
+
+/** Outlook or Google calendar: meetings show up in Zeiterfassung as booking suggestions. */
+function CalendarCard() {
+  const { mode, notify } = useStore();
+  const demo = mode === "demo";
+  const [s, setS] = useState<CalendarStatus | null>(null);
+  const load = () => loadCalendarStatus(demo).then(setS).catch(() => setS(null));
+  useEffect(() => {
+    const q = new URLSearchParams(location.search);
+    const outcome = q.get("kalender");
+    if (outcome === "ok") notify(tr("Kalender verbunden"));
+    if (outcome === "fehler") notify(tr("Der Kalender konnte nicht verbunden werden. Bitte nochmals versuchen."));
+    if (outcome) history.replaceState(null, "", location.pathname + location.hash);
+    void load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!s) return null;
+  const offered = (["microsoft", "google"] as const).filter((p) => s.providers[p]);
+  if (!offered.length) return null;
+  const connect = (p: "microsoft" | "google") => {
+    if (demo) { setDemoCalendar(p); void load(); notify(tr("Kalender verbunden")); return; }
+    location.href = `/api/calendar/${p}`;
+  };
+  const disconnect = async () => {
+    try {
+      if (demo) setDemoCalendar(null); else await api("/api/calendar", { method: "DELETE" });
+      notify(tr("Kalender getrennt"));
+      void load();
+    } catch (e) { notify((e as Error).message); }
+  };
+  return (
+    <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }} id="calendar">
+      <h2>{tr("Kalender")}</h2>
+      <p className="muted" style={{ fontSize: "0.86rem", margin: 0 }}>{tr("Termine aus deinem Kalender erscheinen in der Zeiterfassung als Vorschläge. Ein Klick bucht sie mit Zeit, Dauer und Titel. TrackInsight liest den Kalender nur und speichert keine Termine.")}</p>
+      {s.connected ? (
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="pill ok">{providerLabel(s.connected.provider)}{s.connected.account ? ` · ${s.connected.account}` : ""}</span>
+          <button className="btn small ghost" onClick={() => void disconnect()}>{tr("Trennen")}</button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {offered.map((p) => <button key={p} id={`cal-connect-${p}`} className="btn small" onClick={() => connect(p)}>{tr("{0} verbinden", providerLabel(p))}</button>)}
+        </div>
+      )}
     </section>
   );
 }

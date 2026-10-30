@@ -7,6 +7,7 @@ import { and, eq, gte, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import { HttpError, type AppContext } from "./app";
 import { jiraConnections, jiraIssues, jiraWorklogs, projects, subProjects, timeEntries, users } from "./db/schema";
 import { tr } from "@taktwerk/domain";
+import { zurichOffset } from "./tz";
 
 export const ATLASSIAN_AUTH = "https://auth.atlassian.com";
 export const ATLASSIAN_API = "https://api.atlassian.com";
@@ -253,12 +254,8 @@ export const canWrite = (conn: Pick<JiraConnection, "scopes">) => !!conn.scopes?
 
 /** Jira wants the start with a UTC offset; bookings are Swiss local time. */
 export function jiraStarted(date: string, time: string | null) {
-  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  const [hh, mm] = (time ?? "09:00").split(":").map(Number) as [number, number];
-  const guess = new Date(Date.UTC(y, m - 1, d, hh, mm));
-  const name = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Zurich", timeZoneName: "longOffset" }).formatToParts(guess).find((p) => p.type === "timeZoneName")?.value ?? "GMT+01:00";
-  const off = name === "GMT" ? "+0000" : name.replace("GMT", "").replace(":", "");
-  return `${date}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00.000${off}`;
+  const t = time ?? "09:00";
+  return `${date}T${t}:00.000${zurichOffset(date, t)}`;
 }
 
 const adf = (text: string) => ({ type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text }] }] });

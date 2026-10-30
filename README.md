@@ -83,6 +83,7 @@ Schema ändern: `server/src/db/schema.ts` anpassen, dann `npm run db:generate -w
 
 - **Microsoft:** Im Entra Admin Center eine App registrieren, Redirect-URI `<APP_URL>/api/auth/microsoft/callback` (Typ Web), Client-Secret anlegen. `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT` setzen.
 - **Google:** In der Google Cloud Console einen OAuth-Client (Webanwendung) mit Redirect-URI `<APP_URL>/api/auth/google/callback` anlegen. `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` setzen.
+- **Kalender-Vorschläge:** Zusätzlich die Redirect-URIs `<APP_URL>/api/calendar/microsoft/callback` bzw. `<APP_URL>/api/calendar/google/callback` eintragen; Details in docs/BETRIEB.md, Abschnitt 17.
 
 Die Buttons erscheinen auf der Anmeldeseite, sobald die Werte gesetzt sind.
 

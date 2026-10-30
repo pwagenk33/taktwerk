@@ -12,6 +12,7 @@ import {
   mysqlEnum,
   mysqlTable,
   primaryKey,
+  text,
   uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
@@ -582,5 +583,20 @@ export const importBatches = mysqlTable("import_batches", {
   created: json<{ customers: string[]; projects: string[]; subProjects: string[] }>("created").notNull(),
   createdBy: id("created_by").references(() => users.id, { onDelete: "set null" }),
   undoneAt: datetime("undone_at", { mode: "date" }),
+  createdAt: createdAt(),
+});
+
+/**
+ * A person's Outlook (Microsoft 365) or Google calendar, read for booking suggestions. One calendar per person.
+ * Read-only scopes; the refresh token is only usable together with the client secret from the environment.
+ */
+export const calendarConnections = mysqlTable("calendar_connections", {
+  userId: id("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  organizationId: orgId(),
+  provider: mysqlEnum("provider", ["microsoft", "google"]).notNull(),
+  account: varchar("account", { length: 255 }),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token"),
+  expiresAt: datetime("expires_at", { mode: "date" }).notNull(),
   createdAt: createdAt(),
 });

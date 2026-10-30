@@ -1128,3 +1128,11 @@ body.dialog-open { overflow: hidden; }
 .gs-opt { font-size: 0.72rem; color: var(--muted); }
 .gs-sample { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--hue-1) 16%, var(--surface)); font-size: 0.86rem; color: var(--ink-2); }
 .gs-sample span { flex: 1; min-width: 220px; }
+
+/* Calendar suggestions: meetings from Outlook/Google that are not booked yet. */
+.cal-block.cal-suggest { background: color-mix(in srgb, var(--surface) 70%, transparent); border: 1.5px dashed color-mix(in srgb, var(--primary) 55%, var(--line)); color: var(--ink-2); box-shadow: none; cursor: pointer; z-index: 0; }
+.cal-block.cal-suggest:hover, .cal-block.cal-suggest:focus-visible { background: color-mix(in srgb, var(--primary) 8%, var(--surface)); color: var(--ink); outline: none; }
+.cal-block.cal-suggest .cal-block-title { padding-right: 16px; }
+.cal-suggest-x { position: absolute; top: 2px; right: 3px; border: 0; background: none; color: var(--muted); font-size: 0.9rem; line-height: 1; padding: 2px 4px; cursor: pointer; border-radius: 4px; opacity: 0; }
+.cal-block.cal-suggest:hover .cal-suggest-x, .cal-suggest-x:focus-visible { opacity: 1; }
+@media (hover: none) { .cal-suggest-x { opacity: 1; } }

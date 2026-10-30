@@ -31,6 +31,7 @@ import { platformRoutes } from "./routes/platform";
 import { statusRoutes } from "./routes/status";
 import { contactRoutes, serveWebsite } from "./routes/website";
 import { jiraRoutes } from "./routes/jira";
+import { calendarRoutes } from "./routes/calendar";
 import { importRoutes } from "./routes/import";
 import { securityRoutes } from "./routes/security";
 import { privacyRoutes } from "./routes/privacy";
@@ -288,6 +289,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(subscriptionRoutes);
   await app.register(contactRoutes);
   await app.register(jiraRoutes);
+  await app.register(calendarRoutes);
   await app.register(importRoutes);
 
   // Production: serve the built web app with SPA fallback.

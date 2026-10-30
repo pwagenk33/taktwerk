@@ -9,6 +9,7 @@ import { TYPE_CLASS, WorkTiles, signedH } from "./WorkTime";
 import { Select } from "../ui/Select";
 import { Field, FieldRow, FormDialog } from "../ui/Dialog";
 import { intlLocale, tr, trn } from "../i18n";
+import { useCalendarSuggestions } from "../calendar";
 
 const CATEGORIES = EXPENSE_CATEGORIES as readonly ExpenseCategory[];
 
@@ -803,6 +804,9 @@ interface DialogState {
   date: string;
   startTime?: string;
   hours: number;
+  /** Prefill for a new booking, e.g. from a calendar suggestion. */
+  reason?: string;
+  subProjectId?: string;
 }
 
 /** Popup to create or change one booking (or to record an expense for that day). */
@@ -815,7 +819,7 @@ function EntryDialog({ state, onClose }: { state: DialogState; onClose: () => vo
   const [date, setDate] = useState(state.date);
   const [startTime, setStartTime] = useState(e?.startTime ?? state.startTime ?? "");
   const [hours, setHours] = useState(String(e?.hours ?? state.hours));
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState(state.reason ?? "");
   const [issueKey, setIssueKey] = useState(e?.jiraIssueKey ?? "");
   const [billable, setBillable] = useState(e?.billable ?? true);
   const [confirm, setConfirm] = useState(false);
@@ -826,6 +830,7 @@ function EntryDialog({ state, onClose }: { state: DialogState; onClose: () => vo
 
   // Prefill from the existing entry once the target picker is mounted.
   useEffect(() => {
+    if (!e && state.subProjectId) target.select(state.subProjectId);
     if (!e) return;
     target.select(e.subProjectId);
     setReason(e.jiraIssueKey && e.reason.startsWith(`${e.jiraIssueKey} `) ? e.reason.slice(e.jiraIssueKey.length + 1) : e.reason);
@@ -1070,6 +1075,7 @@ function WeekCalendar() {
   const gridRef = useRef<HTMLDivElement>(null);
   const week = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(monday, i)), [monday]);
   const days = useMemo(() => (phone ? [week[dayIdx]] : week), [week, phone, dayIdx]);
+  const calendar = useCalendarSuggestions(days);
   const employee = data.employees.find((e) => e.id === currentUserId);
   const cal = useMemo(() => (employee ? new WorkCalendar(data, employee) : null), [data, employee]);
   // Weeks before the loaded window: fetch their single bookings on demand.
@@ -1320,6 +1326,30 @@ function WeekCalendar() {
               >
                 {hoursAxis.map((m) => <div key={m} className="cal-line" style={{ top: (m - DAY_START) * PX_PER_MIN }} />)}
                 {d === data.today && nowMin >= DAY_START && nowMin <= DAY_END && <div className="cal-now" style={{ top: (nowMin - DAY_START) * PX_PER_MIN }} />}
+                {!lock && calendar.suggestions.filter((x) => x.event.date === d && !(drag && drag.date === d)).map((x) => {
+                  const from = Math.max(DAY_START, toMin(x.event.start));
+                  const to = Math.min(DAY_END, Math.max(from + 15, toMin(x.event.end)));
+                  if (to <= DAY_START || from >= DAY_END) return null;
+                  const h = Math.max(18, (to - from) * PX_PER_MIN);
+                  return (
+                    <div
+                      key={x.event.id}
+                      className="cal-block cal-suggest"
+                      role="button"
+                      tabIndex={0}
+                      style={{ top: (from - DAY_START) * PX_PER_MIN, height: h, left: 2, right: 2 }}
+                      title={tr("Termin aus deinem Kalender. Klicken, um ihn zu buchen.")}
+                      onPointerDown={(ev) => ev.stopPropagation()}
+                      onClick={() => setDialog({ date: d, startTime: x.event.start, hours: x.hours, reason: x.event.title, subProjectId: x.subProjectId })}
+                      onKeyDown={(ev) => ev.key === "Enter" && setDialog({ date: d, startTime: x.event.start, hours: x.hours, reason: x.event.title, subProjectId: x.subProjectId })}
+                    >
+                      <div className="cal-block-title">{x.event.title}</div>
+                      {h >= 34 && <div className="cal-block-meta">{x.subProjectId ? labels.short(x.subProjectId) : tr("Vorschlag aus dem Kalender")}</div>}
+                      <div className="cal-block-time">{x.event.start}{tr("–{0} · {1} h", x.event.end, fmt1(x.hours))}</div>
+                      <button className="cal-suggest-x" aria-label={tr("Vorschlag ausblenden")} title={tr("Vorschlag ausblenden")} onClick={(ev) => { ev.stopPropagation(); calendar.hide(x.event.id); }}>×</button>
+                    </div>
+                  );
+                })}
                 {placed.filter((p) => !(drag && drag.kind !== "create" && drag.entry.id === p.entry.id)).map((p) => block(p, d))}
                 {drag?.kind === "create" && drag.date === d && (
                   <div className="cal-block cal-preview creating" style={{ top: (drag.from - DAY_START) * PX_PER_MIN, height: (drag.to - drag.from) * PX_PER_MIN, left: 2, right: 2 }}>
@@ -1336,6 +1366,7 @@ function WeekCalendar() {
         </div>
       </div>
       <div className="card-pad" style={{ paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        {calendar.suggestions.length > 0 && <span className="muted" style={{ fontSize: "0.78rem", width: "100%" }}>{tr("Gestrichelt: Termine aus deinem Kalender, die noch nicht gebucht sind. Ein Klick öffnet die Buchung mit Zeit, Dauer und Titel.")}</span>}
         <span className="muted" style={{ fontSize: "0.78rem" }}>{tr("Ziehen bucht (15-Minuten-Raster), Einträge lassen sich verschieben und unten verlängern. Tasten: N neu, S Stoppuhr, ← → Woche, T heute, D dupliziert den Eintrag unter der Maus. Buchungen ohne Uhrzeit stehen oben im Tag.")}</span>
         {error && <span className="error">{error}</span>}
       </div>
