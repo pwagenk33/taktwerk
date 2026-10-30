@@ -5,6 +5,7 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 ## Unveröffentlicht
 
 ### Neu
+- Website: Seiten zum Umsteigen (Import, Alternativen zu Clockodo, Toggl und Harvest), für Agenturen und Treuhänder, ein Ratgeber zur Arbeitszeiterfassung nach ArGV 1 und ein Rechner für unverrechnete Zeit. Preise, Funktionen und Roadmap zeigen die Neuerungen.
 - Offene API und Webhooks (Einstellungen → API, Paket Business): API-Schlüssel nur lesend oder lesend und schreibend, Endpunkte /api/v1 für Kunden, Projekte, Personen, Buchungen (auch anlegen, ändern, löschen), Spesen, Absenzen, Budgets mit Forecast und Rechnungen, Beschreibung als OpenAPI unter /api/v1/openapi.json. Webhooks schicken Änderungen an Buchungen, Spesen, Absenzen, Monatsabschlüssen und Rechnungen signiert per HTTPS, mit Wiederholungen und Verlauf. Anleitung in docs/API.md.
 - Lohnexport (Monatsabschluss → Lohnexport): pro Person und Monat Stunden, Soll, Überzeit, Absenztage nach Art und Spesen zur Rückerstattung als CSV mit den eigenen Lohnarten und der Personalnummer (neu im Arbeitsmodell). Für den Import in Lohnprogramme, keine Swissdec-Übermittlung.
 - bexio (Einstellungen → Rechnung): Rechnungen gehen auf Knopfdruck als Entwurf nach bexio, mit Kunde als Kontakt, Positionen und MWST-Satz. Braucht eine bexio-App des Betreibers (docs/BETRIEB.md, Abschnitt 18).
