@@ -5,6 +5,7 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 ## Unveröffentlicht
 
 ### Neu
+- Geführter Start für neue Firmen: Checkliste «Erste Schritte» im Eingang, Beispieldaten auf Knopfdruck (drei Kunden mit sechs Wochen Buchungen, mit einem Klick wieder entfernt) und Hilfe direkt in der App über «?» oben rechts oder die Taste ?.
 - Import aus Clockodo, Toggl Track, Harvest und Excel (Einstellungen → Import): Datei wird erkannt, Spalten lassen sich anpassen, Personen werden zugeordnet, fehlende Kunden, Projekte und Tätigkeiten entstehen automatisch. Abgeschlossene Monate bleiben unberührt, jeder Import lässt sich rückgängig machen.
 - Website in den neuen Farben, mit aktuellen Bildern der App und Grundlagen für Suchmaschinen: Sitemap, kanonische Adressen, Vorschaubilder und strukturierte Daten zu Produkt, Preisen und FAQ.
 - Neue Farben «Bunt mit System»: Violett als Hauptfarbe, jede Kennzahl mit eigener Farbe, Ampeln unabhängig von der Hauptfarbe. Firmen mit der bisherigen Standardfarbe Rot erhalten Violett; eine eigene Farbe bleibt.

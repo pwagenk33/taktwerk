@@ -1092,3 +1092,35 @@ body.dialog-open { overflow: hidden; }
 .import-problems summary { cursor: pointer; color: var(--warn-ink); font-size: 0.86rem; }
 .import-problems ul { margin: 8px 0 0; padding-left: 18px; font-size: 0.84rem; color: var(--ink-2); }
 .import-new { display: flex; flex-direction: column; gap: 10px; font-size: 0.88rem; }
+
+/* Help panel and first steps */
+.help-btn { width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--line-strong); font-weight: 700; color: var(--ink-2); background: var(--surface); }
+@media (hover: hover) { .help-btn:hover { border-color: var(--accent); color: var(--accent-strong); } }
+.help-overlay { justify-content: flex-end; align-items: stretch; padding: 0; }
+.help-panel { width: min(420px, 100%); height: 100%; background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow-pop); display: flex; flex-direction: column; animation: rise 0.18s var(--ease); }
+.help-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 8px; }
+.help-head h2 { font-size: 1.05rem; }
+.help-search { margin: 4px 18px 10px; }
+.help-list { overflow: auto; padding: 0 18px 24px; display: flex; flex-direction: column; }
+.help-item { border-top: 1px solid var(--line); }
+.help-title { width: 100%; display: flex; align-items: center; gap: 8px; justify-content: space-between; padding: 12px 0; background: none; border: 0; text-align: left; font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; }
+.help-here { font-size: 0.72rem; font-weight: 600; color: var(--accent-strong); background: var(--accent-soft); border-radius: 99px; padding: 1px 8px; white-space: nowrap; }
+.help-body { padding: 0 0 14px; font-size: 0.9rem; color: var(--ink-2); display: flex; flex-direction: column; gap: 8px; }
+.help-body ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.getting-started { margin: 0 20px 16px; padding: 16px 18px; border: 1px solid color-mix(in srgb, var(--hue-1) 22%, var(--surface)); border-radius: var(--radius); background: color-mix(in srgb, var(--hue-1) 6%, var(--surface)); display: flex; flex-direction: column; gap: 12px; }
+.gs-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.gs-head h2 { color: color-mix(in srgb, var(--hue-1) 60%, var(--ink)); }
+.gs-head p { font-size: 0.84rem; margin-top: 2px; }
+.gs-progress { height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--hue-1) 14%, var(--surface)); overflow: hidden; }
+.gs-progress span { display: block; height: 100%; background: var(--hue-1); border-radius: 99px; transition: width 0.3s var(--ease); }
+.gs-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 6px 16px; }
+.gs-steps li { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; min-height: 28px; }
+.gs-steps li a, .gs-steps li .link-btn { color: var(--ink); text-decoration: none; font-weight: 500; }
+@media (hover: hover) { .gs-steps li a:hover, .gs-steps li .link-btn:hover { color: var(--accent-strong); text-decoration: underline; } }
+.gs-steps li.done a, .gs-steps li.done .link-btn { color: var(--muted); text-decoration: line-through; }
+.gs-check { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--hue-1) 45%, var(--line)); display: grid; place-items: center; flex: none; background: var(--surface); }
+.gs-steps li.done .gs-check { background: var(--good); border-color: var(--good); color: #fff; }
+.gs-check svg { width: 12px; height: 12px; }
+.gs-opt { font-size: 0.72rem; color: var(--muted); }
+.gs-sample { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--hue-1) 16%, var(--surface)); font-size: 0.86rem; color: var(--ink-2); }
+.gs-sample span { flex: 1; min-width: 220px; }

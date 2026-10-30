@@ -24,6 +24,7 @@ import { BrandMark } from "./ui/motif";
 import { Select } from "./ui/Select";
 import { api } from "./api";
 import { loadLocal, saveLocal } from "./store";
+import { HelpPanel } from "./ui/Help";
 
 /** Minimal Markdown for CHANGELOG.md: headings, bullets and paragraphs. */
 function Changelog({ markdown }: { markdown: string }) {
@@ -161,6 +162,7 @@ export function App() {
   const [hash, setHash] = useState(location.hash);
   const [theme, setTheme] = useTheme();
   const [palette, setPalette] = useState(false);
+  const [help, setHelp] = useState(false);
   const [more, setMore] = useState(false);
   const [setup, setSetup] = useState(false);
   const sub = useSubscription();
@@ -188,6 +190,7 @@ export function App() {
       if (ev.metaKey || ev.ctrlKey || ev.altKey || isTyping(ev.target)) return;
       if (ev.key === "n" || ev.key === "N") { ev.preventDefault(); requestNewEntry(); }
       if (ev.key === "s" || ev.key === "S") { ev.preventDefault(); if (!timer.get()) timer.start(); }
+      if (ev.key === "?") { ev.preventDefault(); setHelp(true); }
     };
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("hashchange", onHash); window.removeEventListener("keydown", onKey); };
@@ -274,11 +277,13 @@ export function App() {
               </button>
             </>
           )}
+          <button id="open-help" className="icon-btn help-btn" title="Hilfe (?)" aria-label="Hilfe" onClick={() => setHelp(true)}>?</button>
           <a href="#profil" className={`avatar-link ${current === "profil" ? "active" : ""}`} title={`${name} · Profil`} aria-label="Profil">
             <span className="who">{initials}</span>
           </a>
         </header>
         <SubscriptionBanner />
+        {help && <HelpPanel page={current} onClose={() => setHelp(false)} />}
         <main className={`main ${current === "eingang" ? "flush" : ""}`}>
           {current === "eingang" && <Inbox />}
           {current === "dashboard" && <Dashboard key={role === "employee" ? "employee" : "lead"} />}

@@ -1,0 +1,152 @@
+// Help articles shown in the help panel («?» in the top bar). Each article belongs to a page; the panel opens
+// with the article of the page the person is on. Text is short on purpose: what it is for, then the steps.
+
+export interface HelpArticle {
+  id: string;
+  /** Page id (hash) the article belongs to; the panel shows it first there. */
+  page: string;
+  title: string;
+  /** Paragraphs; a line starting with "- " is a list item. */
+  body: string[];
+}
+
+export const HELP: HelpArticle[] = [
+  {
+    id: "eingang",
+    page: "eingang",
+    title: "Der Eingang",
+    body: [
+      "Hier steht, was heute eine Entscheidung braucht: Budgets, die knapp werden, Anträge zum Bewilligen und eigene Pendenzen.",
+      "- Klicken Sie auf ein Budget, um rechts die Zahlen und die Prognose zu sehen.",
+      "- «Bewilligen» erscheint, wenn Sie mit der Maus über einen Antrag fahren.",
+      "- Ist nichts offen, ist der Eingang leer. Das Dashboard mit allen Kennzahlen erreichen Sie oben rechts.",
+    ],
+  },
+  {
+    id: "zeit",
+    page: "zeit",
+    title: "Zeit buchen",
+    body: [
+      "Im Wochenkalender ziehen Sie mit der Maus über die Zeit, die Sie gearbeitet haben. Danach wählen Sie Kunde, Projekt und Tätigkeit und schreiben kurz, was Sie gemacht haben.",
+      "- Taste N öffnet überall eine neue Buchung, Taste S startet die Stoppuhr.",
+      "- Einen Block verschieben Sie mit der Maus, die Länge ändern Sie am unteren Rand.",
+      "- «Kopieren» übernimmt die Buchungen der Vorwoche.",
+      "- Am Ende der Woche reichen Sie die Woche mit «Woche einreichen» ein.",
+    ],
+  },
+  {
+    id: "spesen",
+    page: "zeit",
+    title: "Spesen erfassen",
+    body: [
+      "Spesen erfassen Sie in der Zeiterfassung unter «Liste» oder beim Klick auf einen Tag im Kalender über den Reiter «Spese».",
+      "- Fotografieren Sie den Beleg; Betrag und Datum werden gelesen und vorgeschlagen.",
+      "- Mitarbeitende reichen Spesen ein, Consultants oder Admins bewilligen sie. Erst bewilligte Spesen erscheinen auf der Rechnung.",
+    ],
+  },
+  {
+    id: "absenzen",
+    page: "arbeitszeit",
+    title: "Ferien und Absenzen",
+    body: [
+      "Mit «+ Absenz» beantragen Sie Ferien oder tragen Krankheit, Militär oder Weiterbildung ein. Ferien und Kompensation gehen zur Bewilligung an die Teamleitung.",
+      "- Halbe Tage wählen Sie im Fenster mit «Halbe Tage».",
+      "- Den Ferien- und Überzeit-Saldo sehen Sie oben in der Zeiterfassung.",
+    ],
+  },
+  {
+    id: "abschluss",
+    page: "abschluss",
+    title: "Monatsabschluss",
+    body: [
+      "Am Monatsende reicht jede Person ihren Monat ein. Die Teamleitung oder ein Admin prüft und schliesst ab; danach lassen sich die Buchungen nicht mehr ändern.",
+      "- «Erinnern» schickt allen eine E-Mail, die noch nicht eingereicht haben.",
+      "- Ein Admin kann einen abgeschlossenen Monat wieder öffnen.",
+    ],
+  },
+  {
+    id: "projekte",
+    page: "projekte",
+    title: "Kunden, Projekte und Budgets",
+    body: [
+      "Ein Kunde hat einen Stundensatz und Projekte. Ein Projekt hat ein Budget, das Sie auf Subprojekte (zum Beispiel Phasen oder Epics) verteilen.",
+      "- «+ Kunde» und «+ Projekt» öffnen ein Fenster mit allen nötigen Angaben.",
+      "- Projektarten: Zeit und Material, Fixpreis oder Kontingent mit Stunden pro Monat.",
+      "- Bei «Bearbeiten» ändern Sie Budget, Projektleitung und Jira-Schlüssel.",
+    ],
+  },
+  {
+    id: "forecast",
+    page: "velocity",
+    title: "Wie der Forecast rechnet",
+    body: [
+      "TrackInsight misst, wie viele Stunden Ihr Team pro Story Point braucht (Velocity), und rechnet die offenen Story Points damit in Stunden und Franken um.",
+      "- Die Velocity wird Monat für Monat neu gemessen, weil sie sich mit Team und Technik ändert.",
+      "- Das Band zeigt die beste und schlechteste Velocity der letzten Monate; daraus entsteht die Spanne der Prognose.",
+    ],
+  },
+  {
+    id: "planung",
+    page: "planung",
+    title: "Ressourcenplanung",
+    body: [
+      "Die Planung zeigt pro Person und Woche, wie viele Stunden für Projekte reserviert sind, verglichen mit der Kapazität aus dem Pensum.",
+      "- Klicken Sie auf eine Zelle, um Stunden für ein Projekt zu reservieren.",
+      "- Die Farbe zeigt die Auslastung: unter 50 %, 50 bis 90 %, über 90 % und überplant. Die Legende steht über der Tabelle.",
+    ],
+  },
+  {
+    id: "reports",
+    page: "reports",
+    title: "Kundenreports und Rechnungen",
+    body: [
+      "Pro Kunde und Monat entsteht ein Report mit Stunden, Spesen, Budget und Prognose, als PDF oder Excel. Daraus erstellen Sie die Rechnung mit Schweizer QR-Rechnung.",
+      "- Die Rechnungsadresse erfassen Sie beim Kunden oder direkt bei den Rechnungen.",
+      "- Reports können jeden Monat automatisch an den Kunden gehen.",
+    ],
+  },
+  {
+    id: "import",
+    page: "einstellungen",
+    title: "Daten aus Clockodo, Toggl oder Harvest übernehmen",
+    body: [
+      "Unter Einstellungen → Import laden Sie den Export Ihres bisherigen Tools hoch. TrackInsight erkennt die Spalten, Sie ordnen die Personen zu, fehlende Kunden und Projekte entstehen automatisch.",
+      "- Clockodo: Berichte → Stundenzettel, als CSV oder Excel.",
+      "- Toggl Track: Reports → Detailed → Export → CSV.",
+      "- Harvest: Reports → Detailed time → Export → CSV.",
+      "- Jeder Import lässt sich unter «Bisherige Importe» rückgängig machen.",
+    ],
+  },
+  {
+    id: "team",
+    page: "einstellungen",
+    title: "Team einladen und Rollen",
+    body: [
+      "Unter Einstellungen → Benutzer laden Sie Personen per E-Mail ein. Sie setzen ihr Passwort über den Link in der Einladung.",
+      "- Admin: alles, auch Einstellungen und Abo.",
+      "- Consultant: alle Kunden, Projekte und Berichte, ohne Einstellungen.",
+      "- Mitarbeitende: eigene Zeiten und Spesen; mehr, wenn sie ein Projekt oder Team leiten.",
+      "- Treuhand: sieht alles, ändert nichts, kostet nichts.",
+    ],
+  },
+  {
+    id: "jira",
+    page: "einstellungen",
+    title: "Jira verbinden",
+    body: [
+      "Unter Einstellungen → Jira melden Sie sich bei Atlassian an und wählen die Jira-Projekte aus. Epics werden zu Subprojekten, Story Points und Status werden alle 15 Minuten abgeglichen.",
+    ],
+  },
+  {
+    id: "tasten",
+    page: "",
+    title: "Tastenkürzel",
+    body: [
+      "- ⌘K oder Ctrl+K: suchen und Befehle",
+      "- N: neue Buchung",
+      "- S: Stoppuhr starten",
+      "- ?: diese Hilfe",
+      "- Im Kalender: ← und → wechseln die Woche, T springt zu heute, D dupliziert die Buchung unter der Maus",
+    ],
+  },
+];

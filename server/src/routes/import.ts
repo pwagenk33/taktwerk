@@ -1,5 +1,5 @@
 import { rateOn, type ImportRow } from "@taktwerk/domain";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -102,6 +102,30 @@ export async function importRoutes(app: FastifyInstance) {
     const result = await runImport(ctx, user.organizationId, user.id, body);
     await audit(ctx, user, "import", result.id, "create", null, { source: body.source, fileName: body.fileName, ...result });
     return reply.status(201).send(result);
+  });
+
+  /** Sample data for a new company: three customers with projects and six weeks of bookings, removable in one go. */
+  app.post("/api/onboarding/sample", async (req, reply) => {
+    const user = requireRole(req, "admin");
+    const [open] = await ctx.db.select({ id: importBatches.id }).from(importBatches).where(and(eq(importBatches.organizationId, user.organizationId), eq(importBatches.source, "sample"), isNull(importBatches.undoneAt))).limit(1);
+    if (open) throw new HttpError(409, "Die Beispieldaten sind schon geladen.");
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await runImport(ctx, user.organizationId, user.id, { source: "sample", fileName: "Beispieldaten", rows: sampleRows(today, user.name), people: { [key(user.name)]: user.id }, rate: 160 });
+    // Budgets make the forecast and the warnings visible right away.
+    const [batch] = await ctx.db.select().from(importBatches).where(eq(importBatches.id, result.id)).limit(1);
+    for (const id of batch!.created.projects) {
+      const [p] = await ctx.db.select({ name: projects.name }).from(projects).where(eq(projects.id, id)).limit(1);
+      const budget = SAMPLE_BUDGETS[p?.name ?? ""];
+      if (budget) await ctx.db.update(projects).set({ budget }).where(eq(projects.id, id));
+    }
+    return reply.status(201).send(result);
+  });
+
+  app.get("/api/onboarding", async (req) => {
+    const user = requireRole(req, "admin");
+    const [sample] = await ctx.db.select({ id: importBatches.id }).from(importBatches).where(and(eq(importBatches.organizationId, user.organizationId), eq(importBatches.source, "sample"), isNull(importBatches.undoneAt))).limit(1);
+    const [anyImport] = await ctx.db.select({ id: importBatches.id }).from(importBatches).where(and(eq(importBatches.organizationId, user.organizationId), isNull(importBatches.undoneAt))).limit(1);
+    return { sampleBatchId: sample?.id ?? null, imported: !!anyImport };
   });
 
   app.delete("/api/import/:id", async (req) => {
@@ -233,4 +257,33 @@ async function undoImport(ctx: AppContext, orgId: string, batch: typeof importBa
   }
   await ctx.db.update(importBatches).set({ undoneAt: new Date() }).where(eq(importBatches.id, batch.id));
   return { entries: rows.length, removed };
+}
+
+const SAMPLE_BUDGETS: Record<string, number> = { "Buchungsstrecke Relaunch": 48000, "Online-Shop": 30000, "IT-Support 2026": 24000 };
+
+/** Six weeks of plausible bookings up to `today` for one person, spread over three sample customers. */
+export function sampleRows(today: string, person: string): ImportRow[] {
+  const plan: [string, string, string[], string[]][] = [
+    ["Beispiel: Alpenblick Hotels AG", "Buchungsstrecke Relaunch", ["Konzept", "Umsetzung"], ["Workshop mit dem Kunden", "Wireframes Buchung", "Zahlungsschritt umgesetzt", "Tests Buchungsstrecke"]],
+    ["Beispiel: Velo Zürich GmbH", "Online-Shop", ["Design", "Entwicklung"], ["Startseite gestaltet", "Warenkorb gebaut", "Produktfilter", "Abstimmung mit Marketing"]],
+    ["Beispiel: Treuhand Muster AG", "IT-Support 2026", ["Support"], ["Drucker eingerichtet", "Update der Arbeitsplätze", "Backup geprüft"]],
+  ];
+  const rows: ImportRow[] = [];
+  const end = new Date(`${today}T12:00:00Z`);
+  let line = 1;
+  for (let back = 42; back >= 1; back--) {
+    const d = new Date(end.getTime() - back * 86400000);
+    const dow = d.getUTCDay();
+    if (dow === 0 || dow === 6) continue;
+    const date = d.toISOString().slice(0, 10);
+    // Two or three bookings a day, about eight hours, rotating through the customers.
+    const slots = [[0, 3.5], [1, 2.5], [back % 3 === 0 ? 2 : 0, 2]] as const;
+    let start = 8 * 60;
+    for (const [i, hours] of slots) {
+      const [customer, project, tasks, reasons] = plan[(i + back) % 3]!;
+      rows.push({ line: line++, date, person, customer, project, task: tasks[back % tasks.length]!, reason: reasons[(back + i) % reasons.length]!, hours, billable: customer !== plan[2]![0] || back % 2 === 0, startTime: `${String(Math.floor(start / 60)).padStart(2, "0")}:${String(start % 60).padStart(2, "0")}` });
+      start += hours * 60 + (start < 12 * 60 && start + hours * 60 >= 11.5 * 60 ? 60 : 0);
+    }
+  }
+  return rows;
 }

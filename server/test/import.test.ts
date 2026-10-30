@@ -67,6 +67,21 @@ describe("import", () => {
     expect((await send("DELETE", `/api/import/${batch.id}`, anna)).statusCode).toBe(409);
   });
 
+  it("loads sample data once and removes it again", async () => {
+    const res = await send("POST", "/api/onboarding/sample", anna);
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({ customers: 3, projects: 3, skippedPeople: 0 });
+    expect(res.json().entries).toBeGreaterThan(50);
+    expect((await send("POST", "/api/onboarding/sample", anna)).statusCode).toBe(409);
+    const state = (await send("GET", "/api/onboarding", anna)).json();
+    expect(state.sampleBatchId).toBe(res.json().id);
+    const d = (await send("GET", "/api/dataset?all=1", anna)).json();
+    expect(d.projects.find((p: { name: string }) => p.name === "Online-Shop").budget).toBe(30000);
+    await send("DELETE", `/api/import/${state.sampleBatchId}`, anna);
+    expect((await send("GET", "/api/onboarding", anna)).json().sampleBatchId).toBeNull();
+    expect((await send("GET", "/api/dataset?all=1", anna)).json().customers.some((c: { name: string }) => c.name.startsWith("Beispiel:"))).toBe(false);
+  });
+
   it("reads the first sheet of an Excel file", async () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Zeiten");

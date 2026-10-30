@@ -1,3 +1,4 @@
+import { GettingStarted } from "../ui/Help";
 import { useState } from "react";
 import { absenceDays, addMonths, fmt1, fmtCHF, fmtCHF2, fmtDate, fmtH, fmtMoney, fmtMonthLong, monthOf, vacationSummary, workBalance, type ProjectReport } from "@taktwerk/domain";
 import { useStore } from "../store";
@@ -332,6 +333,7 @@ export function Inbox() {
           </div>
           <a className="btn" href="#dashboard">Dashboard</a>
         </div>
+        <GettingStarted />
         <Stats />
         {all.length === 0 && (
           <div className="ib-empty">
