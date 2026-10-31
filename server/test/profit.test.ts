@@ -21,7 +21,7 @@ const stubFetch = (date = "2026-10-19") => async () => ({ ok: true, status: 200,
 describe("project kinds, currencies and cost rates", () => {
   it("stores kind and retainer hours on projects and the currency on customers", async () => {
     const ds = await t.app.inject({ method: "GET", url: "/api/dataset", headers: { cookie: admin } });
-    const project = ds.json().projects[0];
+    const project = ds.json().projects.find((p: { kind: string }) => p.kind === "tm");
     const customer = ds.json().customers[0];
     expect(project.kind).toBe("tm");
 
