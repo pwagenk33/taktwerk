@@ -32,7 +32,8 @@ export function isWebsiteHost(ctx: AppContext, host: string | undefined) {
 
 /**
  * The public website (website/ in the repository, built to WEBSITE_DIR) on trackinsight.ch, next to the app on
- * app.trackinsight.ch and the companies on <slug>.trackinsight.ch. Clean URLs: /preise serves preise.html.
+ * app.trackinsight.ch and the companies on <slug>.trackinsight.ch. Clean URLs: /preise serves preise.html, /fr/prix
+ * fr/prix.html and /fr the French home page.
  * %APP_URL% in the pages becomes APP_URL, so the sign-up buttons lead to the app; %SITE_URL% (canonical links,
  * sitemap, robots.txt) becomes the website's own address.
  */
@@ -56,6 +57,8 @@ export function serveWebsite(app: FastifyInstance, ctx: AppContext) {
       const path = decodeURIComponent(req.url.split("?")[0]!);
       let rel = path === "/" ? "index.html" : normalize(path).replace(/^[/\\]+/, "");
       if (rel.includes("..")) rel = "404.html";
+      // Language home pages: /fr and /fr/ serve fr/index.html.
+      if (/^[a-z]{2}[/\\]?$/.test(rel) && existsSync(join(dir, rel.slice(0, 2), "index.html"))) rel = `${rel.slice(0, 2)}/index.html`;
       if (!extname(rel)) rel += ".html";
       let file = join(dir, rel);
       let status = 200;

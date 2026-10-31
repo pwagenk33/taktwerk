@@ -425,3 +425,12 @@ ol.steps li strong { color: var(--ink); }
 .calc-result dt { color: var(--muted); }
 .calc-result dd { font-weight: 600; font-variant-numeric: tabular-nums; }
 @media (max-width: 860px) { .calc { grid-template-columns: 1fr; gap: 32px; } .calc-result { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 28px; } }
+
+/* Language switch (DE · FR · IT) at the end of the main navigation */
+.lang-switch { display: flex; gap: 2px; margin-left: 8px; padding-left: 10px; border-left: 1px solid var(--line); align-items: center; }
+.main-nav .lang-switch a { padding: 6px 7px; font-size: 0.82rem; letter-spacing: 0.04em; }
+.main-nav .lang-switch a[aria-current="true"] { color: var(--ink); font-weight: 650; }
+@media (max-width: 880px) {
+  .lang-switch { margin: 12px 0 0; padding: 0; border: 0; gap: 8px; }
+  .main-nav .lang-switch a { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 14px; }
+}

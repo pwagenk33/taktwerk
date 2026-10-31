@@ -8,6 +8,9 @@ const STORE_KEY = "rt.locale";
 
 function detect(): Locale {
   try {
+    // From the website in French or Italian: "?lang=fr" on the sign-up link picks the language once.
+    const fromLink = typeof location !== "undefined" ? new URLSearchParams(location.search).get("lang") : null;
+    if (isLocale(fromLink)) { localStorage.setItem(STORE_KEY, fromLink); return fromLink; }
     const stored = localStorage.getItem(STORE_KEY);
     if (isLocale(stored)) return stored;
   } catch { /* private mode */ }

@@ -1,18 +1,19 @@
 <!doctype html>
-<html lang="de-CH">
+<html lang="{{htmlLang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{{title}}</title>
 <meta name="description" content="{{description}}">
 {{robots}}<link rel="canonical" href="%SITE_URL%/{{page}}">
+{{alternates}}
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TrackInsight">
 <meta property="og:url" content="%SITE_URL%/{{page}}">
 <meta property="og:title" content="{{title}}">
 <meta property="og:description" content="{{description}}">
 <meta property="og:image" content="%SITE_URL%/img/app-eingang.jpg">
-<meta property="og:locale" content="de_CH">
+<meta property="og:locale" content="{{ogLocale}}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#6d4cf0">
 {{jsonld}}

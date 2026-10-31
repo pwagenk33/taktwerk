@@ -6,8 +6,11 @@
 // `node build.mjs --app=https://…` replaces it at build time instead (static preview without the server).
 // %SITE_URL% (canonical links, sitemap, preview images) works the same way; `--site=https://…` fills it at build time.
 // Search engines get a sitemap, canonical links, Open Graph tags and structured data (product with prices, FAQ).
+// French and Italian pages live in src/pages/fr and src/pages/it and are built to /fr/… and /it/…, with their own
+// header and footer (partials/header.fr.html …), hreflang links between the language versions and a language switch.
+// Legal texts and guides stay German; links to them from French or Italian pages lead to the German page.
 import { build } from "esbuild";
-import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -24,22 +27,40 @@ const tmp = join(here, ".plans.mjs");
 await build({ entryPoints: [join(here, "../packages/domain/src/plans.ts")], bundle: true, format: "esm", platform: "node", outfile: tmp, logLevel: "error" });
 const { PLANS, TRIAL_DAYS, MIN_SEATS } = await import(`${pathToFileURL(tmp).href}?t=${Date.now()}`);
 rmSync(tmp);
+// Plan names and highlights in French and Italian come from the app's own translation table.
+await build({ entryPoints: [join(here, "../packages/domain/src/messages.ts")], bundle: true, format: "esm", platform: "node", outfile: tmp, logLevel: "error" });
+const { MESSAGES } = await import(`${pathToFileURL(tmp).href}?t=${Date.now()}`);
+rmSync(tmp);
+const COL = { de: 0, fr: 1, it: 3 };
+const byDe = new Map(MESSAGES.map((r) => [r[0], r]));
+const tx = (lang, de) => (lang === "de" ? de : byDe.get(de)?.[COL[lang]] || de);
+
+const LANGS = ["de", "fr", "it"];
+const L = {
+  de: { html: "de-CH", og: "de_CH", popular: "Am häufigsten gewählt", per: "pro Person<br>und Monat", monthly: "monatlich verrechnet", yearly: (n) => `CHF ${n} pro Person jährlich verrechnet`, test: (d) => `${d} Tage testen`, langLabel: "Sprache", desc: "Zeiterfassung, Spesen und Absenzen mit Budget-Forecast aus JIRA, QR-Rechnung und Daten in der Schweiz.", perPerson: "pro Person und Monat" },
+  fr: { html: "fr-CH", og: "fr_CH", popular: "Le plus choisi", per: "par personne<br>et par mois", monthly: "facturé mensuellement", yearly: (n) => `CHF ${n} par personne facturés annuellement`, test: (d) => `Essai de ${d} jours`, langLabel: "Langue", desc: "Saisie du temps, frais et absences avec prévision budgétaire depuis JIRA, facture QR et données en Suisse.", perPerson: "par personne et par mois" },
+  it: { html: "it-CH", og: "it_CH", popular: "Il più scelto", per: "per persona<br>al mese", monthly: "fatturato mensilmente", yearly: (n) => `CHF ${n} per persona fatturati annualmente`, test: (d) => `Prova di ${d} giorni`, langLabel: "Lingua", desc: "Registrazione ore, spese e assenze con previsione del budget da JIRA, fattura QR e dati in Svizzera.", perPerson: "per persona al mese" },
+};
+/** The same page in every language (German slug, French, Italian) for hreflang links and the language switch. */
+const EQUIV = [["index", "index", "index"], ["funktionen", "fonctionnalites", "funzioni"], ["preise", "prix", "prezzi"], ["sicherheit", "securite", "sicurezza"], ["kontakt", "contact", "contatto"]];
+const equiv = (lang, page) => EQUIV.find((row) => row[LANGS.indexOf(lang)] === page);
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const chf = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2)).replace(/\B(?=(\d{3})+(?!\d))/g, "’");
 const attrs = (s) => Object.fromEntries([...s.matchAll(/(\w+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
 
-function plansHtml() {
+function plansHtml(lang) {
+  const s = L[lang];
   const cards = PLANS.map((p) => {
     const featured = p.id === "team";
     return `<article class="plan${featured ? " featured" : ""}" aria-labelledby="plan-${p.id}">
-  ${featured ? '<p class="plan-flag">Am häufigsten gewählt</p>' : ""}
+  ${featured ? `<p class="plan-flag">${s.popular}</p>` : ""}
   <h3 id="plan-${p.id}">${esc(p.name)}</h3>
-  <p class="plan-size">${esc(p.tagline)}</p>
-  <p class="plan-price"><span class="cur">CHF</span> <strong data-month="${chf(p.perUser)}" data-year="${chf(Math.round((p.perUser * 10 * 100) / 12) / 100)}">${chf(p.perUser)}</strong> <span class="per">pro Person<br>und Monat</span></p>
-  <p class="plan-bill" data-month="monatlich verrechnet" data-year="CHF ${chf(p.perUser * 10)} pro Person jährlich verrechnet">monatlich verrechnet</p>
-  <ul>${p.highlights.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>
-  <a class="btn${featured ? " primary" : ""}" href="%APP_URL%/registrieren?paket=${p.id}">${TRIAL_DAYS} Tage testen</a>
+  <p class="plan-size">${esc(tx(lang, p.tagline))}</p>
+  <p class="plan-price"><span class="cur">CHF</span> <strong data-month="${chf(p.perUser)}" data-year="${chf(Math.round((p.perUser * 10 * 100) / 12) / 100)}">${chf(p.perUser)}</strong> <span class="per">${s.per}</span></p>
+  <p class="plan-bill" data-month="${s.monthly}" data-year="${s.yearly(chf(p.perUser * 10))}">${s.monthly}</p>
+  <ul>${p.highlights.map((h) => `<li>${esc(tx(lang, h))}</li>`).join("")}</ul>
+  <a class="btn${featured ? " primary" : ""}" href="%APP_URL%/registrieren?paket=${p.id}">${s.test(TRIAL_DAYS)}</a>
 </article>`;
   }).join("\n");
   return `<div class="plans">${cards}</div>`;
@@ -93,7 +114,7 @@ function markdown(md) {
 const NOINDEX = ["404", "avv"];
 
 /** Structured data for the home page: the product with its prices, the provider and the questions from the FAQ. */
-function jsonLd(html) {
+function jsonLd(html, lang, home) {
   const text = (s) => s.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
   const faq = [...html.matchAll(/<details>\s*<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/g)].map((m) => ({
     "@type": "Question",
@@ -107,10 +128,11 @@ function jsonLd(html) {
       name: "TrackInsight",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web, iOS, Android",
-      url: "%SITE_URL%/",
+      url: `%SITE_URL%${home}`,
       image: "%SITE_URL%/img/app-eingang.jpg",
-      description: "Zeiterfassung, Spesen und Absenzen mit Budget-Forecast aus JIRA, QR-Rechnung und Daten in der Schweiz.",
-      offers: PLANS.map((p) => ({ "@type": "Offer", name: p.name, price: p.perUser.toFixed(2), priceCurrency: "CHF", description: `${p.name}: pro Person und Monat` })),
+      inLanguage: L[lang].html,
+      description: L[lang].desc,
+      offers: PLANS.map((p) => ({ "@type": "Offer", name: p.name, price: p.perUser.toFixed(2), priceCurrency: "CHF", description: `${p.name}: ${L[lang].perPerson}` })),
       provider: { "@type": "Organization", name: "TrackInsight", url: "%SITE_URL%/" },
     },
     ...(faq.length ? [{ "@context": "https://schema.org", "@type": "FAQPage", mainEntity: faq }] : []),
@@ -118,45 +140,85 @@ function jsonLd(html) {
   return data.map((d) => `<script type="application/ld+json">${JSON.stringify(d).replaceAll("<", "\\u003c")}</script>`).join("\n") + "\n";
 }
 
-const partial = (name) => readFileSync(join(src, "partials", `${name}.html`), "utf8");
-const NAV = [["funktionen", "Funktionen"], ["preise", "Preise"], ["sicherheit", "Sicherheit"], ["kontakt", "Kontakt"]];
-const link = (page) => (page === "index" ? (preview ? "index.html" : "/") : preview ? `${page}.html` : `/${page}`);
+/** Partial in the page's language (header.fr.html), else the German one. */
+const partial = (name, lang = "de") => {
+  const own = join(src, "partials", `${name}.${lang}.html`);
+  return readFileSync(lang !== "de" && existsSync(own) ? own : join(src, "partials", `${name}.html`), "utf8");
+};
+const NAV = {
+  de: [["funktionen", "Funktionen"], ["preise", "Preise"], ["sicherheit", "Sicherheit"], ["kontakt", "Kontakt"]],
+  fr: [["fonctionnalites", "Fonctionnalités"], ["prix", "Prix"], ["securite", "Sécurité"], ["contact", "Contact"]],
+  it: [["funzioni", "Funzioni"], ["prezzi", "Prezzi"], ["sicurezza", "Sicurezza"], ["contatto", "Contatto"]],
+};
+const pagesDir = (lang) => (lang === "de" ? join(src, "pages") : join(src, "pages", lang));
+const PAGES = Object.fromEntries(LANGS.map((lang) => [lang, new Set(readdirSync(pagesDir(lang)).filter((f) => f.endsWith(".html")).map((f) => f.replace(/\.html$/, "")))]));
+/** Address of a page in language `lang`, seen from a page in language `from` (matters for the static preview). */
+const link = (page, lang = "de", from = "de") => {
+  if (preview) return `${from !== "de" ? "../" : ""}${lang !== "de" ? `${lang}/` : ""}${page}.html`;
+  const prefix = lang === "de" ? "" : `/${lang}`;
+  return page === "index" ? `${prefix}/` : `${prefix}/${page}`;
+};
+/** Path part of the canonical address ("" for the German home page, "fr/prix" …). */
+const canonicalPath = (page, lang) => `${lang === "de" ? "" : `${lang}/`}${page === "index" ? "" : page}`;
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 const pages = [];
-const PAGES = new Set(readdirSync(join(src, "pages")).filter((f) => f.endsWith(".html")).map((f) => f.replace(/\.html$/, "")));
-for (const file of readdirSync(join(src, "pages")).filter((f) => f.endsWith(".html"))) {
-  const page = file.replace(/\.html$/, "");
-  let html = readFileSync(join(src, "pages", file), "utf8");
-  html = html.replace(/<!--@head([^>]*)-->/, (_, a) => {
-    const { title, description } = attrs(a);
-    return partial("head")
-      .replaceAll("{{title}}", esc(title))
-      .replaceAll("{{description}}", esc(description))
-      .replaceAll("{{page}}", page === "index" ? "" : page)
-      .replace("{{robots}}", NOINDEX.includes(page) ? '<meta name="robots" content="noindex">\n' : "")
-      .replace("{{jsonld}}", page === "index" ? jsonLd(html) : "");
-  });
-  html = html.replace("<!--@header-->", () =>
-    partial("header").replace("{{nav}}", NAV.map(([id, label]) => `<a href="${link(id)}"${id === page ? ' aria-current="page"' : ""}>${label}</a>`).join("")));
-  html = html.replace("<!--@footer-->", () => partial("footer"));
-  html = html.replace("<!--@plans-->", () => plansHtml());
-  html = html.replace(/<!--@markdown ([^ ]+)-->/g, (_, p) => markdown(readFileSync(resolve(here, p), "utf8")));
-  html = html.replace(/\{\{price\.(\w+)\}\}/g, (m, id) => { const p = PLANS.find((x) => x.id === id); return p ? chf(p.perUser) : m; });
-  html = html.replaceAll("{{trialDays}}", String(TRIAL_DAYS)).replaceAll("{{minSeats}}", String(MIN_SEATS));
-  html = html.replace(/href="\/(\w[\w-]*)?"/g, (m, p) => (p && PAGES.has(p) ? `href="${link(p)}"` : !p ? `href="${link("index")}"` : m));
-  if (preview) html = html.replace('<html lang="de-CH">', '<html lang="de-CH" data-preview="1">').replace(/(href|src)="\/(site\.css|site\.js|favicon\.svg|img\/|fonts\/)/g, '$1="$2');
-  if (appUrl) html = html.replaceAll("%APP_URL%", appUrl);
-  if (siteUrl) html = html.replaceAll("%SITE_URL%", siteUrl);
-  writeFileSync(join(out, file), html);
-  if (!NOINDEX.includes(page)) pages.push(page);
+for (const lang of LANGS) {
+  if (lang !== "de") mkdirSync(join(out, lang), { recursive: true });
+  for (const file of readdirSync(pagesDir(lang)).filter((f) => f.endsWith(".html"))) {
+    const page = file.replace(/\.html$/, "");
+    const row = equiv(lang, page);
+    let html = readFileSync(join(pagesDir(lang), file), "utf8");
+    html = html.replace(/<!--@head([^>]*)-->/, (_, a) => {
+      const { title, description } = attrs(a);
+      const alternates = row
+        ? LANGS.map((l, i) => `<link rel="alternate" hreflang="${l}" href="%SITE_URL%/${canonicalPath(row[i], l)}">`).join("\n") + `\n<link rel="alternate" hreflang="x-default" href="%SITE_URL%/${canonicalPath(row[0], "de")}">\n`
+        : "";
+      return partial("head")
+        .replaceAll("{{title}}", esc(title))
+        .replaceAll("{{description}}", esc(description))
+        .replaceAll("{{page}}", canonicalPath(page, lang))
+        .replace("{{htmlLang}}", L[lang].html)
+        .replace("{{ogLocale}}", L[lang].og)
+        .replace("{{alternates}}", alternates)
+        .replace("{{robots}}", NOINDEX.includes(page) ? '<meta name="robots" content="noindex">\n' : "")
+        .replace("{{jsonld}}", page === "index" ? jsonLd(html, lang, `/${canonicalPath("index", lang)}`) : "");
+    });
+    const langs = LANGS.map((l, i) => {
+      const target = row ? row[i] : "index";
+      return `<a href="${link(target, l, lang)}" hreflang="${l}" lang="${l}"${l === lang ? ' aria-current="true"' : ""}>${l.toUpperCase()}</a>`;
+    }).join("");
+    html = html.replace("<!--@header-->", () =>
+      partial("header", lang)
+        .replace("{{nav}}", NAV[lang].map(([id, label]) => `<a href="${link(id, lang, lang)}"${id === page ? ' aria-current="page"' : ""}>${label}</a>`).join(""))
+        .replace("{{langs}}", "<!--@langs-->"));
+    html = html.replace("<!--@footer-->", () => partial("footer", lang));
+    html = html.replace("<!--@plans-->", () => plansHtml(lang));
+    html = html.replace(/<!--@markdown ([^ ]+)-->/g, (_, p) => markdown(readFileSync(resolve(here, p), "utf8")));
+    html = html.replace(/\{\{price\.(\w+)\}\}/g, (m, id) => { const p = PLANS.find((x) => x.id === id); return p ? chf(p.perUser) : m; });
+    html = html.replaceAll("{{trialDays}}", String(TRIAL_DAYS)).replaceAll("{{minSeats}}", String(MIN_SEATS));
+    // Links between pages: the page's own language first, then the German page (legal texts, guides).
+    html = html.replace(/href="\/(\w[\w-]*)?"/g, (m, p) => (!p ? `href="${link("index", lang, lang)}"` : PAGES[lang].has(p) ? `href="${link(p, lang, lang)}"` : PAGES.de.has(p) ? `href="${link(p, "de", lang)}"` : m));
+    // Language switch after the link rewrite above, which would turn the German "/" into this language's home page.
+    html = html.replace("<!--@langs-->", () => `<span class="lang-switch" role="group" aria-label="${L[lang].langLabel}">${langs}</span>`);
+    // Sign-up and sign-in from a French or Italian page open the app in that language.
+    if (lang !== "de") html = html.replace(/%APP_URL%\/registrieren\?/g, `%APP_URL%/registrieren?lang=${lang}&`).replace(/%APP_URL%\/registrieren"/g, `%APP_URL%/registrieren?lang=${lang}"`).replace(/%APP_URL%\/"/g, `%APP_URL%/?lang=${lang}"`);
+    if (preview) {
+      const up = lang === "de" ? "" : "../";
+      html = html.replace(/<html lang="([^"]+)">/, '<html lang="$1" data-preview="1">').replace(/(href|src)="\/(site\.css|site\.js|favicon\.svg|img\/|fonts\/)/g, `$1="${up}$2`);
+    }
+    if (appUrl) html = html.replaceAll("%APP_URL%", appUrl);
+    if (siteUrl) html = html.replaceAll("%SITE_URL%", siteUrl);
+    writeFileSync(join(out, lang === "de" ? "" : lang, file), html);
+    if (!NOINDEX.includes(page)) pages.push(canonicalPath(page, lang));
+  }
 }
 // Sitemap with every listed page; the server fills in %SITE_URL% like in the pages.
 const today = new Date().toISOString().slice(0, 10);
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${pages.sort().map((p) => `  <url><loc>%SITE_URL%/${p === "index" ? "" : p}</loc><lastmod>${today}</lastmod></url>`).join("\n")}
+${pages.sort().map((p) => `  <url><loc>%SITE_URL%/${p}</loc><lastmod>${today}</lastmod></url>`).join("\n")}
 </urlset>
 `;
 writeFileSync(join(out, "sitemap.xml"), siteUrl ? sitemap.replaceAll("%SITE_URL%", siteUrl) : sitemap);

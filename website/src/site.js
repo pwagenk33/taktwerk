@@ -36,6 +36,13 @@
   }
 
   const form = document.getElementById("contact-form");
+  // Messages in the page's language (de-CH, fr-CH, it-CH).
+  const TEXTS = {
+    de: { preview: "Vorschau: In dieser Demo wird nichts verschickt. Auf trackinsight.ch geht die Anfrage per E-Mail an das Team.", failed: "Senden fehlgeschlagen", thanks: "Danke! Ihre Anfrage ist angekommen, wir melden uns bei Ihnen.", later: "Bitte versuchen Sie es später nochmals oder schreiben Sie uns direkt eine E-Mail." },
+    fr: { preview: "Aperçu : rien n'est envoyé dans cette démo. Sur trackinsight.ch, la demande part par e-mail à l'équipe.", failed: "Échec de l'envoi", thanks: "Merci ! Votre demande est bien arrivée, nous vous recontactons.", later: "Veuillez réessayer plus tard ou nous écrire directement par e-mail." },
+    it: { preview: "Anteprima: in questa demo non viene inviato nulla. Su trackinsight.ch la richiesta arriva al team via e-mail.", failed: "Invio non riuscito", thanks: "Grazie! La Sua richiesta è arrivata, La ricontatteremo.", later: "Riprovi più tardi o ci scriva direttamente un'e-mail." },
+  };
+  const T = TEXTS[document.documentElement.lang.slice(0, 2)] || TEXTS.de;
   if (form) {
     const msg = document.getElementById("form-msg");
     const show = (text, err) => { msg.textContent = text; msg.classList.toggle("err", !!err); msg.hidden = false; };
@@ -44,18 +51,18 @@
       const data = Object.fromEntries(new FormData(form));
       // Static preview (opened as a file or outside the TrackInsight server): nothing can be sent.
       if (location.protocol === "file:" || !location.host || document.documentElement.dataset.preview === "1") {
-        show("Vorschau: In dieser Demo wird nichts verschickt. Auf trackinsight.ch geht die Anfrage per E-Mail an das Team.");
+        show(T.preview);
         return;
       }
       const btn = form.querySelector("button[type=submit]");
       btn.disabled = true;
       try {
         const res = await fetch("/api/contact", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Senden fehlgeschlagen");
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || T.failed);
         form.reset();
-        show("Danke! Ihre Anfrage ist angekommen, wir melden uns bei Ihnen.");
+        show(T.thanks);
       } catch (err) {
-        show(`${err.message.replace(/\.$/, "")}. Bitte versuchen Sie es später nochmals oder schreiben Sie uns direkt eine E-Mail.`, true);
+        show(`${err.message.replace(/\.$/, "")}. ${T.later}`, true);
       } finally {
         btn.disabled = false;
       }

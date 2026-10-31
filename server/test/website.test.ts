@@ -36,6 +36,16 @@ describe("Website", () => {
     expect((await get("/img/a.jpg", BASE)).headers["cache-control"]).toContain("max-age=604800");
   });
 
+  it("serves the French and Italian pages under /fr and /it", async () => {
+    mkdirSync(join(dir, "fr"), { recursive: true });
+    writeFileSync(join(dir, "fr", "index.html"), "<h1>Accueil</h1>");
+    writeFileSync(join(dir, "fr", "prix.html"), "<h1>Prix</h1>");
+    expect((await get("/fr", BASE)).body).toBe("<h1>Accueil</h1>");
+    expect((await get("/fr/", BASE)).body).toBe("<h1>Accueil</h1>");
+    expect((await get("/fr/prix", BASE)).body).toBe("<h1>Prix</h1>");
+    expect((await get("/it/", BASE)).statusCode).toBe(404);
+  });
+
   it("answers unknown paths and path tricks with the 404 page", async () => {
     for (const url of ["/gibt-es-nicht", "/../package.json", "/%2e%2e/package.json"]) {
       const res = await get(url, BASE);
