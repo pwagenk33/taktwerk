@@ -480,7 +480,16 @@ Pro Firma unter Einstellungen → Slack & Teams (nur Admins). Es braucht keine S
 
 **Bedienung:** `2h Muster Website Startseite überarbeitet` (Dauer, Anfang von Kunde/Projekt/Teilprojekt, Text), `gestern 1:30 …`, `heute`, `woche`, `hilfe`. Beim ersten Mal antwortet der Bot mit einem Link (30 Minuten gültig); wer ihn angemeldet öffnet, verknüpft sein Chat-Konto. Gebucht wird mit den Regeln der App (abgeschlossene Monate und Projekte, Rechte).
 
-## 21. Kurzreferenz
+## 21. GitHub und GitLab als Buchungsvorschläge
+
+Jede Person verbindet im Profil ihr eigenes Konto mit einem persönlichen Token (nur lesen). Keine Server-Variablen nötig.
+
+- **GitHub:** Settings → Developer settings → Fine-grained token, Repository access auf die gewünschten Repos, Berechtigung «Contents: Read». Gesucht werden Commits mit der Person als Autor (GitHub-Commit-Suche).
+- **GitLab:** Preferences → Access tokens, Bereich `read_api`. Für ein eigenes GitLab die https-Adresse eintragen; interne Adressen (private IP-Bereiche, localhost) werden abgelehnt.
+
+Commits werden pro Repository und Tag zu Blöcken zusammengefasst (Start 30 Minuten vor dem ersten Commit, neue Blöcke nach mehr als 2,5 Stunden Pause) und erscheinen gepunktet neben den Kalendervorschlägen. Ein Jira-Schlüssel in der Commit-Nachricht wählt das Projekt mit diesem Jira-Schlüssel und füllt das Ticket aus. Das Token liegt in der Datenbank (Tabelle `git_connections`) und geht nie an den Browser zurück; Commits werden live geholt und nicht gespeichert.
+
+## 22. Kurzreferenz
 
 | Aufgabe | Befehl (im Ordner `~/trackinsight`) |
 |---|---|

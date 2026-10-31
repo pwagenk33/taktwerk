@@ -810,3 +810,15 @@ export const incidents = mysqlTable(
   },
   (t) => [index("incidents_start_idx").on(t.startsAt)],
 );
+
+/** A person's GitHub or GitLab account (personal access token, read-only), read for booking suggestions. */
+export const gitConnections = mysqlTable("git_connections", {
+  userId: id("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  organizationId: orgId(),
+  provider: mysqlEnum("provider", ["github", "gitlab"]).notNull(),
+  /** API base: https://api.github.com, https://gitlab.com or a company's own GitLab. */
+  baseUrl: varchar("base_url", { length: 255 }).notNull(),
+  account: varchar("account", { length: 120 }).notNull(),
+  token: text("token").notNull(),
+  createdAt: createdAt(),
+});

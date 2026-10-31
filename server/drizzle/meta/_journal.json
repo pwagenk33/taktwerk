@@ -232,6 +232,13 @@
       "when": 1793468909646,
       "tag": "0032_status_history",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1793469226100,
+      "tag": "0033_git_connections",
+      "breakpoints": true
     }
   ]
 }

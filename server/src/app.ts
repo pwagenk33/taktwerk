@@ -29,6 +29,7 @@ import { quoteRoutes } from "./routes/quotes";
 import { ssoRoutes } from "./routes/sso";
 import { chatRoutes } from "./routes/chat";
 import { growthRoutes } from "./routes/growth";
+import { gitRoutes } from "./routes/git";
 import { mandateRoutes } from "./routes/mandates";
 import { worktimeRoutes } from "./routes/worktime";
 import { planningRoutes } from "./routes/planning";
@@ -317,6 +318,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(ssoRoutes);
   await app.register(chatRoutes);
   await app.register(growthRoutes);
+  await app.register(gitRoutes);
   await app.register(planningRoutes);
   await app.register(portalRoutes);
   await app.register(platformRoutes);

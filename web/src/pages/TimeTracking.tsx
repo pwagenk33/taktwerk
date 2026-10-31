@@ -809,6 +809,7 @@ interface DialogState {
   /** Prefill for a new booking, e.g. from a calendar suggestion. */
   reason?: string;
   subProjectId?: string;
+  jiraIssueKey?: string;
 }
 
 /** Popup to create or change one booking (or to record an expense for that day). */
@@ -822,7 +823,7 @@ function EntryDialog({ state, onClose }: { state: DialogState; onClose: () => vo
   const [startTime, setStartTime] = useState(e?.startTime ?? state.startTime ?? "");
   const [hours, setHours] = useState(String(e?.hours ?? state.hours));
   const [reason, setReason] = useState(state.reason ?? "");
-  const [issueKey, setIssueKey] = useState(e?.jiraIssueKey ?? "");
+  const [issueKey, setIssueKey] = useState(e?.jiraIssueKey ?? state.jiraIssueKey ?? "");
   const [billable, setBillable] = useState(e?.billable ?? true);
   const [confirm, setConfirm] = useState(false);
   const [history, setHistory] = useState(false);
@@ -1337,17 +1338,17 @@ function WeekCalendar() {
                   return (
                     <div
                       key={x.event.id}
-                      className="cal-block cal-suggest"
+                      className={`cal-block cal-suggest${x.event.source === "git" ? " git" : ""}`}
                       role="button"
                       tabIndex={0}
                       style={{ top: (from - DAY_START) * PX_PER_MIN, height: h, left: 2, right: 2 }}
-                      title={tr("Termin aus deinem Kalender. Klicken, um ihn zu buchen.")}
+                      title={x.event.source === "git" ? tr("Arbeit aus deinen Commits. Klicken, um sie zu buchen.") : tr("Termin aus deinem Kalender. Klicken, um ihn zu buchen.")}
                       onPointerDown={(ev) => ev.stopPropagation()}
-                      onClick={() => setDialog({ date: d, startTime: x.event.start, hours: x.hours, reason: x.event.title, subProjectId: x.subProjectId })}
-                      onKeyDown={(ev) => ev.key === "Enter" && setDialog({ date: d, startTime: x.event.start, hours: x.hours, reason: x.event.title, subProjectId: x.subProjectId })}
+                      onClick={() => setDialog({ date: d, startTime: x.event.start, hours: x.hours, reason: x.event.title, subProjectId: x.subProjectId, jiraIssueKey: x.jiraIssueKey })}
+                      onKeyDown={(ev) => ev.key === "Enter" && setDialog({ date: d, startTime: x.event.start, hours: x.hours, reason: x.event.title, subProjectId: x.subProjectId, jiraIssueKey: x.jiraIssueKey })}
                     >
                       <div className="cal-block-title">{x.event.title}</div>
-                      {h >= 34 && <div className="cal-block-meta">{x.subProjectId ? labels.short(x.subProjectId) : tr("Vorschlag aus dem Kalender")}</div>}
+                      {h >= 34 && <div className="cal-block-meta">{x.subProjectId ? labels.short(x.subProjectId) : x.event.source === "git" ? tr("Vorschlag aus Git") : tr("Vorschlag aus dem Kalender")}</div>}
                       <div className="cal-block-time">{x.event.start}{tr("–{0} · {1} h", x.event.end, fmt1(x.hours))}</div>
                       <button className="cal-suggest-x" aria-label={tr("Vorschlag ausblenden")} title={tr("Vorschlag ausblenden")} onClick={(ev) => { ev.stopPropagation(); calendar.hide(x.event.id); }}>×</button>
                     </div>
@@ -1369,7 +1370,7 @@ function WeekCalendar() {
         </div>
       </div>
       <div className="card-pad" style={{ paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        {calendar.suggestions.length > 0 && <span className="muted" style={{ fontSize: "0.78rem", width: "100%" }}>{tr("Gestrichelt: Termine aus deinem Kalender, die noch nicht gebucht sind. Ein Klick öffnet die Buchung mit Zeit, Dauer und Titel.")}</span>}
+        {calendar.suggestions.length > 0 && <span className="muted" style={{ fontSize: "0.78rem", width: "100%" }}>{tr("Gestrichelt: Termine aus deinem Kalender und Arbeit aus deinen Commits, die noch nicht gebucht sind. Ein Klick öffnet die Buchung mit Zeit, Dauer und Titel.")}</span>}
         <span className="muted" style={{ fontSize: "0.78rem" }}>{tr("Ziehen bucht (15-Minuten-Raster), Einträge lassen sich verschieben und unten verlängern. Tasten: N neu, S Stoppuhr, ← → Woche, T heute, D dupliziert den Eintrag unter der Maus. Buchungen ohne Uhrzeit stehen oben im Tag.")}</span>
         {error && <span className="error">{error}</span>}
       </div>

@@ -1272,3 +1272,8 @@ body.dialog-open { overflow: hidden; }
 .incident-row > div:first-child { min-width: 0; }
 .incident-update { display: grid; grid-template-columns: minmax(0, 10rem) minmax(0, 1fr) auto; gap: 6px; min-width: min(100%, 420px); }
 @media (max-width: 640px) { .incident-row { flex-direction: column; } .incident-update { grid-template-columns: 1fr; width: 100%; } }
+
+/* Profile → GitHub/GitLab */
+.git-connect { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.git-connect .field { width: 100%; max-width: 420px; }
+.cal-suggest.git { border-style: dotted; }

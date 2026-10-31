@@ -1,5 +1,6 @@
 // Booking suggestions from the person's Outlook or Google calendar: each meeting that is not booked yet
 // becomes a suggestion with duration and, where the history or the title gives it away, a sub-project.
+import { JIRA_KEY } from "./git";
 import type { Dataset } from "./types";
 
 export interface CalendarEvent {
@@ -8,14 +9,18 @@ export interface CalendarEvent {
   date: string; // YYYY-MM-DD, local time Zurich
   start: string; // HH:MM
   end: string; // HH:MM
+  /** Where the block comes from; calendar when missing. */
+  source?: "calendar" | "git";
 }
 
 export interface CalendarSuggestion {
   event: CalendarEvent;
   hours: number;
   subProjectId?: string;
-  /** Why the sub-project was picked: an earlier booking with the same text, or a name in the title. */
-  because?: "history" | "name";
+  /** Why the sub-project was picked: an earlier booking with the same text, a name in the title, or a Jira key. */
+  because?: "history" | "name" | "jira";
+  /** Jira issue named in the title (e.g. a commit message «ABC-123 fix login»). */
+  jiraIssueKey?: string;
 }
 
 const minutes = (hhmm: string) => {
@@ -38,7 +43,13 @@ export function calendarSuggestions(events: CalendarEvent[], data: Pick<Dataset,
   for (const e of mine) used.set(e.subProjectId, (used.get(e.subProjectId) ?? 0) + 1);
   const mostUsed = (ids: string[]) => ids.sort((a, b) => (used.get(b) ?? 0) - (used.get(a) ?? 0))[0];
 
-  const guess = (title: string): Pick<CalendarSuggestion, "subProjectId" | "because"> => {
+  const guess = (title: string): Pick<CalendarSuggestion, "subProjectId" | "because" | "jiraIssueKey"> => {
+    const key = JIRA_KEY.exec(title);
+    if (key) {
+      const proj = data.projects.find((p) => p.jiraProjectKey?.toUpperCase() === key[1]);
+      const subs = proj ? data.subProjects.filter((s) => s.projectId === proj.id).map((s) => s.id) : [];
+      if (subs.length) return { subProjectId: mostUsed(subs), because: "jira", jiraIssueKey: key[0] };
+    }
     const t = norm(title);
     if (!t) return {};
     const same = new Map<string, number>();

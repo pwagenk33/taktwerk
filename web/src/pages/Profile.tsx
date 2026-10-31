@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Role } from "@taktwerk/domain";
-import { loadCalendarStatus, providerLabel, setDemoCalendar, type CalendarStatus } from "../calendar";
+import { loadCalendarStatus, loadGitStatus, providerLabel, setDemoCalendar, setDemoGit, type CalendarStatus, type GitStatus } from "../calendar";
 import { api } from "../api";
 import { loadLocal, saveLocal, useStore } from "../store";
 import { Select } from "../ui/Select";
@@ -326,6 +326,7 @@ export function Profile() {
         </section>
         <LanguageCard />
         <CalendarCard />
+        <GitCard />
         <ReminderCard />
         {mode === "api" && <SecurityCard />}
         <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 8 }} id="my-data">
@@ -388,6 +389,65 @@ function LanguageCard() {
         ))}
       </div>
       <p className="muted" style={{ fontSize: "0.82rem" }}>{tr("Gilt für die App und für E-Mails an dich. Reports und Rechnungen erhalten Kunden in der Sprache, die beim Kunden eingestellt ist.")}</p>
+    </section>
+  );
+}
+
+/** GitHub or GitLab: commits show up in Zeiterfassung as booking suggestions (read-only personal token). */
+function GitCard() {
+  const { mode, notify } = useStore();
+  const demo = mode === "demo";
+  const [s, setS] = useState<GitStatus | null>(null);
+  const [provider, setProvider] = useState<"github" | "gitlab">("github");
+  const [token, setToken] = useState("");
+  const [baseUrl, setBaseUrl] = useState("https://gitlab.com");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const load = () => loadGitStatus(demo).then(setS).catch(() => setS({ connected: null }));
+  useEffect(() => { void load(); }, [demo]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!s) return null;
+  const name = (p: "github" | "gitlab") => (p === "github" ? "GitHub" : "GitLab");
+  const connect = async () => {
+    setError("");
+    if (demo) { setDemoGit(provider); setToken(""); await load(); return notify(tr("{0} verbunden", name(provider))); }
+    setBusy(true);
+    try {
+      setS(await api<GitStatus>("/api/git", { method: "PUT", body: { provider, token: token.trim(), ...(provider === "gitlab" ? { baseUrl: baseUrl.trim() } : {}) } }));
+      setToken("");
+      notify(tr("{0} verbunden", name(provider)));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const disconnect = async () => {
+    if (demo) setDemoGit(null); else await api("/api/git", { method: "DELETE" });
+    notify(tr("Git getrennt"));
+    void load();
+  };
+  return (
+    <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12 }} id="git">
+      <h2>{tr("GitHub und GitLab")}</h2>
+      <p className="muted" style={{ fontSize: "0.86rem", margin: 0 }}>{tr("Deine Commits erscheinen in der Zeiterfassung als Vorschläge, pro Repository und Tag. Steht ein Jira-Schlüssel in der Commit-Nachricht (z. B. SHOP-12), ist das Projekt schon gewählt. Gelesen wird nur, gespeichert wird nichts.")}</p>
+      {s.connected ? (
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="pill ok">{name(s.connected.provider)} · {s.connected.account}{s.connected.provider === "gitlab" && s.connected.baseUrl !== "https://gitlab.com" ? ` · ${new URL(s.connected.baseUrl).host}` : ""}</span>
+          <button className="btn small ghost" onClick={() => void disconnect()}>{tr("Trennen")}</button>
+        </div>
+      ) : (
+        <div className="git-connect">
+          <div className="seg" role="group" aria-label={tr("Anbieter")}>
+            {(["github", "gitlab"] as const).map((p) => <button key={p} type="button" aria-pressed={provider === p} className={provider === p ? "on" : ""} onClick={() => setProvider(p)}>{name(p)}</button>)}
+          </div>
+          {provider === "gitlab" && <label className="field"><span>{tr("GitLab-Adresse")}</span><input className="input" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} /></label>}
+          <label className="field"><span>{provider === "github" ? tr("Persönliches Token (Fine-grained, Leserechte auf Inhalte)") : tr("Persönliches Token (Bereich read_api)")}</span>
+            <input id="git-token" className="input" type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} />
+          </label>
+          {error && <p className="error" style={{ margin: 0 }}>{error}</p>}
+          <div><button id="git-connect" className="btn small" disabled={busy || (!demo && token.trim().length < 10)} onClick={() => void connect()}>{tr("{0} verbinden", name(provider))}</button></div>
+        </div>
+      )}
     </section>
   );
 }

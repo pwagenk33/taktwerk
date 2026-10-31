@@ -1,6 +1,6 @@
 // Booking suggestions from the person's Outlook or Google calendar (connected in Profile).
 import { useEffect, useMemo, useState } from "react";
-import { addDays, calendarSuggestions, type CalendarEvent, type CalendarSuggestion } from "@taktwerk/domain";
+import { addDays, calendarSuggestions, gitWorkBlocks, type CalendarEvent, type CalendarSuggestion, type GitCommit } from "@taktwerk/domain";
 import { api } from "./api";
 import { loadLocal, saveLocal, useStore } from "./store";
 import { tr } from "./i18n";
@@ -35,6 +35,31 @@ function demoEvents(days: string[], names: { customer: string; project: string }
   return out;
 }
 
+export interface GitStatus { connected: { provider: "github" | "gitlab"; account: string; baseUrl: string } | null }
+const GIT_DEMO_KEY = "rt.git.demo";
+export async function loadGitStatus(demo: boolean): Promise<GitStatus> {
+  if (demo) {
+    const p = loadLocal<"github" | "gitlab" | null>(GIT_DEMO_KEY, "github");
+    return { connected: p ? { provider: p, account: "anna-keller", baseUrl: p === "github" ? "https://api.github.com" : "https://gitlab.com" } : null };
+  }
+  return api<GitStatus>("/api/git");
+}
+export const setDemoGit = (p: "github" | "gitlab" | null) => saveLocal(GIT_DEMO_KEY, p);
+
+/** Prototype: a few commits on the sample projects with Jira keys, so the suggestions pick the project. */
+function demoCommits(days: string[], projects: { name: string; key: string }[]): GitCommit[] {
+  const out: GitCommit[] = [];
+  const p = projects[0];
+  if (!p) return out;
+  const repo = `beispiel/${p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const at = (d: string, hhmm: string) => new Date(`${d}T${hhmm}:00+01:00`).toISOString();
+  days.slice(0, 5).forEach((d, i) => {
+    if (i === 0) out.push({ sha: `${d}a`, repo, message: tr("{0}-41 Suche beschleunigt", p.key), at: at(d, "10:50") }, { sha: `${d}b`, repo, message: tr("{0}-41 Tests ergänzt", p.key), at: at(d, "11:40") });
+    if (i === 2) out.push({ sha: `${d}c`, repo, message: tr("{0}-44 Export korrigiert", p.key), at: at(d, "16:20") });
+  });
+  return out;
+}
+
 const hiddenKey = (userId: string) => `rt.cal.hidden.${userId}`;
 
 /** Suggestions for the visible days; meetings that are already booked or dismissed do not show. */
@@ -49,19 +74,24 @@ export function useCalendarSuggestions(days: string[]) {
     let live = true;
     (async () => {
       try {
-        const s = await loadCalendarStatus(demo);
-        if (!s.connected) return live && setEvents([]);
         // Only what is past or today: future meetings are not booked yet.
         const until = to < data.today ? to : data.today;
         if (from > until) return live && setEvents([]);
-        if (demo) {
-          const names = data.projects.filter((p) => p.jiraProjectKey).map((p) => ({ project: p.name, customer: data.customers.find((c) => c.id === p.customerId)?.name.replace(/\s+(AG|GmbH|SA)$/, "") ?? "" }));
-          const all: string[] = [];
-          for (let d = from; d <= until; d = addDays(d, 1)) all.push(d);
-          return live && setEvents(demoEvents(all, names));
-        }
-        const list = await api<CalendarEvent[]>(`/api/calendar/events?from=${from}&to=${until}`);
-        if (live) setEvents(list);
+        const [cal, git] = await Promise.all([loadCalendarStatus(demo).catch(() => null), loadGitStatus(demo).catch(() => null)]);
+        const all: string[] = [];
+        for (let d = from; d <= until; d = addDays(d, 1)) all.push(d);
+        const meetings: Promise<CalendarEvent[]> = !cal?.connected
+          ? Promise.resolve([])
+          : demo
+            ? Promise.resolve(demoEvents(all, data.projects.filter((p) => p.jiraProjectKey).map((p) => ({ project: p.name, customer: data.customers.find((c) => c.id === p.customerId)?.name.replace(/\s+(AG|GmbH|SA)$/, "") ?? "" }))))
+            : api<CalendarEvent[]>(`/api/calendar/events?from=${from}&to=${until}`).catch(() => []);
+        const commits: Promise<GitCommit[]> = !git?.connected
+          ? Promise.resolve([])
+          : demo
+            ? Promise.resolve(demoCommits(all, data.projects.filter((p) => p.jiraProjectKey).map((p) => ({ name: p.name, key: p.jiraProjectKey! }))))
+            : api<GitCommit[]>(`/api/git/commits?from=${from}&to=${until}`).catch(() => []);
+        const [m, c] = await Promise.all([meetings, commits]);
+        if (live) setEvents([...m, ...gitWorkBlocks(c).filter((b) => b.date >= from && b.date <= until)]);
       } catch {
         if (live) setEvents([]);
       }
