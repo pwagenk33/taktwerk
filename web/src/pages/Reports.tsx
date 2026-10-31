@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { PROJECT_KINDS, addMonths, currencyOf, fmt1, fmtCHF, fmtCHF2, fmtDate, fmtMoney, fmtMonth, fmtMonthLong, fmtNum, fmtQty, monthOf, type Currency, type Figures, type PostalAddress, type ProfitRow } from "@taktwerk/domain";
+import { PROJECT_KINDS, addMonths, currencyOf, fmt1, fmtCHF, fmtCHF2, fmtDate, fmtMoney, fmtMonth, fmtMonthLong, fmtNum, fmtQty, monthOf, monthSummary, type Currency, type Figures, type PostalAddress, type ProfitRow } from "@taktwerk/domain";
 import { useBexio } from "./Bexio";
 import { api, type Invoice, type InvoicePosition, type InvoiceStatus } from "../api";
 import { useStore } from "../store";
@@ -435,6 +435,7 @@ export function Reports() {
       </div>
 
       {customerId && scope.lead && <ReportExport customerId={customerId} />}
+      {customerId && scope.lead && <MonthSummaryCard customerId={customerId} />}
       {customerId && scope.lead && <Invoices customerId={customerId} />}
 
       <div className="tiles">
@@ -516,5 +517,60 @@ function AddressDialog({ initial, onClose, onSave }: { initial: PostalAddress; o
         <Field label={tr("Land")} name="country" required><input id="i-country" className="input" maxLength={2} value={a.country} onChange={(e) => setA({ ...a, country: e.target.value.toUpperCase() })} /></Field>
       </FieldRow>
     </FormDialog>
+  );
+}
+
+/** Text for the customer: what was done in a month, built from bookings and resolved Jira issues; editable before copying. */
+function MonthSummaryCard({ customerId }: { customerId: string }) {
+  const { data, notify } = useStore();
+  const current = monthOf(data.today);
+  const months = [0, 1, 2].map((n) => addMonths(current, -n));
+  const [month, setMonth] = useState(addMonths(current, -1));
+  const customer = data.customers.find((c) => c.id === customerId);
+  const generated = (() => {
+    const projects = monthSummary(data, customerId, month);
+    if (!projects.length) return "";
+    const lines = [tr("Zusammenfassung {0} für {1}", fmtMonthLong(month), customer?.name ?? ""), ""];
+    for (const p of projects) {
+      lines.push(tr("{0}: {1} h", p.name, fmtQty(p.hours)));
+      for (const s of p.subs) {
+        lines.push(`• ${tr("{0}: {1} h", s.name, fmtQty(s.hours))}`);
+        // Issues with the same title are listed once with all their keys.
+        const done = new Map<string, string[]>();
+        for (const d of s.done) done.set(d.summary, [...(done.get(d.summary) ?? []), d.key]);
+        const topics = s.topics.map((t) => t.text).filter((t) => !done.has(t));
+        if (done.size) lines.push(`  ${tr("Abgeschlossen:")} ${[...done].map(([t, keys]) => `${t} (${keys.join(", ")})`).join(", ")}`);
+        if (topics.length) lines.push(`  ${done.size ? tr("Ausserdem:") : tr("Arbeiten:")} ${topics.join(", ")}`);
+      }
+      lines.push("");
+    }
+    return lines.join("\n").trim();
+  })();
+  const [text, setText] = useState(generated);
+  useEffect(() => setText(generated), [generated]);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify(tr("Zusammenfassung kopiert"));
+    } catch {
+      notify(tr("Kopieren nicht möglich, bitte Text markieren"));
+    }
+  };
+  return (
+    <section className="card card-pad" id="month-summary" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="tree-row">
+        <h2>{tr("Monatszusammenfassung")}</h2>
+        <span className="muted" style={{ fontSize: "0.8rem" }}>{tr("Aus Buchungstexten und erledigten Jira-Issues, zum Anpassen vor dem Versand")}</span>
+      </div>
+      <div className="export-bar">
+        <label className="field">
+          <span>{tr("Monat")}</span>
+          <Select id="ms-month" value={month} onChange={setMonth} options={months.map((m) => ({ value: m, label: fmtMonthLong(m) }))} />
+        </label>
+        <button className="btn" id="ms-copy" disabled={!text} onClick={() => void copy()}>{tr("Kopieren")}</button>
+        {text !== generated && <button className="btn ghost" onClick={() => setText(generated)}>{tr("Zurücksetzen")}</button>}
+      </div>
+      {generated ? <textarea id="ms-text" className="input ms-text" rows={Math.min(18, text.split("\n").length + 1)} value={text} onChange={(e) => setText(e.target.value)} /> : <p className="muted" style={{ margin: 0 }}>{tr("In {0} gibt es für diesen Kunden keine Buchungen.", fmtMonthLong(month))}</p>}
+    </section>
   );
 }

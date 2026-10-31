@@ -1210,3 +1210,10 @@ body.dialog-open { overflow: hidden; }
   .quote-row > :nth-child(4) { display: none; }
 }
 .quote-row.foot > button { justify-self: start; }
+
+/* Booking-text suggestions under the reason field */
+.reason-hints { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font-size: 0.8rem; margin-top: -4px; }
+.reason-hint { background: none; border: 0; padding: 2px 0; color: var(--ink, inherit); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; max-width: 26em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; }
+.reason-hint .mono { color: var(--muted); margin-right: 5px; }
+@media (hover: hover) { .reason-hint:hover { text-decoration-color: currentColor; } }
+.ms-text { font-size: 0.86rem; line-height: 1.5; resize: vertical; }

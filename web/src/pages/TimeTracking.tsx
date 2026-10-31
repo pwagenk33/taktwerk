@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, dayPresence, fmt1, fmtCHF, fmtCHF2, fmtDay, isoWeekKey, parseReceipt, presenceIssues, rateOn, stampOptions, type PeriodKind, type StampAction } from "@taktwerk/domain";
+import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, dayPresence, fmt1, fmtCHF, fmtCHF2, fmtDay, isoWeekKey, parseReceipt, presenceIssues, rateOn, reasonSuggestions, type ReasonSuggestion, stampOptions, type PeriodKind, type StampAction } from "@taktwerk/domain";
 import { recognizeReceipt } from "../ocr";
 import type { Expense, ExpenseCategory, TimeEntry } from "@taktwerk/domain";
 import { api, type EntryComment } from "../api";
@@ -317,6 +317,7 @@ function TimeForm() {
         </span>
         <textarea id="t-reason" className="input" placeholder={tr("z. B. Abnahme-Workshop mit Fachbereich vorbereitet")} value={reason} onChange={(e) => setReason(e.target.value)} />
       </label>
+      <ReasonHints id="t-hints" subProjectId={target.subProjectId} date={date} typed={reason} onPick={(x) => { setReason(x.text); if (x.issueKey && openIssues.some((i) => i.key === x.issueKey)) setIssueKey(x.issueKey); }} />
       {mode === "manual" ? (
         <div className="form-grid" style={{ alignItems: "end" }}>
           <label className="field"><span>{tr("Datum")}</span><input id="t-date" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
@@ -933,6 +934,7 @@ function EntryDialog({ state, onClose }: { state: DialogState; onClose: () => vo
               </span>
               <input id="d-reason" className="input" placeholder={tr("z. B. Abnahme-Workshop vorbereitet")} value={reason} autoFocus={!e} onChange={(ev) => setReason(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && save()} />
             </label>
+            {!lock && <ReasonHints id="d-hints" subProjectId={target.subProjectId} date={date} typed={reason} onPick={(x) => { setReason(x.text); if (x.issueKey && openIssues.some((i) => i.key === x.issueKey)) setIssueKey(x.issueKey); }} />}
             {error && <p className="error">{error}</p>}
             {e && <Comments entry={e} />}
             {history && e && <History id={e.id} />}
@@ -1494,5 +1496,23 @@ export function TimeTracking() {
         </div>
       )}
     </>
+  );
+}
+
+/** Suggestions for the booking text from open Jira issues, own earlier bookings and the team's texts on the sub-project. */
+function ReasonHints({ id, subProjectId, date, typed, onPick }: { id: string; subProjectId: string; date: string; typed: string; onPick: (s: ReasonSuggestion) => void }) {
+  const { data, currentUserId } = useStore();
+  const list = useMemo(() => (subProjectId ? reasonSuggestions(data, { employeeId: currentUserId, subProjectId, date: date || data.today, typed: typed.length >= 2 ? typed : "" }) : []), [data, currentUserId, subProjectId, date, typed]);
+  if (!list.length) return null;
+  const label = { jira: tr("Issue in Arbeit"), mine: tr("Von dir zuletzt gebucht"), team: tr("Im Team gebucht") };
+  return (
+    <div className="reason-hints" id={id}>
+      <span className="muted">{tr("Vorschläge")}</span>
+      {list.map((x) => (
+        <button type="button" key={`${x.source}:${x.text}`} className="reason-hint" title={label[x.source]} onClick={() => onPick(x)}>
+          {x.issueKey && <span className="mono">{x.issueKey}</span>}{x.text}
+        </button>
+      ))}
+    </div>
   );
 }
