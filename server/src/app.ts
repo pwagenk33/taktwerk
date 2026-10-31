@@ -132,6 +132,8 @@ export interface AppContext {
 }
 
 export const SESSION_COOKIE = "tw_session";
+/** Bundle id / package name of the store apps in mobile/ (capacitor.config.ts). */
+export const MOBILE_APP_ID = "ch.trackinsight.app";
 
 export class HttpError extends Error {
   constructor(readonly statusCode: number, message: string) {
@@ -300,6 +302,15 @@ export async function buildApp(ctx: AppContext) {
   });
 
   app.get("/api/health", async () => ({ ok: true }));
+  // Store apps (mobile/): links to this server open in the installed app instead of the browser.
+  app.get("/.well-known/apple-app-site-association", async (_req, reply) => {
+    if (!ctx.config.APP_IOS_TEAM_ID) return reply.code(404).send();
+    return { applinks: { details: [{ appIDs: [`${ctx.config.APP_IOS_TEAM_ID}.${MOBILE_APP_ID}`], components: [{ "/": "/*" }] }] } };
+  });
+  app.get("/.well-known/assetlinks.json", async (_req, reply) => {
+    if (!ctx.config.APP_ANDROID_SHA256) return reply.code(404).send();
+    return [{ relation: ["delegate_permission/common.handle_all_urls"], target: { namespace: "android_app", package_name: MOBILE_APP_ID, sha256_cert_fingerprints: ctx.config.APP_ANDROID_SHA256.split(",").map((f) => f.trim()).filter(Boolean) } }];
+  });
   await app.register(statusRoutes);
   await app.register(authRoutes);
   await app.register(dataRoutes);

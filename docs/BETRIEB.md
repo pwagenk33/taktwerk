@@ -503,6 +503,8 @@ Nur mit dem Erfassungsmodell «Kommen/Gehen» (Einstellungen → Arbeitszeit). D
 
 Wer den Link hat, kann damit für sich selbst stempeln (Anmeldung nötig). Ist ein Aufkleber verloren, mit «Neu» einen neuen Link erzeugen; alte Aufkleber und QR-Codes gelten dann nicht mehr.
 
+**Store-App:** Die App für App Store und Play Store liegt in `mobile/` (Anleitung `mobile/README.md`). Mit `APP_IOS_TEAM_ID` und `APP_ANDROID_SHA256` in `.env` öffnen Aufkleber und Mail-Links die installierte App statt den Browser.
+
 ## 23. Kurzreferenz
 
 | Aufgabe | Befehl (im Ordner `~/trackinsight`) |

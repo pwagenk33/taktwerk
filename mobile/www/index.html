@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>TrackInsight</title>
+  <style>
+    :root { --v: #6d4aff; --ink: #18181b; --muted: #6b6b76; --bg: #fafafa; --line: #e4e4e7; }
+    @media (prefers-color-scheme: dark) { :root { --ink: #f4f4f5; --muted: #a1a1aa; --bg: #0f0f12; --line: #2a2a31; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+    main { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; }
+    img { width: 64px; height: 64px; border-radius: 16px; }
+    h1 { margin: 0; font-size: 1.5rem; }
+    p { margin: 0; color: var(--muted); }
+    input { width: 100%; padding: 14px; font-size: 1rem; border: 1px solid var(--line); border-radius: 12px; background: transparent; color: inherit; }
+    button { padding: 14px; font-size: 1rem; font-weight: 600; border: 0; border-radius: 12px; background: var(--v); color: #fff; }
+    .error { color: #c0262d; min-height: 1.5em; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <main id="pick" class="hidden">
+    <img src="icon.png" alt="" />
+    <h1 data-t="title">Willkommen bei TrackInsight</h1>
+    <p data-t="lead">Gib die Adresse deiner Firma ein. Du findest sie in der Einladungsmail, z. B. muster.trackinsight.ch.</p>
+    <form id="f">
+      <input id="addr" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="muster.trackinsight.ch" required />
+    </form>
+    <p class="error" id="err"></p>
+    <button form="f" type="submit" data-t="go">Weiter</button>
+  </main>
+  <script>
+    // Thin store app: remembers the company address once and then opens the normal web app there.
+    // Universal links / app links (NFC tags, mails) are handled by the web app itself (web/src/main.tsx).
+    const T = {
+      fr: { title: "Bienvenue sur TrackInsight", lead: "Saisis l'adresse de ton entreprise. Tu la trouves dans l'e-mail d'invitation, p. ex. muster.trackinsight.ch.", go: "Continuer", bad: "Cette adresse ne répond pas. Vérifie-la et réessaie." },
+      en: { title: "Welcome to TrackInsight", lead: "Enter your company's address. You'll find it in the invitation email, e.g. muster.trackinsight.ch.", go: "Continue", bad: "This address does not respond. Please check it and try again." },
+      it: { title: "Benvenuto in TrackInsight", lead: "Inserisci l'indirizzo della tua azienda. Lo trovi nell'e-mail d'invito, p. es. muster.trackinsight.ch.", go: "Avanti", bad: "Questo indirizzo non risponde. Controllalo e riprova." },
+      de: { bad: "Diese Adresse antwortet nicht. Bitte prüfen und erneut versuchen." },
+    };
+    const lang = (navigator.language || "de").slice(0, 2);
+    const t = T[lang] || T.de;
+    if (T[lang]) document.querySelectorAll("[data-t]").forEach((el) => { if (t[el.dataset.t]) el.textContent = t[el.dataset.t]; });
+    const KEY = "ti.companyUrl";
+    const saved = (() => { try { return localStorage.getItem(KEY); } catch { return null; } })();
+    // ?neu (from "Andere Firma" in the app) shows the form again.
+    if (saved && !location.search.includes("neu")) location.replace(saved);
+    else document.getElementById("pick").classList.remove("hidden");
+    document.getElementById("f").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      let raw = document.getElementById("addr").value.trim();
+      if (!/^https?:\/\//i.test(raw)) raw = "https://" + raw;
+      const err = document.getElementById("err");
+      try {
+        const url = new URL(raw);
+        if (url.protocol !== "https:") throw new Error();
+        // Opaque request (no CORS needed): only checks that the address answers at all.
+        await fetch(url.origin + "/api/health", { mode: "no-cors", cache: "no-store" });
+        try { localStorage.setItem(KEY, url.origin + "/"); } catch {}
+        location.replace(url.origin + "/");
+      } catch {
+        err.textContent = t.bad || T.de.bad;
+      }
+    });
+  </script>
+</body>
+</html>

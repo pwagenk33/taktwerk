@@ -1,0 +1,11 @@
+{
+  "appId": "ch.trackinsight.app",
+  "appName": "TrackInsight",
+  "webDir": "www",
+  "server": {
+    "allowNavigation": ["*"],
+    "androidScheme": "https"
+  },
+  "ios": { "contentInset": "automatic", "limitsNavigationsToAppBoundDomains": false },
+  "android": { "allowMixedContent": false }
+}

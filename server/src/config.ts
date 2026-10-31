@@ -52,6 +52,10 @@ const schema = z.object({
   BEXIO_CLIENT_SECRET: optional,
   /** Directory with the built public website (website/dist); served on SAAS_BASE_DOMAIN and www.<base> when APP_URL runs on another host. */
   WEBSITE_DIR: optional,
+  /** Store apps (mobile/): with these set, NFC links and mails open in the installed app (universal links / app links). */
+  APP_IOS_TEAM_ID: optional,
+  /** SHA-256 fingerprint(s) of the Android signing certificate, comma-separated ("AB:CD:…"), from Play Console → App integrity. */
+  APP_ANDROID_SHA256: optional,
   /** Where uploaded files (receipts) are stored. */
   DATA_DIR: z.string().default("./data"),
 });
