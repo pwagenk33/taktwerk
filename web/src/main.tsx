@@ -7,6 +7,9 @@ import { locale } from "./i18n";
 try {
   const m = /^#chat-verbinden\/(.+)$/.exec(location.hash);
   if (m) sessionStorage.setItem("ti.chatLink", m[1]!);
+  // Same for an NFC tag or QR code at a stamp point ("#stempeln/<token>").
+  const st = /^#stempeln\/(.+)$/.exec(location.hash);
+  if (st) sessionStorage.setItem("ti.stampPoint", st[1]!);
 } catch { /* storage blocked: the person opens the link again after signing in */ }
 
 const messages = locale === "de" ? Promise.resolve() : import("@taktwerk/domain/messages").then((m) => registerMessages(m.MESSAGES));

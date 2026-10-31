@@ -99,8 +99,23 @@ export interface OrgSettings {
   autoRetainerInvoices?: boolean;
   /** Company sign-in (SAML 2.0, e.g. Microsoft Entra ID, Okta, Google Workspace) and user provisioning via SCIM 2.0. */
   sso?: SsoSettings;
+  /** Stamp points for come/go: NFC tag or QR code at the entrance, optionally with a location for the geofence. */
+  stampPoints?: StampPoint[];
+  /** Stamping in the app only within the radius of a stamp point (the device sends its location; it is not stored). */
+  stampGeofence?: boolean;
   /** Booking from chat: Slack signing secret and Teams outgoing-webhook secret (both never sent to the browser). */
   chat?: { slackSigningSecret?: string; teamsSecret?: string };
+}
+
+export interface StampPoint {
+  id: string;
+  name: string;
+  /** Secret part of the link on the NFC tag or QR code. */
+  token: string;
+  lat?: number;
+  lng?: number;
+  /** Metres around lat/lng that count as "at work". */
+  radius?: number;
 }
 
 export interface SsoSettings {
@@ -635,6 +650,9 @@ export const workPeriods = mysqlTable(
     kind: mysqlEnum("kind", ["work", "break"]).notNull().default("work"),
     start: varchar("start", { length: 5 }).notNull(),
     end: varchar("end", { length: 5 }),
+    /** How the period was started: app button, NFC/QR stamp point, app with location check, or added by hand. */
+    source: mysqlEnum("source", ["app", "nfc", "location", "manual"]),
+    pointId: varchar("point_id", { length: 36 }),
     createdAt: createdAt(),
   },
   (t) => [index("period_user_date_idx").on(t.userId, t.date), index("period_org_date_idx").on(t.organizationId, t.date)],

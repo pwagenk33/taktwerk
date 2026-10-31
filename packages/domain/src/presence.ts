@@ -137,3 +137,27 @@ export function applyStamp(periods: WorkPeriod[], action: StampAction, employeeI
       return close(periods);
   }
 }
+
+/** Distance in metres between two coordinates (haversine; plenty for a few hundred metres). */
+export function distanceMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6371_000;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * The stamp point the device is at: within the point's radius, widened by the reported accuracy (at most 100 m),
+ * the nearest one. Points without coordinates never match.
+ */
+export function pointAt<P extends { lat?: number; lng?: number; radius?: number }>(points: P[], pos: { lat: number; lng: number; accuracy?: number }): P | null {
+  let best: { p: P; d: number } | null = null;
+  for (const p of points) {
+    if (p.lat === undefined || p.lng === undefined) continue;
+    const d = distanceMeters(pos, { lat: p.lat, lng: p.lng });
+    if (d <= (p.radius ?? 150) + Math.min(pos.accuracy ?? 0, 100) && (!best || d < best.d)) best = { p, d };
+  }
+  return best?.p ?? null;
+}

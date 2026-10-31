@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, loadDataset, loadOlder, upload, type Branding, type Me, type EntryComment, type OpenQuestion, type WeekSubmission, type WeekOverviewRow, type PortalAccount } from "./api";
+import { ApiError, api, loadDataset, loadOlder, upload, type Branding, type Me, type EntryComment, type OpenQuestion, type WeekSubmission, type WeekOverviewRow, type PortalAccount } from "./api";
 import { currentVelocity, profitability, projectReports, velocityByMonth, type Profitability, type ProjectReport, type VelocityFactor, type VelocityMonth, applyStamp, type PeriodKind, type StampAction, type TimeModel, type WorkPeriod } from "@taktwerk/domain";
 import { NEEDS_APPROVAL, WorkCalendar, absenceProblem, isoWeekKey, monthRange, weekFigures } from "@taktwerk/domain";
 import type { Absence, Customer, Dataset, Employee, Expense, Holiday, Project, Role, SubProject, TimeEntry, VelocitySettings } from "@taktwerk/domain";
@@ -584,7 +584,14 @@ export function StoreProvider({ children, initial, me, branding, onBranding, onL
         : async (userId, patch) => setData((d) => ({ ...d, employees: d.employees.map((e) => (e.id === userId ? { ...e, ...patch } : e)) })),
     stamp: async (action) => {
       if (mode === "api") {
-        await api("/api/presence/stamp", { body: { action } });
+        try {
+          await api("/api/presence/stamp", { body: { action } });
+        } catch (e) {
+          // The company only allows stamping at the workplace: ask the phone where it is and try again.
+          if (!(e instanceof ApiError) || e.status !== 428) throw e;
+          const { currentPosition } = await import("./pages/Stamping");
+          await api("/api/presence/stamp", { body: { action, ...(await currentPosition()) } });
+        }
         setData(await loadDataset());
         return;
       }

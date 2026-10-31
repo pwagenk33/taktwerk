@@ -1277,3 +1277,14 @@ body.dialog-open { overflow: hidden; }
 .git-connect { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .git-connect .field { width: 100%; max-width: 420px; }
 .cal-suggest.git { border-style: dotted; }
+
+/* Stamp point page (NFC tag / QR code) and the list in Settings → Arbeitszeit */
+.stamp-landing { max-width: 440px; margin: 24px auto; }
+.stamp-landing h1 { margin: 4px 0 8px; font-size: 1.6rem; }
+.stamp-landing-actions { display: grid; gap: 10px; margin-top: 16px; }
+.btn.big { min-height: 56px; font-size: 1.1rem; justify-content: center; }
+.stamp-done { font-size: 1.25rem; font-weight: 600; color: var(--ok, #1a7f4b); margin: 16px 0; }
+.point-list { list-style: none; margin: 0; padding: 0; }
+.point-list li { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line, #e5e5ea); }
+.point-list .toolbar { flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 640px) { .point-list li { flex-direction: column; align-items: stretch; } .point-list .toolbar { justify-content: flex-start; } }

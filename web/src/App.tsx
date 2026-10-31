@@ -31,6 +31,7 @@ const pages = {
   Velocity: () => import("./pages/Velocity").then((m) => ({ default: m.Velocity })),
   WorkTime: () => import("./pages/WorkTime").then((m) => ({ default: m.WorkTime })),
   SetupWizard: () => import("./pages/Setup").then((m) => ({ default: m.SetupWizard })),
+  StampLanding: () => import("./pages/Stamping").then((m) => ({ default: m.StampLanding })),
 };
 const Closing = lazy(pages.Closing);
 const Dashboard = lazy(pages.Dashboard);
@@ -38,6 +39,7 @@ const Planning = lazy(pages.Planning);
 const Portal = lazy(pages.Portal);
 const Profile = lazy(pages.Profile);
 const Mandates = lazy(pages.Mandates);
+const StampLanding = lazy(pages.StampLanding);
 const Projects = lazy(pages.Projects);
 const Reports = lazy(pages.Reports);
 const Settings = lazy(pages.Settings);
@@ -133,6 +135,7 @@ const PAGES = [
   { id: "einstellungen", label: tr("Einstellungen"), icon: Icon.settings, lead: true, admin: true },
   { id: "profil", label: tr("Profil"), icon: Icon.settings, lead: false, hidden: true },
   { id: "mandanten", label: tr("Alle Firmen"), icon: Icon.folder, lead: false, hidden: true },
+  { id: "stempeln", label: tr("Stempeln"), icon: Icon.clock, lead: false, hidden: true },
 ] as const;
 
 type PageId = (typeof PAGES)[number]["id"];
@@ -237,6 +240,13 @@ export function App() {
       .then((r) => notify(tr("{0} ist verbunden. Du kannst jetzt im Chat buchen.", r.provider === "slack" ? "Slack" : "Teams")))
       .catch((e) => notify((e as Error).message));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Back to the stamp point after signing in (kept in main.tsx).
+  useEffect(() => {
+    let token: string | null = null;
+    try { token = sessionStorage.getItem("ti.stampPoint"); sessionStorage.removeItem("ti.stampPoint"); } catch { /* ignore */ }
+    if (token && !location.hash.startsWith("#stempeln/")) location.hash = `#stempeln/${token}`;
+  }, []);
 
   useEffect(() => {
     const onHash = () => { setPage(readHash()); setHash(location.hash); setMore(false); };
@@ -356,6 +366,7 @@ export function App() {
           {current === "einstellungen" && <Settings />}
           {current === "profil" && <Profile />}
           {current === "mandanten" && <Mandates />}
+          {current === "stempeln" && <StampLanding />}
           </Suspense>
           </PageBoundary>
         </main>

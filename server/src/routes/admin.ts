@@ -67,8 +67,9 @@ export async function adminRoutes(app: FastifyInstance) {
     const user = requireUser(req);
     const org = await orgOf(user.organizationId);
     // SSO details have their own admin endpoint (/api/sso); the SCIM token hash never leaves the server.
-    const { sso, chat: _chat, ...rest } = org.settings;
-    return { name: org.name, ...rest, ssoActive: !!sso?.saml?.enabled };
+    const { sso, chat: _chat, stampPoints, ...rest } = org.settings;
+    // Stamp point links only for admins (/api/presence/points); everyone learns whether there are any.
+    return { name: org.name, ...rest, ssoActive: !!sso?.saml?.enabled, stampPointCount: stampPoints?.length ?? 0 };
   });
 
   app.put("/api/settings", async (req) => {
@@ -141,8 +142,8 @@ export async function adminRoutes(app: FastifyInstance) {
       fx: body.fx ? { rates: { ...org.settings.fx?.rates, ...body.fx.rates }, asOf: todayZurich(), source: "manuell", manual: body.fx.manual ?? true } : org.settings.fx,
     };
     await ctx.db.update(organizations).set({ name: body.name ?? org.name, settings }).where(eq(organizations.id, org.id));
-    const { sso, chat: _chat, ...rest } = settings;
-    return { name: body.name ?? org.name, ...rest, ssoActive: !!sso?.saml?.enabled };
+    const { sso, chat: _chat, stampPoints, ...rest } = settings;
+    return { name: body.name ?? org.name, ...rest, ssoActive: !!sso?.saml?.enabled, stampPointCount: stampPoints?.length ?? 0 };
   });
 
   /** Sends one scheduled report now to the requesting admin, to check its content. */

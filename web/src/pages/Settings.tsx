@@ -10,6 +10,7 @@ import { SsoTab } from "./SsoSettings";
 import { PartnersCard, ReferralCard } from "./Growth";
 import { IncidentsCard } from "./StatusAdmin";
 import { ChatTab } from "./ChatSettings";
+import { StampPointsCard } from "./Stamping";
 import { MonitorCard } from "./Monitor";
 import { STATUS_LABEL, SubscriptionTab, statusPill, useSubscription } from "./Subscription";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
@@ -393,6 +394,7 @@ function WorkSettings() {
           <button className="btn primary" disabled={!changed} onClick={save}>{tr("Speichern")}</button>
         </div>
       </section>
+      {(model.timeModel ?? "simplified") === "full" && <StampPointsCard />}
     </div>
   );
 }

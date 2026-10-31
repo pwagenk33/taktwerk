@@ -493,7 +493,17 @@ Jede Person verbindet im Profil ihr eigenes Konto mit einem persönlichen Token 
 
 Commits werden pro Repository und Tag zu Blöcken zusammengefasst (Start 30 Minuten vor dem ersten Commit, neue Blöcke nach mehr als 2,5 Stunden Pause) und erscheinen gepunktet neben den Kalendervorschlägen. Ein Jira-Schlüssel in der Commit-Nachricht wählt das Projekt mit diesem Jira-Schlüssel und füllt das Ticket aus. Das Token liegt in der Datenbank (Tabelle `git_connections`) und geht nie an den Browser zurück; Commits werden live geholt und nicht gespeichert.
 
-## 22. Kurzreferenz
+## 22. Stempeln per NFC, QR-Code oder Standort
+
+Nur mit dem Erfassungsmodell «Kommen/Gehen» (Einstellungen → Arbeitszeit). Dort legt ein Admin Stempelpunkte an, z. B. «Eingang Werkstatt». Jeder Punkt hat einen eigenen Link `…/#stempeln/<token>`:
+
+- **NFC:** günstige NTAG213/215-Aufkleber. Auf Android mit Chrome direkt aus der App beschreiben («NFC schreiben»), sonst den Link mit einer NFC-App (z. B. NFC Tools) als URL auf den Tag schreiben. iPhone und Android öffnen den Link beim Hinhalten ohne eigene App.
+- **QR-Code:** «QR-Code» öffnet eine SVG-Datei zum Ausdrucken.
+- **Standort (optional):** Punkt mit Koordinaten und Umkreis anlegen und «nur am Arbeitsort» einschalten. Dann verlangt die App beim Stempeln den Standort des Handys und lehnt Stempel ausserhalb aller Umkreise ab. Gespeichert wird nur der Stempelpunkt (Spalte `work_periods.point_id`, Quelle `nfc`/`location`/`app`/`manual`), nie die Koordinaten der Person.
+
+Wer den Link hat, kann damit für sich selbst stempeln (Anmeldung nötig). Ist ein Aufkleber verloren, mit «Neu» einen neuen Link erzeugen; alte Aufkleber und QR-Codes gelten dann nicht mehr.
+
+## 23. Kurzreferenz
 
 | Aufgabe | Befehl (im Ordner `~/trackinsight`) |
 |---|---|
