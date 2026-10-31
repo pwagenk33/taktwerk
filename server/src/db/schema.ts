@@ -256,6 +256,8 @@ export const projects = mysqlTable("projects", {
   kind: mysqlEnum("kind", ["tm", "fixed", "retainer"]).notNull().default("tm"),
   /** Retainer: hours included per month. */
   retainerHours: decimal("retainer_hours", { precision: 6, scale: 1, mode: "number" }),
+  /** Last day of work: no bookings after it, retainers stop billing after its month, hidden from pickers. */
+  closedOn: date("closed_on", { mode: "string" }),
   createdAt: createdAt(),
 });
 

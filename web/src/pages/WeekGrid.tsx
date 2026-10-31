@@ -1,6 +1,6 @@
 // Week grid: the whole week in one table. Rows are sub-project + activity, columns the days; typing a number
 // books, changes or (with 0) deletes. A cell with several bookings is only shown, they are edited in the calendar.
-import { WorkCalendar, addDays, fmt1, fmtDay, isoWeekKey, parseHours, rateOn, type TimeEntry } from "@taktwerk/domain";
+import { WorkCalendar, projectOpenOn, addDays, fmt1, fmtDay, isoWeekKey, parseHours, rateOn, type TimeEntry } from "@taktwerk/domain";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadLocal, saveLocal, useStore } from "../store";
 import { Select } from "../ui/Select";
@@ -93,7 +93,7 @@ export function WeekGrid() {
   // Add a row: sub-project and activity; it stays in this week until hours are booked on it.
   const [subId, setSubId] = useState("");
   const [reason, setReason] = useState("");
-  const subOptions = useMemo(() => data.subProjects.map((s) => ({ value: s.id, label: labels.long(s.id) })).sort((a, b) => a.label.localeCompare(b.label)), [data.subProjects]); // eslint-disable-line react-hooks/exhaustive-deps
+  const subOptions = useMemo(() => data.subProjects.filter((s) => { const p = data.projects.find((x) => x.id === s.projectId); return !p || projectOpenOn(p, data.today); }).map((s) => ({ value: s.id, label: labels.long(s.id) })).sort((a, b) => a.label.localeCompare(b.label)), [data.subProjects]); // eslint-disable-line react-hooks/exhaustive-deps
   const addRow = () => {
     if (!subId) return setError(tr("Bitte ein Subprojekt wählen."));
     if (!reason.trim()) return setError(tr("Bitte einen Grund angeben, er erscheint im Kundenreport."));

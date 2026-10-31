@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_RATES, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, dayPresence, fmt1, fmtCHF, fmtCHF2, fmtDay, isoWeekKey, parseReceipt, presenceIssues, rateOn, reasonSuggestions, type ReasonSuggestion, stampOptions, type PeriodKind, type StampAction } from "@taktwerk/domain";
+import { DEFAULT_RATES, projectOpenOn, EXPENSE_CATEGORIES, VAT_RATES, WorkCalendar, addDays, dayPresence, fmt1, fmtCHF, fmtCHF2, fmtDay, isoWeekKey, parseReceipt, presenceIssues, rateOn, reasonSuggestions, type ReasonSuggestion, stampOptions, type PeriodKind, type StampAction } from "@taktwerk/domain";
 import { recognizeReceipt } from "../ocr";
 import type { Expense, ExpenseCategory, TimeEntry } from "@taktwerk/domain";
 import { api, type EntryComment } from "../api";
@@ -65,7 +65,7 @@ const WEEKDAYS = [tr("Mo"), tr("Di"), tr("Mi"), tr("Do"), tr("Fr"), tr("Sa"), tr
 function useTarget() {
   const { data } = useStore();
   const [customerId, setCustomerId] = useState(data.customers[0]?.id ?? "");
-  const projects = data.projects.filter((p) => p.customerId === customerId);
+  const projects = data.projects.filter((p) => p.customerId === customerId && projectOpenOn(p, data.today));
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const subs = data.subProjects.filter((s) => s.projectId === projectId);
   const [subProjectId, setSubProjectId] = useState(subs[0]?.id ?? "");

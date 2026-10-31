@@ -15,6 +15,8 @@ function ProjectLead({ project }: { project: Project }) {
   return lead ? <p className="muted" style={{ fontSize: "0.82rem", margin: "6px 0 0" }}>{tr("Projektleitung")}{" "}{lead.name}</p> : null;
 }
 
+const ClosedPill = ({ on }: { on: string }) => <span className="pill neutral" style={{ fontSize: "0.72rem", verticalAlign: "middle" }}>{tr("Abgeschlossen am {0}", on.split("-").reverse().join("."))}</span>;
+
 const kindLabel = (k: ProjectKind | undefined) => tr(PROJECT_KINDS.find((x) => x.id === (k ?? "tm"))!.label);
 
 /** Name, budget and Jira key of a project or sub-project; «Bearbeiten» opens the popup for leads. */
@@ -116,7 +118,7 @@ function ProjectDetail({ projectId, onBack }: { projectId: string; onBack: () =>
       <div className="page-head">
         <div>
           <button className="btn small ghost back-btn" onClick={onBack}><Icon.back />{customer?.name ?? tr("Kunden")}</button>
-          <h1 style={{ marginTop: 8 }}>{project.name}</h1>
+          <h1 style={{ marginTop: 8 }}>{project.name} {project.closedOn && <ClosedPill on={project.closedOn} />}</h1>
           <p className="sub">{customer?.name}{" "}{tr("· {0}/h ·", m(customer ? rateOn(customer, data.today) : 0))}{" "}{kindLabel(project.kind)}</p>
         </div>
         {r && <StatusPill status={r.status} />}
@@ -355,7 +357,7 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
       </div>
       <section className="card">
         {projects.length === 0 && <p className="muted card-pad">{tr("Noch kein Projekt. Mit «+ Projekt» anlegen.")}</p>}
-        {projects.map((p) => {
+        {[...projects].sort((a, b) => Number(!!a.closedOn) - Number(!!b.closedOn)).map((p) => {
           const r = projReport.get(p.id);
           const subs = data.subProjects.filter((s) => s.projectId === p.id);
           const allocated = subs.reduce((s, x) => s + x.budget, 0);
@@ -363,7 +365,7 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
             <div className="tree-customer" key={p.id}>
               <div className="tree-row">
                 <div>
-                  <button className="link-btn" onClick={() => onOpenProject(p.id)}><h2 style={{ margin: 0, color: "inherit" }}>{p.name}</h2></button> {p.jiraProjectKey && <span className="pill neutral mono">{p.jiraProjectKey}</span>} {(p.kind ?? "tm") !== "tm" && <span className="pill neutral">{kindLabel(p.kind)}</span>}
+                  <button className="link-btn" onClick={() => onOpenProject(p.id)}><h2 style={{ margin: 0, color: "inherit" }}>{p.name}</h2></button> {p.jiraProjectKey && <span className="pill neutral mono">{p.jiraProjectKey}</span>} {(p.kind ?? "tm") !== "tm" && <span className="pill neutral">{kindLabel(p.kind)}</span>} {p.closedOn && <ClosedPill on={p.closedOn} />}
                   <div className="muted num" style={{ fontSize: "0.8rem" }}>
                     {r?.retainer
                       ? tr("Kontingent {0} h/Monat · {1} {2} h genutzt · Schnitt {3} h", fmtNum(r.retainer.hoursPerMonth), fmtMonth(r.retainer.month), fmt1(r.retainer.used), fmt1(r.retainer.avg3))

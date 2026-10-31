@@ -197,6 +197,13 @@
       "when": 1793446885069,
       "tag": "0027_issue_type",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1793467359965,
+      "tag": "0028_project_closed",
+      "breakpoints": true
     }
   ]
 }

@@ -90,7 +90,12 @@ export interface Project {
   kind?: ProjectKind;
   /** Retainer: hours included per month. */
   retainerHours?: number;
+  /** Closed after this day (ISO date): no new bookings, retainers stop billing, hidden from pickers. */
+  closedOn?: string | null;
 }
+
+/** Whether bookings on the project are still possible on this day. */
+export const projectOpenOn = (p: Pick<Project, "closedOn">, date: string) => !p.closedOn || date <= p.closedOn;
 
 export interface SubProject {
   id: string;

@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `closed_on` date;

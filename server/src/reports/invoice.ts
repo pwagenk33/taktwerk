@@ -76,7 +76,7 @@ export async function invoicePositions(ctx: AppContext, orgId: string, customerI
   for (const g of [...groups.values()].sort((a, b) => a.text.localeCompare(b.text, "de"))) positions.push(hourLine(g.text, tr("Leistungen {0}", fmtMonthLong(month)), g.hours, g.rate));
 
   // Retainers: the contingent is billed every month, used or not; hours above it come on top at their rates.
-  for (const p of [...projects.values()].filter((p) => p.kind === "retainer" && p.retainerHours).sort((a, b) => a.name.localeCompare(b.name, "de"))) {
+  for (const p of [...projects.values()].filter((p) => p.kind === "retainer" && p.retainerHours && !(p.closedOn && p.closedOn < `${month}-01`)).sort((a, b) => a.name.localeCompare(b.name, "de"))) {
     const rate = customer ? rateOn(customer, `${month}-01`) : 0;
     positions.push({ ...hourLine(tr("Retainer {0}", p.name), tr("Kontingent {0}", fmtMonthLong(month)), p.retainerHours!, rate) });
     const used = retainerHours.get(p.id);

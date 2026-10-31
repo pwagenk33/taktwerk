@@ -154,7 +154,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser, opts: { de
       rates: rateRows.filter((r) => r.r.customerId === c.id).map((r) => ({ validFrom: r.r.validFrom, hourlyRate: r.r.hourlyRate })),
       ...(isLead(user) && c.billingAddress ? { address: c.billingAddress } : {}),
     })),
-    projects: projectRows.map((p) => ({ id: p.id, customerId: p.customerId, name: p.name, budget: seesBudget(p.id) ? p.budget : 0, jiraProjectKey: p.jiraProjectKey ?? undefined, leadUserId: p.leadUserId ?? undefined, kind: p.kind, retainerHours: p.retainerHours ?? undefined })),
+    projects: projectRows.map((p) => ({ id: p.id, customerId: p.customerId, name: p.name, budget: seesBudget(p.id) ? p.budget : 0, jiraProjectKey: p.jiraProjectKey ?? undefined, leadUserId: p.leadUserId ?? undefined, kind: p.kind, retainerHours: p.retainerHours ?? undefined, closedOn: p.closedOn ?? undefined })),
     subProjects: subRows.map((s) => ({ id: s.id, projectId: s.projectId, name: s.name, budget: seesBudget(s.projectId) ? s.budget : 0, jiraEpicKey: s.jiraEpicKey ?? undefined })),
     detailFrom: opts.detailFrom,
     timeEntries: [
@@ -232,15 +232,21 @@ export async function loadDataset(ctx: AppContext, user: SessionUser, opts: { de
   };
 }
 
-async function subProjectInOrg(ctx: AppContext, org: string, subProjectId: string) {
+async function subProjectInOrg(ctx: AppContext, org: string, subProjectId: string, date?: string) {
   const [row] = await ctx.db
-    .select({ sub: subProjects, customerId: projects.customerId })
+    .select({ sub: subProjects, customerId: projects.customerId, projectName: projects.name, closedOn: projects.closedOn })
     .from(subProjects)
     .innerJoin(projects, eq(projects.id, subProjects.projectId))
     .where(and(eq(subProjects.id, subProjectId), eq(subProjects.organizationId, org)))
     .limit(1);
   if (!row) throw new HttpError(404, tr("Subprojekt nicht gefunden."));
+  assertOpen(row, date);
   return row;
+}
+
+/** Bookings and expenses after the day a project was closed are refused. */
+export function assertOpen(p: { projectName: string; closedOn: string | null }, date?: string) {
+  if (date && p.closedOn && date > p.closedOn) throw new HttpError(409, tr("Das Projekt «{0}» ist seit {1} abgeschlossen.", p.projectName, p.closedOn.split("-").reverse().join(".")));
 }
 
 /** Admins and consultants may book for others; employees only for themselves. */
@@ -305,7 +311,7 @@ export async function dataRoutes(app: FastifyInstance) {
         startTime: clockTime.optional(),
       })
       .parse(req.body);
-    const { customerId } = await subProjectInOrg(ctx, user.organizationId, body.subProjectId);
+    const { customerId } = await subProjectInOrg(ctx, user.organizationId, body.subProjectId, body.date);
     const rates = await ctx.db.select().from(customerRates).where(eq(customerRates.customerId, customerId));
     const userId = await bookingUser(ctx, user, body.employeeId);
     await assertBookable(ctx, user, userId, body.date);
@@ -344,7 +350,7 @@ export async function dataRoutes(app: FastifyInstance) {
         km: z.number().positive().max(10000).optional(),
       })
       .parse(req.body);
-    await subProjectInOrg(ctx, user.organizationId, body.subProjectId);
+    await subProjectInOrg(ctx, user.organizationId, body.subProjectId, body.date);
     const { employeeId, ...rest } = body;
     const userId = await bookingUser(ctx, user, employeeId);
     await assertBookable(ctx, user, userId, body.date);
@@ -450,6 +456,7 @@ export async function dataRoutes(app: FastifyInstance) {
         kind: projectKind.optional(),
         retainerHours: z.number().min(0).max(10000).nullable().optional(),
         leadUserId: z.string().nullable().optional(),
+        closedOn: isoDate.nullable().optional(),
       })
       .parse(req.body);
     const [p] = await ctx.db.select().from(projects).where(and(eq(projects.id, id), eq(projects.organizationId, user.organizationId))).limit(1);
@@ -467,6 +474,7 @@ export async function dataRoutes(app: FastifyInstance) {
       kind,
       retainerHours: kind !== "retainer" ? null : body.retainerHours === undefined ? p.retainerHours : body.retainerHours,
       leadUserId: body.leadUserId === undefined ? p.leadUserId : body.leadUserId || null,
+      closedOn: body.closedOn === undefined ? p.closedOn : body.closedOn,
     };
     await ctx.db.update(projects).set(next).where(eq(projects.id, id));
     return { id, ...next };

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { fmt1, rateOn } from "@taktwerk/domain";
+import { fmt1, projectOpenOn, rateOn } from "@taktwerk/domain";
 import { useStore } from "../store";
 import { Icon } from "./components";
 import { tr } from "../i18n";
@@ -67,7 +67,7 @@ export function CommandPalette({ open, onClose, pages, onNewEntry }: PaletteProp
     // Quick booking: "2h medtech sprint review"
     const booking = parseBooking(q);
     if (booking) {
-      const labelled = data.subProjects.map((s) => {
+      const labelled = data.subProjects.filter((s) => { const p = projById.get(s.projectId); return !p || projectOpenOn(p, data.today); }).map((s) => {
         const p = projById.get(s.projectId);
         const c = p && custById.get(p.customerId);
         return { s, p, c, text: norm(`${c?.name ?? ""} ${p?.name ?? ""} ${s.name}`) };

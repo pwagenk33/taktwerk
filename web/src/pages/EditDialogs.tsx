@@ -94,6 +94,8 @@ export function ProjectDialog({ project, customerId, onClose }: { project?: Proj
   const [retainer, setRetainer] = useState(project?.retainerHours ? String(project.retainerHours) : "");
   const [jira, setJira] = useState(project?.jiraProjectKey ?? "");
   const [lead, setLead] = useState(project?.leadUserId ?? "");
+  const [closed, setClosed] = useState(!!project?.closedOn);
+  const [closedOn, setClosedOn] = useState(project?.closedOn ?? data.today);
   const people = data.employees.filter((e) => e.role !== "customer" && e.role !== "auditor");
   const canLead = scope.lead && !scope.readOnly;
 
@@ -104,6 +106,7 @@ export function ProjectDialog({ project, customerId, onClose }: { project?: Proj
     if (!name.trim()) e.name = tr("Bitte einen Projektnamen eingeben.");
     if (kind !== "retainer" && !(b >= 0)) e.budget = kind === "fixed" ? tr("Bitte den Fixpreis eingeben.") : tr("Bitte ein Budget eingeben, 0 ist erlaubt.");
     if (kind === "retainer" && !(h > 0)) e.retainer = tr("Wie viele Stunden umfasst das Kontingent pro Monat?");
+    if (closed && !/^\d{4}-\d{2}-\d{2}$/.test(closedOn)) e.closedOn = tr("Bitte ein Datum wählen.");
     if (jira.trim() && !/^[A-Z][A-Z0-9_]{1,19}$/.test(jira.trim())) e.jira = tr("Ein Jira-Schlüssel besteht aus Grossbuchstaben und Ziffern, z. B. KPR.");
     if (Object.keys(e).length) return e;
     const body = { name: name.trim(), kind, budget: kind === "retainer" && !(b >= 0) ? 0 : b, retainerHours: kind === "retainer" ? h : undefined };
@@ -112,8 +115,8 @@ export function ProjectDialog({ project, customerId, onClose }: { project?: Proj
       notify(tr("Projekt «{0}» angelegt", body.name));
     } else {
       // An empty string clears the key or the lead; undefined would leave them as they were.
-      await updateProject(project.id, { ...body, jiraProjectKey: jira.trim(), ...(canLead ? { leadUserId: lead } : {}) });
-      notify(tr("Projekt gespeichert"));
+      await updateProject(project.id, { ...body, jiraProjectKey: jira.trim(), closedOn: closed ? closedOn : null, ...(canLead ? { leadUserId: lead } : {}) });
+      notify(closed && !project.closedOn ? tr("Projekt «{0}» abgeschlossen", body.name) : !closed && project.closedOn ? tr("Projekt «{0}» wieder geöffnet", body.name) : tr("Projekt gespeichert"));
     }
     onClose();
   };
@@ -146,6 +149,14 @@ export function ProjectDialog({ project, customerId, onClose }: { project?: Proj
       <Field label={tr("Jira-Projektschlüssel")} name="jira" hint={tr("Optional. Am einfachsten unter Einstellungen → Jira zuordnen, dann werden Epics und Story Points automatisch geladen.")}>
         <input id="p-jira" className="input mono" value={jira} onChange={(e) => setJira(e.target.value.toUpperCase())} placeholder={tr("z. B. KPR")} />
       </Field>
+      {editing && (
+        <Field label={tr("Abschluss")} name="closedOn" hint={tr("Nach diesem Tag sind keine Buchungen mehr möglich, Retainer werden nicht mehr verrechnet und das Projekt verschwindet aus der Auswahl. Bisherige Buchungen und Berichte bleiben.")}>
+          <div>
+            <label className="check"><input id="p-closed" type="checkbox" checked={closed} onChange={(e) => setClosed(e.target.checked)} />{" "}{tr("Projekt ist abgeschlossen")}</label>
+            {closed && <input id="p-closed-on" type="date" className="input" value={closedOn} onChange={(e) => setClosedOn(e.target.value)} style={{ marginTop: 6, maxWidth: 200 }} />}
+          </div>
+        </Field>
+      )}
     </FormDialog>
   );
 }

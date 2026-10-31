@@ -3,7 +3,7 @@ import { and, desc, eq, notInArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { bookingChanged } from "./data";
+import { assertOpen, bookingChanged } from "./data";
 import { HttpError, assertManages, isLead, managedUserIds, managesPeople, managesUser, requireRole, requireUser, type AppContext, type SessionUser } from "../app";
 import { auditLog, customerRates, customers, expenses, monthClosings, organizations, projects, subProjects, timeEntries, users } from "../db/schema";
 import { reportFile, sendCustomerReport } from "../reports/export";
@@ -49,14 +49,15 @@ export async function assertBookable(ctx: AppContext, actor: SessionUser, ownerI
   if (status === "submitted" && ownerId === actor.id && !isLead(actor)) throw new HttpError(409, tr("Der Monat {0} ist eingereicht. Änderungen nur noch durch die Freigabe-Person.", date.slice(0, 7)));
 }
 
-async function subProjectCustomer(ctx: AppContext, org: string, subProjectId: string) {
+async function subProjectCustomer(ctx: AppContext, org: string, subProjectId: string, date?: string) {
   const [row] = await ctx.db
-    .select({ customerId: projects.customerId })
+    .select({ customerId: projects.customerId, projectName: projects.name, closedOn: projects.closedOn })
     .from(subProjects)
     .innerJoin(projects, eq(projects.id, subProjects.projectId))
     .where(and(eq(subProjects.id, subProjectId), eq(subProjects.organizationId, org)))
     .limit(1);
   if (!row) throw new HttpError(404, tr("Subprojekt nicht gefunden."));
+  assertOpen(row, date);
   return row.customerId;
 }
 
@@ -86,7 +87,7 @@ export async function billingRoutes(app: FastifyInstance) {
     if (next.date !== row.date) await assertBookable(ctx, user, row.userId, next.date);
     if (next.date !== row.date || next.subProjectId !== row.subProjectId) {
       // New date or customer: freeze the rate valid then, like a new booking.
-      const customerId = await subProjectCustomer(ctx, user.organizationId, next.subProjectId);
+      const customerId = await subProjectCustomer(ctx, user.organizationId, next.subProjectId, next.date);
       const rates = await ctx.db.select().from(customerRates).where(eq(customerRates.customerId, customerId));
       next.hourlyRate = rateOn({ id: customerId, name: "", rates }, next.date);
     }
@@ -129,7 +130,7 @@ export async function billingRoutes(app: FastifyInstance) {
     if (!row) throw new HttpError(404, tr("Spese nicht gefunden."));
     await assertBookable(ctx, user, row.userId, row.date);
     if (body.date && body.date !== row.date) await assertBookable(ctx, user, row.userId, body.date);
-    if (body.subProjectId) await subProjectCustomer(ctx, user.organizationId, body.subProjectId);
+    if (body.subProjectId || body.date) await subProjectCustomer(ctx, user.organizationId, body.subProjectId ?? row.subProjectId, body.date ?? row.date);
     if (row.status === "approved" && user.role === "employee" && (body.amount !== undefined || body.km !== undefined || body.billable !== undefined)) {
       throw new HttpError(409, tr("Eine bewilligte Spese kann nur noch von der Freigabe-Person geändert werden."));
     }

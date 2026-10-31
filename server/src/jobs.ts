@@ -1,7 +1,7 @@
 import { WorkCalendar, addMonths, fmt1, billableSeats, canWrite, fmtCHF, fmtDate, fmtMonthLong, planById, priceOf, projectReports, trialDaysLeft } from "@taktwerk/domain";
 import { deliverDue, emit, purgeDeliveries } from "./events";
 import { createInvoice } from "./reports/invoice";
-import { and, eq, inArray, ne, notInArray } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
 import { HttpError, type AppContext } from "./app";
 import { purgeExpired } from "./routes/privacy";
 import { budgetAlerts, customers, invoices, jobRuns, projects, monthClosings, organizations, users, type OrgSettings, type ReminderSettings } from "./db/schema";
@@ -76,7 +76,7 @@ export async function draftRetainerInvoices(ctx: AppContext, now = new Date()) {
   const created: { customerId: string; number: string }[] = [];
   for (const org of await ctx.db.select().from(organizations)) {
     if (!org.settings.autoRetainerInvoices || !org.active) continue;
-    const retainerCustomers = await ctx.db.selectDistinct({ id: projects.customerId }).from(projects).where(and(eq(projects.organizationId, org.id), eq(projects.kind, "retainer")));
+    const retainerCustomers = await ctx.db.selectDistinct({ id: projects.customerId }).from(projects).where(and(eq(projects.organizationId, org.id), eq(projects.kind, "retainer"), or(isNull(projects.closedOn), gte(projects.closedOn, `${month}-01`))));
     for (const { id: customerId } of retainerCustomers) {
       const [existing] = await ctx.db.select({ id: invoices.id }).from(invoices).where(and(eq(invoices.customerId, customerId), eq(invoices.month, month), ne(invoices.status, "cancelled"))).limit(1);
       if (existing || !(await claim(ctx, `retainer-invoice:${customerId}`, month))) continue;
@@ -105,7 +105,7 @@ export async function checkBudgetAlerts(ctx: AppContext) {
   for (const org of await ctx.db.select().from(organizations)) {
     const data = await loadDataset(ctx, { id: "", organizationId: org.id, name: "", username: "", email: "", role: "admin" });
     const reports = projectReports(data, { method: "rolling", window: 3 });
-    const targets = reports.flatMap((p) => [
+    const targets = reports.filter((p) => !p.project.closedOn).flatMap((p) => [
       { id: p.project.id, name: `${p.customer.name} · ${p.project.name}`, budget: p.budget, forecast: p.forecastCost },
       ...p.subs.map((s) => ({ id: s.subProject.id, name: `${p.customer.name} · ${p.project.name} · ${s.subProject.name}`, budget: s.budget, forecast: s.forecastCost })),
     ]);

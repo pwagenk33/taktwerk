@@ -117,6 +117,22 @@ describe("project kinds", () => {
     expect(lines.every((x) => x.text.startsWith("Retainer ") || x.text.includes("Mehraufwand"))).toBe(true);
   });
 
+  it("stops bookings and retainer billing after a project is closed", async () => {
+    const d = (await get("/api/dataset", admin)).json();
+    const rhein = d.customers.find((c: { name: string }) => c.name.startsWith("Rheinlogistik")).id;
+    const fleet = d.projects.find((x: { name: string }) => x.name === "Flottenmanagement");
+    const sub = d.subProjects.find((s: { projectId: string }) => s.projectId === fleet.id);
+    expect((await send("PATCH", `/api/projects/${fleet.id}`, lead, { closedOn: "2026-08-31" })).json().closedOn).toBe("2026-08-31");
+    const late = await send("POST", "/api/time-entries", lead, { subProjectId: sub.id, date: "2026-09-02", hours: 1, reason: "Nachtrag" });
+    expect(late.statusCode).toBe(409);
+    expect(late.json().error).toContain("abgeschlossen");
+    expect((await send("POST", "/api/time-entries", lead, { subProjectId: sub.id, date: "2026-08-31", hours: 1, reason: "Letzter Tag" })).statusCode).toBe(201);
+    const p = (await get(`/api/invoices/preview?customerId=${rhein}&month=2026-09`, lead)).json();
+    expect(p.positions.some((x: Pos) => x.text.startsWith("Retainer "))).toBe(false);
+    expect((await get(`/api/invoices/preview?customerId=${rhein}&month=2026-08`, lead)).json().positions.some((x: Pos) => x.text.startsWith("Retainer "))).toBe(true);
+    await send("PATCH", `/api/projects/${fleet.id}`, lead, { closedOn: null });
+  });
+
   it("bills fixed prices in instalments up to 100 %", async () => {
     await send("PUT", `/api/customers/${stadtwerke}/address`, lead, { name: "Stadtwerke Aarau", street: "Obere Vorstadt 37", zip: "5000", city: "Aarau" });
     const p = (await get(`/api/invoices/preview?customerId=${stadtwerke}&month=2026-09`, lead)).json();
