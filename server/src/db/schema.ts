@@ -179,7 +179,7 @@ export const users = mysqlTable(
     locale: varchar("locale", { length: 2 }),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("users_username_uq").on(t.username), uniqueIndex("users_email_uq").on(t.email)],
+  (t) => [uniqueIndex("users_username_uq").on(t.username), uniqueIndex("users_org_email_uq").on(t.organizationId, t.email), index("users_email_idx").on(t.email)],
 );
 
 export const oauthAccounts = mysqlTable(

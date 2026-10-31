@@ -204,7 +204,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const [clash] = await ctx.db
       .select({ id: users.id })
       .from(users)
-      .where(or(eq(users.username, body.username), sql`lower(${users.email}) = ${body.email}`))
+      .where(or(eq(users.username, body.username), and(eq(users.organizationId, admin.organizationId), sql`lower(${users.email}) = ${body.email}`)))
       .limit(1);
     if (clash) throw new HttpError(409, tr("Benutzername oder E-Mail ist bereits vergeben."));
     if (body.role === "auditor") requireFeature(admin, "auditor");

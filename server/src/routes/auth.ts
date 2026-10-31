@@ -86,28 +86,36 @@ export async function authRoutes(app: FastifyInstance) {
   app.get("/api/branding", async (req) => (await organizationForHost(ctx.db, req.headers.host, ctx.config.SAAS_BASE_DOMAIN))?.settings.branding ?? DEFAULT_BRANDING);
 
   app.post("/api/auth/login", async (req, reply) => {
-    const body = z.object({ username: z.string().trim().min(1).max(254), password: z.string().min(1).max(500) }).parse(req.body);
+    const body = z.object({ username: z.string().trim().min(1).max(254), password: z.string().min(1).max(500), organizationId: z.string().max(64).optional() }).parse(req.body);
     const key = `${req.ip}|${body.username.toLowerCase()}`;
     const f = failures.get(key);
     if (f && f.count >= 10 && f.until > Date.now()) throw new HttpError(429, tr("Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen."));
 
-    const [user] = await ctx.db
-      .select()
+    // One e-mail address may have an account in several companies (e.g. a fiduciary); the username is unique everywhere.
+    const hostOrg = await organizationForHost(ctx.db, req.headers.host, ctx.config.SAAS_BASE_DOMAIN);
+    const hostBound = !!(hostOrg && (hostOrg.domain || ctx.config.SAAS_BASE_DOMAIN));
+    const candidates = await ctx.db
+      .select({ user: users, orgName: organizations.name, orgActive: organizations.active })
       .from(users)
+      .innerJoin(organizations, eq(organizations.id, users.organizationId))
       .where(or(eq(users.username, body.username), sql`lower(${users.email}) = ${body.username.toLowerCase()}`))
-      .limit(1);
-    const ok = user?.active ? await verifyPassword(body.password, user.passwordHash) : false;
-    if (!ok || !user) {
+      .limit(20);
+    const matching: typeof candidates = [];
+    for (const c of candidates) if (c.user.active && (await verifyPassword(body.password, c.user.passwordHash))) matching.push(c);
+    if (matching.length === 0) {
       const prev = f && f.until > Date.now() ? f.count : 0;
       failures.set(key, { count: prev + 1, until: Date.now() + WINDOW_MS });
       throw new HttpError(401, tr("Benutzername oder Passwort ist falsch."));
     }
     failures.delete(key);
     // Strict tenant separation: on an organization's own domain only its users may sign in; inactive organizations are closed.
-    const hostOrg = await organizationForHost(ctx.db, req.headers.host, ctx.config.SAAS_BASE_DOMAIN);
-    if (hostOrg && (hostOrg.domain || ctx.config.SAAS_BASE_DOMAIN) && hostOrg.id !== user.organizationId) throw new HttpError(403, tr("Dieses Konto gehört zu einer anderen Firma. Bitte die Adresse deiner Firma verwenden."));
-    const [own] = await ctx.db.select({ active: organizations.active }).from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
-    if (own && !own.active) throw new HttpError(403, tr("Diese Firma ist deaktiviert. Bitte den Betreiber kontaktieren."));
+    const here = hostBound ? matching.filter((m) => m.user.organizationId === hostOrg!.id) : matching;
+    if (here.length === 0) throw new HttpError(403, tr("Dieses Konto gehört zu einer anderen Firma. Bitte die Adresse deiner Firma verwenden."));
+    const open = here.filter((m) => m.orgActive);
+    if (open.length === 0) throw new HttpError(403, tr("Diese Firma ist deaktiviert. Bitte den Betreiber kontaktieren."));
+    const picked = body.organizationId ? open.find((m) => m.user.organizationId === body.organizationId) : open.length === 1 ? open[0] : undefined;
+    if (!picked) return { ok: false, choose: open.map((m) => ({ organizationId: m.user.organizationId, name: m.orgName, role: m.user.role })).sort((a, b) => a.name.localeCompare(b.name, "de")) };
+    const user = picked.user;
     // Second factor: the password alone opens no session; the client completes with a code or a passkey.
     const keys = await ctx.db.select({ id: passkeys.id }).from(passkeys).where(eq(passkeys.userId, user.id));
     if (user.totpEnabledAt || keys.length > 0) {
@@ -132,6 +140,40 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user?.active || !hostOrg || hostOrg.id !== user.organizationId) return reply.redirect("/?anmeldung=fehlgeschlagen");
     await startSession(ctx, reply, user.id, req);
     return reply.redirect("/");
+  });
+
+  /**
+   * The other companies the signed-in person has an account in (same e-mail address, password already set).
+   * The address was proven when that account's invitation link was used, so switching needs no second password.
+   */
+  const otherAccounts = async (me: { id: string; email: string }) => {
+    if (!me.email) return [];
+    const rows = await ctx.db
+      .select({ id: users.id, organizationId: users.organizationId, role: users.role, name: organizations.name, passwordHash: users.passwordHash, lastLoginAt: users.lastLoginAt })
+      .from(users)
+      .innerJoin(organizations, eq(organizations.id, users.organizationId))
+      .where(and(sql`lower(${users.email}) = ${me.email.toLowerCase()}`, eq(users.active, true), eq(organizations.active, true)))
+      .limit(50);
+    return rows.filter((r) => r.id !== me.id && (r.passwordHash || r.lastLoginAt)).sort((a, b) => a.name.localeCompare(b.name, "de"));
+  };
+
+  app.get("/api/auth/accounts", async (req) => {
+    const me = requireUser(req);
+    if (me.apiKey) return { current: null, others: [] };
+    const [org] = await ctx.db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, me.organizationId)).limit(1);
+    return { current: { organizationId: me.organizationId, name: org?.name ?? "" }, others: (await otherAccounts(me)).map((a) => ({ organizationId: a.organizationId, name: a.name, role: a.role })) };
+  });
+
+  app.post("/api/auth/switch", async (req, reply) => {
+    const me = requireUser(req);
+    if (me.apiKey) throw new HttpError(403, tr("Dafür fehlt dir die Berechtigung."));
+    const { organizationId } = z.object({ organizationId: z.string().max(64) }).parse(req.body);
+    const target = (await otherAccounts(me)).find((a) => a.organizationId === organizationId);
+    if (!target) throw new HttpError(404, tr("Kein Konto in dieser Firma."));
+    const token = req.cookies[SESSION_COOKIE];
+    const res = await signIn(ctx, req, reply, target.id);
+    if (token && !res.redirect) await ctx.db.delete(sessions).where(eq(sessions.id, sha256(token)));
+    return res;
   });
 
   app.post("/api/auth/logout", async (req, reply) => {
@@ -170,8 +212,9 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post("/api/auth/password/forgot", async (req) => {
     const { email } = z.object({ email: z.string().trim().email() }).parse(req.body);
-    const [user] = await ctx.db.select().from(users).where(sql`lower(${users.email}) = ${email.toLowerCase()}`).limit(1);
-    if (user?.active) {
+    const accounts = await ctx.db.select().from(users).where(sql`lower(${users.email}) = ${email.toLowerCase()}`).limit(20);
+    // One link per company the address has an account in; each mail names its company.
+    for (const user of accounts.filter((u) => u.active)) {
       const token = await createPasswordToken(ctx, user.id, "reset");
       const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, user.organizationId)).limit(1);
       const branding = org?.settings.branding ?? DEFAULT_BRANDING;
@@ -264,7 +307,8 @@ export async function resolveOAuthUser(ctx: AppContext, provider: Provider, subj
   if (linked) return linked.active ? linked.id : null;
   if (!email.includes("@")) return null;
 
-  const [byEmail] = await ctx.db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
+  // With accounts in several companies, the one used last opens; the others are a click away (switch).
+  const [byEmail] = await ctx.db.select().from(users).where(and(sql`lower(${users.email}) = ${email}`, eq(users.active, true))).orderBy(sql`${users.lastLoginAt} is null`, sql`${users.lastLoginAt} desc`).limit(1);
   let userId = byEmail?.active ? byEmail.id : null;
   if (!byEmail) {
     // Auto-provisioning: the organization that lists the e-mail domain (exactly one may claim a domain).

@@ -284,6 +284,7 @@ export function App() {
         )}
         <div className="rail-foot">
           {settings && <nav className="nav">{navLink(settings)}</nav>}
+          {mode === "api" && <CompanySwitch />}
           {mode === "demo" && (
             <Select id="role-select" ariaLabel={tr("Rolle")} value={role} onChange={(v) => setRole(v as Role)} options={(Object.keys(ROLE_LABEL) as Role[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))} small />
           )}
@@ -365,4 +366,26 @@ export function App() {
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );
+}
+
+/** For people with accounts in several companies (e.g. a fiduciary): switch without signing in again. */
+function CompanySwitch() {
+  const { notify } = useStore();
+  const [accounts, setAccounts] = useState<{ current: { organizationId: string; name: string } | null; others: { organizationId: string; name: string }[] } | null>(null);
+  useEffect(() => {
+    api<NonNullable<typeof accounts>>("/api/auth/accounts").then(setAccounts).catch(() => {});
+  }, []);
+  if (!accounts?.current || accounts.others.length === 0) return null;
+  const all = [accounts.current, ...accounts.others];
+  const go = async (organizationId: string) => {
+    if (organizationId === accounts.current!.organizationId) return;
+    try {
+      const res = await api<{ ok: boolean; redirect?: string }>("/api/auth/switch", { body: { organizationId } });
+      if (res.redirect) location.href = res.redirect;
+      else location.reload();
+    } catch (err) {
+      notify((err as Error).message);
+    }
+  };
+  return <Select id="company-switch" ariaLabel={tr("Firma wechseln")} value={accounts.current.organizationId} onChange={(v) => void go(v)} options={all.map((a) => ({ value: a.organizationId, label: a.name }))} small />;
 }

@@ -15,7 +15,9 @@ const SSO_ERRORS: Record<string, string> = {
 };
 
 /** SaaS: a sign-in on the shared address continues on the company's own address. */
-type SignedIn = { ok: boolean; redirect?: string; second?: { token: string; totp: boolean; passkey: boolean } };
+const ROLE_NAMES: Record<string, string> = { admin: "Admin", consultant: "Consultant", employee: "Mitarbeitende", auditor: "Treuhand (nur lesen)", customer: "Kundenportal" };
+type Choice = { organizationId: string; name: string; role: string };
+type SignedIn = { ok: boolean; redirect?: string; second?: { token: string; totp: boolean; passkey: boolean }; choose?: Choice[] };
 const follow = (res: SignedIn | null | undefined) => {
   if (!res?.redirect) return false;
   location.href = res.redirect;
@@ -70,7 +72,8 @@ interface Props {
 
 export function Login({ branding, providers, demo, onLoggedIn }: Props) {
   const ssoError = new URLSearchParams(location.search).get("anmeldung");
-  const [view, setView] = useState<"login" | "forgot" | "sent" | "register" | "second">(location.pathname === "/registrieren" ? "register" : "login");
+  const [choices, setChoices] = useState<Choice[] | null>(null);
+  const [view, setView] = useState<"login" | "forgot" | "sent" | "register" | "second" | "choose">(location.pathname === "/registrieren" ? "register" : "login");
   const [second, setSecond] = useState<{ token: string; totp: boolean; passkey: boolean } | null>(null);
   const [code, setCode] = useState("");
   const [company, setCompany] = useState("");
@@ -83,14 +86,19 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(ssoError ? SSO_ERRORS[ssoError] ?? SSO_ERRORS.fehlgeschlagen : "");
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
+  const submit = async (e: FormEvent | null, organizationId?: string) => {
+    e?.preventDefault();
     setError("");
     if (demo) return onLoggedIn();
     setBusy(true);
     try {
-      const res = await api<SignedIn>("/api/auth/login", { body: { username, password } });
+      const res = await api<SignedIn>("/api/auth/login", { body: { username, password, ...(organizationId ? { organizationId } : {}) } });
       if (follow(res)) return;
+      if (!res.ok && res.choose) {
+        setChoices(res.choose);
+        setView("choose");
+        return;
+      }
       if (!res.ok && res.second) {
         setSecond(res.second);
         setView("second");
@@ -219,6 +227,23 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
           <button className="btn primary block">{tr("Link senden")}</button>
           <button type="button" className="link" onClick={() => setView("login")}>{tr("Zurück zur Anmeldung")}</button>
         </form>
+      )}
+      {view === "choose" && choices && (
+        <div className="login-form" id="choose-company">
+          <div>
+            <h2>{tr("Firma wählen")}</h2>
+            <p className="muted">{tr("Mit dieser Adresse hast du ein Konto in mehreren Firmen. Wechseln geht später jederzeit unten links.")}</p>
+          </div>
+          <div className="company-choices">
+            {choices.map((c) => (
+              <button key={c.organizationId} type="button" className="company-choice" disabled={busy} onClick={() => void submit(null, c.organizationId)}>
+                <strong>{c.name}</strong>
+                <span className="muted">{tr(ROLE_NAMES[c.role] ?? c.role)}</span>
+              </button>
+            ))}
+          </div>
+          <button type="button" className="btn ghost" onClick={() => setView("login")}>{tr("Zurück zur Anmeldung")}</button>
+        </div>
       )}
       {view === "second" && second && (
         <form onSubmit={finishTotp} className="login-form">
