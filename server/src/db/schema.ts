@@ -137,9 +137,17 @@ export const organizations = mysqlTable(
     stripeCustomerId: varchar("stripe_customer_id", { length: 64 }),
     stripeSubscriptionId: varchar("stripe_subscription_id", { length: 64 }),
     canceledAt: datetime("canceled_at", { mode: "date" }),
+    // ---- growth: referrals between companies and reseller partners (Treuhand, agencies) ----
+    /** Own code for recommending the product (?ref=CODE); created on first use. */
+    referralCode: varchar("referral_code", { length: 20 }),
+    /** Company whose link brought this one (no FK: deleting either keeps the other). */
+    referredByOrgId: varchar("referred_by_org_id", { length: 36 }),
+    partnerId: varchar("partner_id", { length: 36 }),
+    /** Free months from referrals that the operator has already credited on an invoice. */
+    freeMonthsUsed: int("free_months_used").notNull().default(0),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("org_slug_uq").on(t.slug), uniqueIndex("org_domain_uq").on(t.domain), index("org_stripe_sub_idx").on(t.stripeSubscriptionId)],
+  (t) => [uniqueIndex("org_slug_uq").on(t.slug), uniqueIndex("org_domain_uq").on(t.domain), index("org_stripe_sub_idx").on(t.stripeSubscriptionId), uniqueIndex("org_referral_uq").on(t.referralCode), index("org_referred_idx").on(t.referredByOrgId), index("org_partner_idx").on(t.partnerId)],
 );
 
 export const teams = mysqlTable("teams", {
@@ -752,4 +760,21 @@ export const chatLinks = mysqlTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("chat_links_uq").on(t.organizationId, t.provider, t.externalId)],
+);
+
+/** Reseller partner (fiduciary, agency): companies registering with the code get a longer trial, the partner a commission. */
+export const partners = mysqlTable(
+  "partners",
+  {
+    id: id().primaryKey(),
+    code: varchar("code", { length: 40 }).notNull(),
+    name: varchar("name", { length: 200 }).notNull(),
+    email: varchar("email", { length: 254 }).notNull(),
+    /** Share of the monthly revenue of referred, paying companies, in percent. */
+    commissionPercent: int("commission_percent").notNull().default(20),
+    trialDays: int("trial_days").notNull().default(60),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("partners_code_uq").on(t.code)],
 );

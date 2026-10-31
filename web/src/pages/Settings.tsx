@@ -7,6 +7,7 @@ import { JiraTab } from "./Jira";
 import { IntegrationsTab } from "./Integrations";
 import { ImportTab } from "./Import";
 import { SsoTab } from "./SsoSettings";
+import { PartnersCard, ReferralCard } from "./Growth";
 import { ChatTab } from "./ChatSettings";
 import { MonitorCard } from "./Monitor";
 import { STATUS_LABEL, SubscriptionTab, statusPill, useSubscription } from "./Subscription";
@@ -628,7 +629,7 @@ function Operator() {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const demoOrgs: PlatformOrg[] = [
-    { id: "o1", name: tr("Beispiel AG"), slug: "beispiel", domain: "zeit.beispiel.ch", active: true, appName: "TrackInsight", users: 7, createdAt: "2026-01-05", plan: "business", status: "active", interval: "year", billing: "invoice", seats: 7, mrr: 128.33, currentPeriodEnd: "2027-01-05T00:00:00Z" },
+    { id: "o1", name: tr("Beispiel AG"), slug: "beispiel", domain: "zeit.beispiel.ch", active: true, appName: "TrackInsight", users: 7, createdAt: "2026-01-05", plan: "business", status: "active", interval: "year", billing: "invoice", seats: 7, mrr: 128.33, currentPeriodEnd: "2027-01-05T00:00:00Z", freeMonthsOpen: 1 },
     { id: "o2", name: tr("Zweite GmbH"), slug: "zweite-gmbh", domain: null, active: true, appName: "ZweiteZeit", users: 12, createdAt: "2026-06-12", plan: "team", status: "active", interval: "month", billing: "stripe", seats: 12, mrr: 180, currentPeriodEnd: "2026-11-12T00:00:00Z" },
     { id: "o4", name: tr("Holzbau Gisler GmbH"), slug: "holzbau-gisler", domain: null, active: true, appName: "TrackInsight", users: 6, createdAt: "2026-10-16", plan: "start", status: "trialing", interval: "month", billing: "invoice", seats: 6, mrr: 0, trialEndsAt: "2026-11-15T00:00:00Z" },
     { id: "o5", name: tr("Atelier Nord"), slug: "atelier-nord", domain: null, active: true, appName: "TrackInsight", users: 9, createdAt: "2026-05-02", plan: "start", status: "past_due", interval: "month", billing: "stripe", seats: 9, mrr: 81, currentPeriodEnd: "2026-10-02T00:00:00Z" },
@@ -672,6 +673,7 @@ function Operator() {
         </div>
       )}
       <MonitorCard />
+      {(data.saas || mode === "demo") && <PartnersCard />}
       <section className="card">
         <div className="card-head">
           <h2>{tr("Firmen auf dieser Installation")}</h2>
@@ -713,6 +715,7 @@ function Operator() {
                       ) : <span className="pill ok">{tr("Aktiv")}</span>}
                     </td>
                     <td className="r op-actions">
+                      {!!o.freeMonthsOpen && <button className="btn small" title={tr("Aus Empfehlungen verdient. Klicken, wenn auf der Rechnung gutgeschrieben.")} onClick={() => void (mode === "demo" ? Promise.resolve(notify(tr("Im Prototyp wird nichts gespeichert."))) : api(`/api/platform/orgs/${o.id}/free-month`, { body: {} }).then(() => { notify(tr("Gratismonat verrechnet")); return load(); })).catch((err: Error) => setError(err.message))}>{tr("Gratismonat verrechnen ({0} offen)", o.freeMonthsOpen)}</button>}
                       {data.saas && o.active && o.status !== "active" && <button className="btn small" title={tr("Zahlung erhalten, Abo aktiv setzen")} onClick={() => void patch(o, { status: "active" }).catch((err: Error) => setError(err.message))}>{tr("Aktiv setzen")}</button>}
                       <button className="btn small ghost" onClick={() => void patch(o, { active: !o.active })}>{o.active ? tr("Deaktivieren") : tr("Aktivieren")}</button>
                     </td>
@@ -856,7 +859,7 @@ export function Settings() {
           {tab === "import" && role === "admin" && <ImportTab />}
           {tab === "jira" && <JiraTab />}
           {tab === "api" && role === "admin" && <IntegrationsTab />}
-          {tab === "abo" && sub && <SubscriptionTab onSetup={() => window.dispatchEvent(new CustomEvent("ti:setup"))} />}
+          {tab === "abo" && sub && <div style={{ display: "flex", flexDirection: "column", gap: 16 }}><SubscriptionTab onSetup={() => window.dispatchEvent(new CustomEvent("ti:setup"))} />{role === "admin" && <ReferralCard />}</div>}
           {tab === "operator" && operator && <Operator />}
         </div>
       </div>

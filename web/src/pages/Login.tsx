@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { passkeysSupported, usePasskey } from "../webauthn";
 import { PLANS, type PlanId } from "@taktwerk/domain";
 import { api, type Branding, type Providers } from "../api";
@@ -82,6 +82,14 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
   const [password, setPassword] = useState(demo ? "demo-passwort" : "");
   const [email, setEmail] = useState("");
   // A package can be preselected by a link from the website (?paket=team); the form itself shows no prices.
+  // Recommendation (?ref=) or partner code (?partner=) from the link; can also be typed in.
+  const [signupCode, setSignupCode] = useState(() => { const q = new URLSearchParams(location.search); return (q.get("ref") ?? q.get("partner") ?? "").toUpperCase(); });
+  const [codeInfo, setCodeInfo] = useState<{ kind: "partner" | "referral"; name: string; trialDays: number } | null>(null);
+  useEffect(() => {
+    if (demo || view !== "register" || signupCode.trim().length < 3) { setCodeInfo(null); return; }
+    const id = setTimeout(() => api<{ kind: "partner" | "referral"; name: string; trialDays: number }>(`/api/orgs/register/code?code=${encodeURIComponent(signupCode.trim())}`).then(setCodeInfo).catch(() => setCodeInfo(null)), 300);
+    return () => clearTimeout(id);
+  }, [signupCode, view, demo]);
   const [plan] = useState<PlanId>(() => (PLANS.find((p) => p.id === new URLSearchParams(location.search).get("paket"))?.id ?? "team"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(ssoError ? SSO_ERRORS[ssoError] ?? SSO_ERRORS.fehlgeschlagen : "");
@@ -168,7 +176,7 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
     if (demo) return setError(tr("Im Prototyp gibt es keine Registrierung. Melde dich mit den Beispieldaten an."));
     setBusy(true);
     try {
-      if (follow(await api<SignedIn>("/api/orgs/register", { body: { company, name: fullName, email, password, ...(providers.saas ? { plan } : {}) } }))) return;
+      if (follow(await api<SignedIn>("/api/orgs/register", { body: { company, name: fullName, email, password, ...(providers.saas ? { plan } : {}), ...(signupCode.trim() ? { code: signupCode.trim() } : {}) } }))) return;
       history.replaceState(null, "", "/");
       onLoggedIn();
     } catch (err) {
@@ -302,6 +310,10 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
           <label className="field"><span>{tr("Dein Name")}</span><input id="r-name" className="input" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required /></label>
           <label className="field"><span>{tr("E-Mail (ist dein Benutzername)")}</span><input id="r-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
           <label className="field"><span>{tr("Passwort (mindestens 10 Zeichen)")}</span><input id="r-pass" className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} /></label>
+          {providers.saas && (
+            <label className="field"><span>{tr("Empfehlungs- oder Partner-Code (optional)")}</span><input id="r-code" className="input" value={signupCode} onChange={(e) => setSignupCode(e.target.value.toUpperCase())} autoComplete="off" /></label>
+          )}
+          {codeInfo && <p className="notice" id="r-code-info">{codeInfo.kind === "partner" ? tr("Über {0}: Du testest {1} Tage kostenlos.", codeInfo.name, codeInfo.trialDays) : tr("Empfohlen von {0}: Du testest {1} Tage kostenlos.", codeInfo.name, codeInfo.trialDays)}</p>}
           {error && <p className="error" role="alert">{error}</p>}
           <button id="r-submit" className="btn primary block" disabled={busy}>{busy ? tr("Richte ein …") : tr("Firma anlegen")}</button>
           <button type="button" className="link" onClick={() => { setView("login"); setError(""); }}>{tr("Zurück zur Anmeldung")}</button>

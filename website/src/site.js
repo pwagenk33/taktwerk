@@ -1,5 +1,20 @@
 // Small enhancements for the static website: mobile menu, monthly/yearly prices, contact form.
 (() => {
+  // Recommendation or partner code from a shared link (?ref=CODE, ?partner=CODE): kept while browsing and
+  // passed on to every sign-up button.
+  let code = "";
+  try {
+    const q = new URLSearchParams(location.search);
+    code = (q.get("ref") || q.get("partner") || sessionStorage.getItem("ti.code") || "").replace(/[^A-Za-z0-9-]/g, "").slice(0, 40);
+    if (code) sessionStorage.setItem("ti.code", code);
+  } catch { /* storage blocked */ }
+  if (code) {
+    for (const a of document.querySelectorAll('a[href*="/registrieren"]')) {
+      const url = new URL(a.href, location.href);
+      url.searchParams.set("ref", code);
+      a.href = url.toString();
+    }
+  }
   const menuBtn = document.getElementById("menu-btn");
   const nav = document.getElementById("main-nav");
   if (menuBtn && nav) {

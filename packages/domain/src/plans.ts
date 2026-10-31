@@ -21,6 +21,8 @@ export interface Plan {
 }
 
 export const TRIAL_DAYS = 30;
+/** Extra trial days for a company that registers through another company\'s recommendation link. */
+export const REFERRAL_TRIAL_BONUS_DAYS = 30;
 /** Days after a failed payment or the end of the trial during which the company keeps working normally. */
 export const GRACE_DAYS = 7;
 

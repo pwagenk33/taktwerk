@@ -66,6 +66,8 @@ export interface PlatformOrg {
   currentPeriodEnd?: string | null;
   canceledAt?: string | null;
   mrr?: number;
+  /** Free months earned through recommendations that the operator still has to credit. */
+  freeMonthsOpen?: number;
 }
 
 export interface PlatformSummary {

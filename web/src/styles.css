@@ -1263,3 +1263,6 @@ body.dialog-open { overflow: hidden; }
 .sso-row { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .sso-row code { overflow-wrap: anywhere; font-size: 0.8rem; background: var(--surface-2, rgba(0,0,0,.04)); padding: 4px 8px; border-radius: 6px; }
 @media (max-width: 640px) { .sso-row { grid-template-columns: minmax(0, 1fr) auto; } .sso-row > span { grid-column: 1 / -1; } }
+
+/* Operator → Partner: inline form */
+.partner-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-items: end; }

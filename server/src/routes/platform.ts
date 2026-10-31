@@ -11,6 +11,7 @@ import { actionMail } from "../mail/mailer";
 import { RESERVED_SLUGS, createOrganization, slugOf } from "../seed";
 import { requireFeature, saasOn, seatsUsed } from "../saas";
 import { createPasswordToken, passwordLink, signIn } from "./auth";
+import { resolveSignupCode } from "./growth";
 import { periodEnd } from "./subscription";
 import { tr } from "@taktwerk/domain";
 import { monitorReport, recordError } from "../monitor";
@@ -33,6 +34,10 @@ export async function platformRoutes(app: FastifyInstance) {
     if (!u.platformAdmin) throw new HttpError(403, tr("Nur der Betreiber der Installation darf Firmen verwalten."));
     return u;
   };
+  const referredPaying = async (orgId: string) => {
+    const [{ n }] = await ctx.db.select({ n: count() }).from(organizations).where(and(eq(organizations.referredByOrgId, orgId), eq(organizations.active, true), sql`${organizations.subStatus} in ('active', 'past_due')`));
+    return n;
+  };
   const view = async (o: typeof organizations.$inferSelect) => {
     const [{ n }] = await ctx.db.select({ n: count() }).from(users).where(and(eq(users.organizationId, o.id), eq(users.active, true), ne(users.role, "customer")));
     const plan = planById(o.plan);
@@ -44,6 +49,9 @@ export async function platformRoutes(app: FastifyInstance) {
       plan: o.plan, status: o.subStatus, interval: o.billingInterval, billing: o.billingMode, seats,
       trialEndsAt: o.trialEndsAt, currentPeriodEnd: o.currentPeriodEnd, canceledAt: o.canceledAt,
       mrr: paying && o.active ? mrrOf(plan, o.billingInterval, seats) : 0,
+      partnerId: o.partnerId,
+      referredByOrgId: o.referredByOrgId,
+      freeMonthsOpen: Math.max(0, (await referredPaying(o.id)) - o.freeMonthsUsed),
     };
   };
   const emailFree = async (email: string, username: string) => {
@@ -198,13 +206,18 @@ export async function platformRoutes(app: FastifyInstance) {
     const r = regs.get(req.ip);
     if (r && r.count >= 5 && r.until > Date.now()) throw new HttpError(429, tr("Zu viele Registrierungen. Bitte später erneut versuchen."));
     const body = z
-      .object({ company: z.string().trim().min(2).max(200), name: z.string().trim().min(1).max(160), email: z.string().trim().toLowerCase().email(), password: z.string().max(500), plan: z.enum(["start", "team", "business"]).optional() })
+      .object({ company: z.string().trim().min(2).max(200), name: z.string().trim().min(1).max(160), email: z.string().trim().toLowerCase().email(), password: z.string().max(500), plan: z.enum(["start", "team", "business"]).optional(), code: z.string().trim().max(40).optional() })
       .parse(req.body);
     const problem = passwordProblem(body.password);
     if (problem) throw new HttpError(400, problem);
     await emailFree(body.email, body.email);
     regs.set(req.ip, { count: (r && r.until > Date.now() ? r.count : 0) + 1, until: Date.now() + 3600_000 });
-    const { orgId, userId, slug: s } = await createOrganization(ctx.db, { orgName: body.company, name: body.name, email: body.email, username: body.email, passwordHash: await hashPassword(body.password), slug: slugOf(body.company), trial: trialFor(ctx, body.plan), onboarding: true });
+    // Recommendation or partner code: longer trial, and the link is kept for the free month or the commission.
+    const signup = saasOn(ctx) ? await resolveSignupCode(ctx, body.code) : null;
+    const trial = trialFor(ctx, body.plan);
+    if (trial && signup) trial.days = Math.max(trial.days, signup.trialDays);
+    const { orgId, userId, slug: s } = await createOrganization(ctx.db, { orgName: body.company, name: body.name, email: body.email, username: body.email, passwordHash: await hashPassword(body.password), slug: slugOf(body.company), trial, onboarding: true });
+    if (signup) await ctx.db.update(organizations).set(signup.kind === "partner" ? { partnerId: signup.id } : { referredByOrgId: signup.id }).where(eq(organizations.id, orgId));
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
     const done = await signIn(ctx, req, reply, userId);
     const origin = appOrigin(ctx.config, org);
@@ -216,7 +229,7 @@ export async function platformRoutes(app: FastifyInstance) {
         lines: [
           tr("{0} ist eingerichtet. Du bist Admin: Lade dein Team unter Einstellungen → Benutzer ein und lege Kunden und Projekte an.", body.company),
           `Anmeldung: ${origin} mit «${body.email}».`,
-          ...(saasOn(ctx) ? [tr("Du testest das Paket {0} {1} Tage lang kostenlos und unverbindlich. Ein Paket wählst du jederzeit unter Einstellungen → Abo.", planById(body.plan ?? "team").name, TRIAL_DAYS)] : []),
+          ...(saasOn(ctx) ? [tr("Du testest das Paket {0} {1} Tage lang kostenlos und unverbindlich. Ein Paket wählst du jederzeit unter Einstellungen → Abo.", planById(body.plan ?? "team").name, trial?.days ?? TRIAL_DAYS)] : []),
         ],
         footer: tr("Fragen? Antworte einfach auf diese E-Mail."),
       }),
@@ -228,7 +241,7 @@ export async function platformRoutes(app: FastifyInstance) {
             to: ctx.config.OPERATOR_EMAIL,
             subject: tr("Neue Firma: {0}", body.company),
             greeting: tr("Hallo"),
-            lines: [tr("{0} ({1}) hat sich registriert.", body.company, s), `Admin: ${body.name}, ${body.email}`, `Paket: ${saasOn(ctx) ? tr("{0}, Testphase", planById(body.plan ?? "team").name) : tr("ohne Abo")}`, `Adresse: ${origin}`],
+            lines: [tr("{0} ({1}) hat sich registriert.", body.company, s), ...(signup ? [signup.kind === "partner" ? tr("Über Partner: {0}", signup.name) : tr("Empfohlen von: {0}", signup.name)] : []), `Admin: ${body.name}, ${body.email}`, `Paket: ${saasOn(ctx) ? tr("{0}, Testphase", planById(body.plan ?? "team").name) : tr("ohne Abo")}`, `Adresse: ${origin}`],
             footer: tr("Diese Meldung geht an OPERATOR_EMAIL."),
           }),
         )
