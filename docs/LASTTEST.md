@@ -35,4 +35,11 @@ Der erste Aufruf nach einem Neustart oder Monatswechsel braucht einmalig rund 2.
 - **Paginierung:** Rechnungsliste seitenweise (`limit`, `before`); die Kundenliste zeigt 50 pro Seite; Listen in der Zeiterfassung sind auf Wochen begrenzt.
 - **Export** lädt nur den gewählten Zeitraum einzeln.
 
+## Nachtrag (2026-10-31)
+
+- **Kompaktes Format:** Die App lädt `/api/dataset?packed=1`. Lange Listen kommen als Spalten mit Wörterbuch für wiederholte Werte (domain/pack.ts): Admin 10 MB → 3.1 MB, gzip 1.15 → 0.79 MB.
+- **ETag:** Ist nichts geändert, antwortet der Server beim Neuladen mit 304 ohne Inhalt.
+- **Rechnen im Browser:** Projekt-Reports für 400 Projekte 85 → rund 30 ms, Saldi für 50 Personen 260 → rund 170 ms und danach aus dem Zwischenspeicher.
+- **App-Code:** Start 1.4 MB → 0.44 MB JavaScript, der Rest lädt pro Seite.
+
 `/api/dataset?all=1` liefert weiterhin alles einzeln, etwa für eigene Auswertungen.

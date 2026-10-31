@@ -204,3 +204,19 @@ describe("projects and calendar bookings", () => {
     expect(again.timeEntries.find((e: { id: string }) => e.id === create.json().id).startTime).toBe("13:00");
   });
 });
+
+describe("dataset transfer", () => {
+  it("sends the compact format with the same content and answers an unchanged reload with 304", async () => {
+    const { cookie } = await login(t.app, "anna.keller");
+    const plain = await get("/api/dataset", cookie);
+    const packed = await get("/api/dataset?packed=1", cookie);
+    const p = packed.json();
+    const { unpack } = await import("@taktwerk/domain");
+    expect(unpack(p.packed.timeEntries)).toEqual(plain.json().timeEntries);
+    expect(unpack(p.packed.expenses)).toEqual(plain.json().expenses);
+    expect(packed.rawPayload.length).toBeLessThan(plain.rawPayload.length);
+    const again = await t.app.inject({ method: "GET", url: "/api/dataset?packed=1", headers: { cookie, "if-none-match": String(packed.headers.etag) } });
+    expect(again.statusCode).toBe(304);
+    expect(again.rawPayload.length).toBe(0);
+  });
+});

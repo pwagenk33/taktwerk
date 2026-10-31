@@ -6,14 +6,20 @@
 #   - behält BACKUP_KEEP_DAYS (Standard 30) tägliche Dumps
 #   - schreibt /backups/latest.json  {"finishedAt": ..., "file": ..., "bytes": ...}
 #   - optional: Kopie in einen S3-Bucket mit rclone, wenn BACKUP_S3_BUCKET gesetzt ist
+#   - Wiederherstellungs-Test am BACKUP_VERIFY_WEEKDAY (Standard 7 = Sonntag): spielt den Dump in eine
+#     Wegwerf-Datenbank im Container ein, vergleicht Tabellen und Zeilen mit der Live-Datenbank und schreibt
+#     /backups/verify.json. Die Statusseite zeigt das Ergebnis.
 #
 # Sofort ein Backup auslösen (ohne auf die Nacht zu warten):
 #   docker compose -f deploy/docker-compose.prod.yml exec backup bash /backup.sh einmal
+# Das neueste Backup sofort auf Wiederherstellbarkeit prüfen:
+#   docker compose -f deploy/docker-compose.prod.yml exec backup bash /backup.sh pruefen
 set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 BACKUP_TIME="${BACKUP_TIME:-02:30}"
 BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
+BACKUP_VERIFY_WEEKDAY="${BACKUP_VERIFY_WEEKDAY:-7}"
 DB_HOST="${DB_HOST:-db}"
 DB_NAME="${DB_NAME:-taktwerk}"
 DB_USER="${DB_USER:-taktwerk}"
@@ -109,6 +115,56 @@ run_backup() {
   upload_offsite "$file"
 }
 
+# Tabellen und Zeilen der wichtigsten Tabellen, als «tabellen buchungen benutzer firmen».
+db_counts() {
+  local -a conn=("$@")
+  "${conn[@]}" -N -B -e "SELECT (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()),
+    (SELECT COUNT(*) FROM time_entries), (SELECT COUNT(*) FROM users), (SELECT COUNT(*) FROM organizations)"
+}
+
+# Spielt einen Dump in eine Wegwerf-Datenbank ein (eigener MariaDB-Prozess im Container, nur über einen Socket
+# erreichbar) und vergleicht mit der Live-Datenbank. Buchungen dürfen seit dem Dump dazugekommen sein.
+verify_backup() {
+  local file="$1" dir sock started ok=false detail="" restored live t_r e_r u_r o_r t_l e_l u_l o_l seconds
+  dir="$(mktemp -d /tmp/restore-test.XXXXXX)"
+  sock="$dir/mysqld.sock"
+  started="$(date +%s)"
+  log "Wiederherstellungs-Test mit $(basename "$file") ..."
+  chown -R mysql:mysql "$dir" 2>/dev/null || true
+  if mariadb-install-db --user=mysql --datadir="$dir/data" --skip-test-db >/dev/null 2>&1; then
+    mariadbd --no-defaults --user=mysql --datadir="$dir/data" --socket="$sock" --skip-networking --skip-grant-tables \
+      --pid-file="$dir/mysqld.pid" --log-error="$dir/error.log" &
+    for _ in $(seq 1 60); do mariadb-admin --socket="$sock" ping >/dev/null 2>&1 && break; sleep 1; done
+    if mariadb --socket="$sock" -e "CREATE DATABASE restore_test" 2>/dev/null \
+       && gunzip -c "$file" | mariadb --socket="$sock" restore_test 2>/dev/null; then
+      restored="$(db_counts mariadb --socket="$sock" restore_test 2>/dev/null)" || restored=""
+      live="$(MYSQL_PWD="$DB_PASSWORD" db_counts mariadb --host="$DB_HOST" --user="$DB_USER" "$DB_NAME" 2>/dev/null)" || live=""
+      read -r t_r e_r u_r o_r <<<"${restored:-0 0 0 0}"
+      read -r t_l e_l u_l o_l <<<"${live:-0 0 0 0}"
+      if [ -z "$restored" ]; then detail="Wichtige Tabellen fehlen im Backup"
+      elif [ -z "$live" ]; then detail="Live-Datenbank nicht erreichbar"
+      else detail="Tabellen ${t_r}/${t_l}, Buchungen ${e_r}/${e_l}, Personen ${u_r}/${u_l}, Firmen ${o_r}/${o_l}"; fi
+      if [ -n "$restored" ] && [ -n "$live" ] && [ "$t_r" = "$t_l" ] && [ "$t_r" -gt 0 ] && [ "$o_r" -gt 0 ] && [ "$e_r" -le "$e_l" ] && [ "$e_r" -ge $((e_l * 9 / 10)) ]; then ok=true; fi
+    else
+      detail="Dump liess sich nicht einspielen"
+    fi
+    mariadb-admin --socket="$sock" shutdown >/dev/null 2>&1 || kill "$(cat "$dir/mysqld.pid" 2>/dev/null)" 2>/dev/null || true
+    wait 2>/dev/null || true
+  else
+    detail="Test-Datenbank liess sich nicht anlegen"
+  fi
+  rm -rf "$dir"
+  seconds=$(( $(date +%s) - started ))
+  printf '{"checkedAt": "%s", "file": "%s", "ok": %s, "detail": "%s", "seconds": %s}\n' \
+    "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$(basename "$file")" "$ok" "$detail" "$seconds" > "$BACKUP_DIR/verify.json.tmp"
+  mv -f "$BACKUP_DIR/verify.json.tmp" "$BACKUP_DIR/verify.json"
+  chmod 644 "$BACKUP_DIR/verify.json"
+  if [ "$ok" = true ]; then log "Wiederherstellung geprüft: ${detail} (${seconds} s)."; else log "FEHLER beim Wiederherstellungs-Test: ${detail}."; fi
+  [ "$ok" = true ]
+}
+
+latest_backup() { ls -1t "$BACKUP_DIR"/trackinsight-*.sql.gz 2>/dev/null | head -n1; }
+
 # Sekunden bis zur nächsten Ausführung um BACKUP_TIME (lokale Zeit, Europe/Zurich).
 seconds_until_next_run() {
   local now target
@@ -124,19 +180,25 @@ if [ "${1:-}" = "einmal" ]; then
   run_backup
   exit $?
 fi
+if [ "${1:-}" = "pruefen" ]; then
+  f="$(latest_backup)"
+  [ -n "$f" ] || { log "Noch kein Backup vorhanden."; exit 1; }
+  verify_backup "$f"
+  exit $?
+fi
 
 log "Backup-Dienst gestartet. Täglich um ${BACKUP_TIME} (${TZ}), behalte ${BACKUP_KEEP_DAYS} Tage, Off-Site: $(s3_enabled && echo "ja (${S3_BUCKET})" || echo nein)."
 mkdir -p "$BACKUP_DIR"
 # Wenn noch gar kein Backup existiert (frische Installation), sofort eines erstellen.
 if ! ls "$BACKUP_DIR"/trackinsight-*.sql.gz >/dev/null 2>&1; then
   log "Noch kein Backup vorhanden, erstelle das erste jetzt."
-  run_backup || true
+  run_backup && verify_backup "$(latest_backup)" || true
 fi
 
 while true; do
   wait="$(seconds_until_next_run)"
   log "Nächstes Backup in $((wait / 3600)) h $(((wait % 3600) / 60)) min."
   sleep "$wait"
-  run_backup || true
+  if run_backup && [ "$(date +%u)" = "$BACKUP_VERIFY_WEEKDAY" ]; then verify_backup "$(latest_backup)" || true; fi
   sleep 60   # verhindert eine zweite Ausführung in derselben Minute
 done

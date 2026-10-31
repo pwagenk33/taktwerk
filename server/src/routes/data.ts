@@ -1,8 +1,8 @@
-import { DEFAULT_RATES, DEFAULT_WEEKLY_HOURS, EXPENSE_CATEGORIES, VAT_RATES, defaultHolidays, projectReports, rateOn, type Dataset, type VelocitySettings } from "@taktwerk/domain";
+import { DEFAULT_RATES, pack, DEFAULT_WEEKLY_HOURS, EXPENSE_CATEGORIES, VAT_RATES, defaultHolidays, projectReports, rateOn, type Dataset, type VelocitySettings } from "@taktwerk/domain";
 import { and, eq, gte, inArray, lt, or, sql, type ColumnBaseConfig, type SQL } from "drizzle-orm";
 import type { MySqlColumn } from "drizzle-orm/mysql-core";
 import type { FastifyInstance } from "fastify";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { HttpError, isLead, leadsProject, managedUserIds, requireRole, requireUser, seesAll, type AppContext, type SessionUser } from "../app";
 import {
@@ -254,13 +254,27 @@ async function bookingUser(ctx: AppContext, user: SessionUser, employeeId?: stri
 export async function dataRoutes(app: FastifyInstance) {
   const ctx = app.ctx;
 
-  /** `?all=1` loads every single booking (slow after years); otherwise older months come as totals. */
-  app.get("/api/dataset", async (req) => {
+  /**
+   * `?all=1` loads every single booking (slow after years); otherwise older months come as totals.
+   * `?packed=1` (the web app) sends the long lists in the compact format of domain/pack.ts. The answer carries an
+   * ETag, so a reload with unchanged data gets a short 304 and the browser reuses its copy.
+   */
+  app.get("/api/dataset", async (req, reply) => {
     const user = requireUser(req);
-    const q = z.object({ all: z.string().optional(), from: isoDate.optional() }).parse(req.query);
+    const q = z.object({ all: z.string().optional(), from: isoDate.optional(), packed: z.string().optional() }).parse(req.query);
     const today = todayZurich();
     const detailFrom = q.all ? undefined : q.from && q.from < detailStart(today) ? q.from : detailStart(today);
-    return loadDataset(ctx, user, { detailFrom });
+    const data = await loadDataset(ctx, user, { detailFrom });
+    let body: unknown = data;
+    if (q.packed) {
+      const { timeEntries: t, expenses: x, absences: a, workPeriods: w, ...rest } = data;
+      body = { ...rest, timeEntries: [], expenses: [], absences: [], workPeriods: [], packed: { timeEntries: pack(t), expenses: pack(x), absences: pack(a ?? []), workPeriods: pack(w ?? []) } };
+    }
+    const json = JSON.stringify(body);
+    const etag = `"${createHash("sha1").update(json).digest("base64url")}"`;
+    reply.header("etag", etag).header("cache-control", "private, no-cache");
+    if (req.headers["if-none-match"] === etag) return reply.code(304).send();
+    return reply.type("application/json; charset=utf-8").send(json);
   });
 
   /** Project reports: leads and the auditor see all, project leads the projects they lead. */

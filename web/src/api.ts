@@ -1,4 +1,5 @@
 import type { BillingInterval, Dataset, Holiday, Plan, PlanId, PostalAddress, ProjectReport, Role, Subscription, SubscriptionStatus } from "@taktwerk/domain";
+import { unpack, type Packed } from "@taktwerk/domain";
 import { intlLocale, tr } from "./i18n";
 
 /** Demo mode runs entirely in the browser with example data (shareable prototype build). */
@@ -219,7 +220,12 @@ export async function upload<T>(path: string, file: File): Promise<T> {
  * further back, `loadOlder` moves the start and every later reload keeps it.
  */
 let datasetFrom: string | null = null;
-export const loadDataset = () => api<Dataset>(`/api/dataset${datasetFrom ? `?from=${datasetFrom}` : ""}`);
+export async function loadDataset(): Promise<Dataset> {
+  const raw = await api<Dataset & { packed?: Record<"timeEntries" | "expenses" | "absences" | "workPeriods", Packed> }>(`/api/dataset?packed=1${datasetFrom ? `&from=${datasetFrom}` : ""}`);
+  const { packed, ...data } = raw;
+  if (!packed) return data;
+  return { ...data, timeEntries: unpack(packed.timeEntries), expenses: unpack(packed.expenses), absences: unpack(packed.absences), workPeriods: unpack(packed.workPeriods) };
+}
 export async function loadOlder(from: string) {
   if (datasetFrom && datasetFrom <= from) return null;
   datasetFrom = from;

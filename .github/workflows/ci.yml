@@ -1,0 +1,51 @@
+# Checks every push and pull request: types, tests against a real MariaDB, the production build and the Docker image.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: taktwerk_test
+          MARIADB_USER: taktwerk
+          MARIADB_PASSWORD: taktwerk
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      TEST_DATABASE_URL: mysql://taktwerk:taktwerk@127.0.0.1:3306/taktwerk_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typen prüfen
+        run: npm run typecheck --workspaces --if-present
+      - name: Tests (Domain und Server)
+        run: npm test
+      - name: Produktions-Build (App, Server, Website)
+        run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker-Image bauen
+        run: docker build -t trackinsight:ci .

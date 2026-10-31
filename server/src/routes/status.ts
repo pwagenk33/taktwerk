@@ -2,7 +2,7 @@
 import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { requireUser } from "../app";
 import { tr } from "@taktwerk/domain";
 
@@ -42,6 +42,8 @@ const fmt = (d: Date) => new Intl.DateTimeFormat("de-CH", { dateStyle: "medium",
 export async function statusRoutes(app: FastifyInstance) {
   const ctx = app.ctx;
   const backupFile = process.env.BACKUP_STATUS_FILE ?? "/backups/latest.json";
+  // Weekly restore test of deploy/backup.sh, next to latest.json. Its details (row counts) stay off this public page.
+  const verifyFile = join(dirname(backupFile), "verify.json");
 
   const probe = async () => {
     const version = await appVersion();
@@ -54,7 +56,16 @@ export async function statusRoutes(app: FastifyInstance) {
     }
     const backup = await readJson<{ finishedAt: string; file: string; bytes: number }>(backupFile);
     const backupAge = backup ? (Date.now() - new Date(backup.finishedAt).getTime()) / 3600_000 : null;
-    return { ok: db, db, version, uptimeSeconds: Math.round((Date.now() - started) / 1000), backup: backup ? { finishedAt: backup.finishedAt, file: backup.file, bytes: backup.bytes, ok: backupAge !== null && backupAge < 36 } : null };
+    const verify = await readJson<{ checkedAt: string; ok: boolean }>(verifyFile);
+    const verifyAge = verify ? (Date.now() - new Date(verify.checkedAt).getTime()) / 86400_000 : null;
+    return {
+      ok: db,
+      db,
+      version,
+      uptimeSeconds: Math.round((Date.now() - started) / 1000),
+      backup: backup ? { finishedAt: backup.finishedAt, file: backup.file, bytes: backup.bytes, ok: backupAge !== null && backupAge < 36 } : null,
+      restoreTest: verify ? { checkedAt: verify.checkedAt, ok: verify.ok && verifyAge !== null && verifyAge < 9 } : null,
+    };
   };
 
   app.get("/api/version", async () => ({ version: await appVersion(), node: process.version }));
@@ -80,6 +91,7 @@ export async function statusRoutes(app: FastifyInstance) {
 ${row(tr("Anwendung"), true, tr("Version {0}, läuft seit {1} h {2} min", s.version, Math.floor(s.uptimeSeconds / 3600), Math.floor((s.uptimeSeconds % 3600) / 60)))}
 ${row(tr("Datenbank"), s.db, s.db ? "erreichbar" : tr("nicht erreichbar"))}
 ${row(tr("Backup"), s.backup ? s.backup.ok : null, s.backup ? `zuletzt ${fmt(new Date(s.backup.finishedAt))}, ${(s.backup.bytes / 1048576).toFixed(1)} MB` : tr("noch keine Sicherung gemeldet"))}
+${row(tr("Wiederherstellung geprüft"), s.restoreTest ? s.restoreTest.ok : null, s.restoreTest ? `${s.restoreTest.ok ? "" : "fehlgeschlagen, "}${fmt(new Date(s.restoreTest.checkedAt))}` : tr("noch nicht geprüft"))}
 </ul><footer>Daten werden in der Schweiz gespeichert. Diese Seite ist öffentlich und enthält keine Kundendaten.</footer></main></body></html>`;
     return reply.status(s.ok ? 200 : 503).header("content-type", "text/html; charset=utf-8").header("cache-control", "no-store").send(html);
   });

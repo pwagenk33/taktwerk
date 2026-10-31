@@ -126,6 +126,7 @@ async function main() {
   const month = new Date().toISOString().slice(0, 7);
   const checks: [string, string, string][] = [
     ["Admin", "/api/dataset", admin],
+    ["Admin", "/api/dataset?packed=1", admin],
     ["Admin", "/api/dataset?all=1", admin],
     ["Mitarbeitende", "/api/dataset", employee],
     ["Admin", "/api/reports", admin],

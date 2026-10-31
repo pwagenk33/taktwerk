@@ -55,8 +55,21 @@ export class Index {
   readonly issue = new Map<string, JiraIssue>();
   readonly entriesBySub = new Map<string, TimeEntry[]>();
   readonly hoursByIssue = new Map<string, number>();
+  // Grouped once, so reports over hundreds of projects don't scan every list per sub-project.
+  readonly subsByProject = new Map<string, SubProject[]>();
+  readonly expensesBySub = new Map<string, Expense[]>();
+  readonly issuesBySub = new Map<string, JiraIssue[]>();
 
   constructor(readonly data: Dataset) {
+    const group = <T>(map: Map<string, T[]>, key: string | undefined, item: T) => {
+      if (key === undefined) return;
+      const list = map.get(key);
+      if (list) list.push(item);
+      else map.set(key, [item]);
+    };
+    for (const s of data.subProjects) group(this.subsByProject, s.projectId, s);
+    for (const x of data.expenses) group(this.expensesBySub, x.subProjectId, x);
+    for (const i of data.issues) group(this.issuesBySub, i.subProjectId, i);
     data.subProjects.forEach((s) => this.sub.set(s.id, s));
     data.projects.forEach((p) => this.project.set(p.id, p));
     data.customers.forEach((c) => this.customer.set(c.id, c));
@@ -75,7 +88,7 @@ export class Index {
   }
 
   subsOf(projectId: string): SubProject[] {
-    return this.data.subProjects.filter((s) => s.projectId === projectId);
+    return this.subsByProject.get(projectId) ?? [];
   }
 }
 
@@ -241,7 +254,7 @@ export function subProjectReport(
 ): SubProjectReport {
   const data = idx.data;
   const entries = idx.entriesBySub.get(sub.id) ?? [];
-  const expenses = data.expenses.filter((x) => x.subProjectId === sub.id && countsExpense(x));
+  const expenses = (idx.expensesBySub.get(sub.id) ?? []).filter(countsExpense);
   const customer = idx.customerOfSub(sub.id);
   const rateNow = rateOn(customer, data.today);
 
@@ -250,7 +263,7 @@ export function subProjectReport(
   const expenseCost = expenses.reduce((s, x) => s + x.amount, 0);
   const actualCost = timeCost + expenseCost;
 
-  const issues = data.issues.filter((i) => i.subProjectId === sub.id);
+  const issues = idx.issuesBySub.get(sub.id) ?? [];
   const open = issues.filter((i) => i.status !== "Done");
   const spOpen = open.reduce((s, i) => s + i.storyPoints, 0);
   const spDone = issues.filter((i) => i.status === "Done").reduce((s, i) => s + i.storyPoints, 0);
@@ -316,7 +329,8 @@ export function projectReports(data: Dataset, settings: VelocitySettings, custom
       if (kind === "retainer" && project.retainerHours) {
         const current = monthOf(data.today);
         const subIds = new Set(subs.map((s) => s.subProject.id));
-        const hoursIn = (m: string) => data.timeEntries.filter((e) => subIds.has(e.subProjectId) && monthOf(e.date) === m).reduce((s, e) => s + e.hours, 0);
+        const own = [...subIds].flatMap((id) => idx.entriesBySub.get(id) ?? []);
+        const hoursIn = (m: string) => own.filter((e) => monthOf(e.date) === m).reduce((s, e) => s + e.hours, 0);
         const used = hoursIn(current);
         const avg3 = [1, 2, 3].reduce((s, n) => s + hoursIn(addMonths(current, -n)), 0) / 3;
         retainer = { month: current, hoursPerMonth: project.retainerHours, used, avg3 };

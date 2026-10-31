@@ -1,6 +1,6 @@
 // Working time: target hours (Soll) from Pensum and holidays, worked hours (Ist), overtime balance and vacation.
 import { monthOf } from "./calc";
-import type { Absence, AbsenceType, Dataset, Employee, Holiday, WorkModel } from "./types";
+import type { Absence, AbsenceType, Dataset, Employee, Holiday, TimeEntry, WorkModel } from "./types";
 import { tr } from "./i18n";
 
 export const ABSENCE_TYPES: AbsenceType[] = ["Ferien", "Krankheit", "Unfall", "Militär/Zivildienst", "Weiterbildung", "Kompensation", "Sonstiges"];
@@ -20,15 +20,27 @@ export function addDays(date: string, n: number): string {
   return iso(d);
 }
 
+/** Day of the week (0 = Sunday) without creating a Date; balances call this for every day of several years. */
+const T = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+function weekday(date: string): number {
+  let y = Number(date.slice(0, 4));
+  const m = Number(date.slice(5, 7));
+  const d = Number(date.slice(8, 10));
+  if (m < 3) y -= 1;
+  return (y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) + T[m - 1]! + d) % 7;
+}
+
 export const isWeekday = (date: string) => {
-  const wd = utc(date).getUTCDay();
+  const wd = weekday(date);
   return wd !== 0 && wd !== 6;
 };
 
 /** All dates from `from` to `to`, inclusive. */
 export function daysBetween(from: string, to: string): string[] {
   const out: string[] = [];
-  for (let d = from; d <= to; d = addDays(d, 1)) out.push(d);
+  if (from > to) return out;
+  const d = utc(from);
+  for (let s = from; s <= to; d.setUTCDate(d.getUTCDate() + 1), s = iso(d)) out.push(s);
   return out;
 }
 
@@ -81,17 +93,38 @@ export const workloadOf = (e: Employee) => e.workload ?? 100;
 export const trackingStartOf = (e: Employee, today: string) => e.trackingStart ?? `${today.slice(0, 4)}-01-01`;
 
 /** Context for the per-day calculations of one person. */
+// Hours per person and day, built once per list of bookings (the app replaces the list on every change),
+// so balances for a whole team don't scan all bookings once per person. A list that grew is counted again.
+const workedCache = new WeakMap<readonly TimeEntry[], { length: number; byEmployee: Map<string, Map<string, number>> }>();
+function workedByEmployee(entries: readonly TimeEntry[]): Map<string, Map<string, number>> {
+  const hit = workedCache.get(entries);
+  let byEmployee = hit?.length === entries.length ? hit.byEmployee : undefined;
+  if (!byEmployee) {
+    byEmployee = new Map();
+    for (const t of entries) {
+      let days = byEmployee.get(t.employeeId);
+      if (!days) byEmployee.set(t.employeeId, (days = new Map()));
+      days.set(t.date, (days.get(t.date) ?? 0) + t.hours);
+    }
+    workedCache.set(entries, { length: entries.length, byEmployee });
+  }
+  return byEmployee;
+}
+
 export class WorkCalendar {
   readonly holidays: Map<string, Holiday>;
   readonly model: WorkModel;
   private readonly absences: Absence[];
-  private readonly worked = new Map<string, number>();
+  private readonly worked: Map<string, number>;
+
+  private readonly absenceByDate = new Map<string, Absence>();
 
   constructor(readonly data: Dataset, readonly employee: Employee) {
     this.model = workModelOf(data);
     this.holidays = new Map(this.model.holidays.map((h) => [h.date, h]));
     this.absences = (data.absences ?? []).filter((a) => a.employeeId === employee.id && a.status === "approved");
-    for (const t of data.timeEntries) if (t.employeeId === employee.id) this.worked.set(t.date, (this.worked.get(t.date) ?? 0) + t.hours);
+    for (const a of this.absences) for (const d of daysBetween(a.startDate, a.endDate)) if (!this.absenceByDate.has(d)) this.absenceByDate.set(d, a);
+    this.worked = workedByEmployee(data.timeEntries).get(employee.id) ?? new Map();
   }
 
   /** Share of a full working day that is a working day (0 on weekends and holidays, 0.5 on half holidays). */
@@ -106,7 +139,7 @@ export class WorkCalendar {
   }
 
   absenceOn(date: string): Absence | undefined {
-    return this.absences.find((a) => a.startDate <= date && a.endDate >= date);
+    return this.absenceByDate.get(date);
   }
 
   /**
@@ -160,7 +193,20 @@ export interface WorkBalance {
 }
 
 /** Overtime balance from the tracking start up to and including `until` (default: today). */
+// Pages show the balance of the same people again on every render; the app replaces `data` on every change.
+const balanceCache = new WeakMap<Dataset, Map<string, WorkBalance>>();
 export function workBalance(data: Dataset, employeeId: string, until = data.today): WorkBalance {
+  const key = `${employeeId}|${until}|${data.today}|${data.timeEntries.length}|${data.absences?.length ?? 0}`;
+  let cache = balanceCache.get(data);
+  if (!cache) balanceCache.set(data, (cache = new Map()));
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const result = computeWorkBalance(data, employeeId, until);
+  cache.set(key, result);
+  return result;
+}
+
+function computeWorkBalance(data: Dataset, employeeId: string, until: string): WorkBalance {
   const employee = data.employees.find((e) => e.id === employeeId);
   if (!employee) throw new Error(`Unknown employee ${employeeId}`);
   const cal = new WorkCalendar(data, employee);

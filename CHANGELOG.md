@@ -4,7 +4,14 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 
 ## Unveröffentlicht
 
+### Schneller
+- Die App lädt beim Start rund 440 statt 1400 KB: Seiten, Diagramme und die Übersetzungen kommen erst, wenn sie gebraucht werden, und werden danach im Hintergrund vorgeladen.
+- Die Daten für die App sind rund dreimal kleiner (Lasttest mit 50 Personen und 5 Jahren: 3 statt 10 MB). Neu laden ohne Änderungen überträgt praktisch nichts mehr.
+- Forecast, Budgets und Überzeit-Saldi rechnen schneller, bei vielen Projekten und Personen etwa doppelt so schnell.
+
 ### Neu
+- Automatische Prüfung bei jeder Änderung auf GitHub: Typen, alle Tests gegen MariaDB, Build und Docker-Image.
+- Wöchentlicher Wiederherstellungs-Test der Backups mit Ergebnis auf der Statusseite (docs/BETRIEB.md, Abschnitt 11).
 - Website: Seiten zum Umsteigen (Import, Alternativen zu Clockodo, Toggl und Harvest), für Agenturen und Treuhänder, ein Ratgeber zur Arbeitszeiterfassung nach ArGV 1 und ein Rechner für unverrechnete Zeit. Preise, Funktionen und Roadmap zeigen die Neuerungen.
 - Offene API und Webhooks (Einstellungen → API, Paket Business): API-Schlüssel nur lesend oder lesend und schreibend, Endpunkte /api/v1 für Kunden, Projekte, Personen, Buchungen (auch anlegen, ändern, löschen), Spesen, Absenzen, Budgets mit Forecast und Rechnungen, Beschreibung als OpenAPI unter /api/v1/openapi.json. Webhooks schicken Änderungen an Buchungen, Spesen, Absenzen, Monatsabschlüssen und Rechnungen signiert per HTTPS, mit Wiederholungen und Verlauf. Anleitung in docs/API.md.
 - Lohnexport (Monatsabschluss → Lohnexport): pro Person und Monat Stunden, Soll, Überzeit, Absenztage nach Art und Spesen zur Rückerstattung als CSV mit den eigenen Lohnarten und der Personalnummer (neu im Arbeitsmodell). Für den Import in Lohnprogramme, keine Swissdec-Übermittlung.

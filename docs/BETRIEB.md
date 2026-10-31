@@ -274,6 +274,12 @@ Sofort ein Backup auslösen (z. B. vor einem Update):
 docker compose -f deploy/docker-compose.prod.yml exec backup bash /backup.sh einmal
 ```
 
+**Wiederherstellungs-Test:** Jeden Sonntag nach dem Backup spielt der Dienst den Dump in eine Wegwerf-Datenbank im eigenen Container ein (die Live-Datenbank bleibt unberührt) und vergleicht Tabellen und Zeilen (Buchungen, Personen, Firmen) mit der Live-Datenbank. Das Ergebnis steht in `verify.json` und auf der Statusseite als «Wiederherstellung geprüft»; älter als 9 Tage oder fehlgeschlagen erscheint rot. Den Wochentag ändert `BACKUP_VERIFY_WEEKDAY` (1 = Montag … 7 = Sonntag). Sofort prüfen:
+
+```bash
+docker compose -f deploy/docker-compose.prod.yml exec backup bash /backup.sh pruefen
+```
+
 Backup-Log anschauen:
 
 ```bash
@@ -452,6 +458,7 @@ Danach verbindet ein Admin unter Einstellungen → Rechnung → bexio. TrackInsi
 | Update | `git pull && docker compose -f deploy/docker-compose.prod.yml up -d --build` |
 | Logs | `docker compose -f deploy/docker-compose.prod.yml logs -f app` |
 | Backup jetzt | `docker compose -f deploy/docker-compose.prod.yml exec backup bash /backup.sh einmal` |
+| Backup prüfen | `docker compose -f deploy/docker-compose.prod.yml exec backup bash /backup.sh pruefen` |
 | Backups zeigen | `bash deploy/restore.sh` |
 | Wiederherstellen | `bash deploy/restore.sh trackinsight-JJJJ-MM-TT.sql.gz` |
 | Konfiguration ändern | `nano deploy/.env.prod`, dann `docker compose -f deploy/docker-compose.prod.yml up -d` |
