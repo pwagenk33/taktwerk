@@ -1,9 +1,10 @@
 import { WorkCalendar, addMonths, fmt1, billableSeats, canWrite, fmtCHF, fmtDate, fmtMonthLong, planById, priceOf, projectReports, trialDaysLeft } from "@taktwerk/domain";
-import { deliverDue, purgeDeliveries } from "./events";
-import { and, eq, inArray, notInArray } from "drizzle-orm";
-import type { AppContext } from "./app";
+import { deliverDue, emit, purgeDeliveries } from "./events";
+import { createInvoice } from "./reports/invoice";
+import { and, eq, inArray, ne, notInArray } from "drizzle-orm";
+import { HttpError, type AppContext } from "./app";
 import { purgeExpired } from "./routes/privacy";
-import { budgetAlerts, customers, jobRuns, monthClosings, organizations, users, type OrgSettings, type ReminderSettings } from "./db/schema";
+import { budgetAlerts, customers, invoices, jobRuns, projects, monthClosings, organizations, users, type OrgSettings, type ReminderSettings } from "./db/schema";
 import type { ChatMessage } from "./notify/webhooks";
 import { actionMail } from "./mail/mailer";
 import { sendCustomerReport } from "./reports/export";
@@ -60,6 +61,39 @@ export async function sendMonthlyReports(ctx: AppContext, now = new Date()) {
     }
   }
   return sent;
+}
+
+/**
+ * Subscription-style billing for retainers: on the 1st from 06:00 Zurich time, a draft invoice for last month for
+ * every customer with a retainer project, if the organization switched it on and no invoice for that month exists.
+ * The draft also contains that customer's other billable hours and expenses; someone checks and sends it.
+ */
+export async function draftRetainerInvoices(ctx: AppContext, now = new Date()) {
+  const z = zurich(now);
+  if (z.day === 1 && z.hour < 6) return [];
+  const month = addMonths(z.month, -1);
+  const today = `${z.month}-${String(z.day).padStart(2, "0")}`;
+  const created: { customerId: string; number: string }[] = [];
+  for (const org of await ctx.db.select().from(organizations)) {
+    if (!org.settings.autoRetainerInvoices || !org.active) continue;
+    const retainerCustomers = await ctx.db.selectDistinct({ id: projects.customerId }).from(projects).where(and(eq(projects.organizationId, org.id), eq(projects.kind, "retainer")));
+    for (const { id: customerId } of retainerCustomers) {
+      const [existing] = await ctx.db.select({ id: invoices.id }).from(invoices).where(and(eq(invoices.customerId, customerId), eq(invoices.month, month), ne(invoices.status, "cancelled"))).limit(1);
+      if (existing || !(await claim(ctx, `retainer-invoice:${customerId}`, month))) continue;
+      try {
+        const inv = await createInvoice(ctx, org.id, customerId, month, today);
+        await emit(ctx, org.id, "invoice.created", { id: inv.id, number: inv.number, customerId, month, net: inv.net, gross: inv.gross, auto: true });
+        created.push({ customerId, number: inv.number });
+      } catch (err) {
+        // Missing address or IBAN: nothing to retry until someone fixes it; the draft can still be made by hand.
+        if (!(err instanceof HttpError)) {
+          await ctx.db.delete(jobRuns).where(and(eq(jobRuns.job, `retainer-invoice:${customerId}`), eq(jobRuns.period, month)));
+          throw err;
+        }
+      }
+    }
+  }
+  return created;
 }
 
 /**
@@ -414,6 +448,7 @@ export async function runJobs(ctx: AppContext, now = new Date(), log: (msg: stri
   for (const [name, job] of [
     ["Monatsreport", () => sendMonthlyReports(ctx, now)],
     ["Budget-Alarm", () => checkBudgetAlerts(ctx)],
+    ["Retainer-Rechnungen", () => draftRetainerInvoices(ctx, now)],
     ["Stunden-Erinnerung", () => sendHoursReminders(ctx, now)],
     ["Abschluss-Erinnerung", () => sendClosingReminders(ctx, now)],
     ["Tages-Erinnerung", () => sendDailyReminders(ctx, now)],

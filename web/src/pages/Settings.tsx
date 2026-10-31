@@ -284,6 +284,19 @@ function SignIn() {
           </label>
           <button className="btn" disabled={!settings || reportDay === String(settings.reportDay ?? 3)} onClick={saveReportDay}>{tr("Speichern")}</button>
         </div>
+        <h3 style={{ marginTop: 8 }}>{tr("Retainer-Rechnungen")}</h3>
+        <label className="check">
+          <input id="s-auto-retainer" type="checkbox" disabled={!settings} checked={!!settings?.autoRetainerInvoices} onChange={async (e) => {
+            const on = e.target.checked;
+            try {
+              setSettings(await api<OrgSettings>("/api/settings", { method: "PUT", body: { autoRetainerInvoices: on } }));
+              notify(on ? tr("Retainer-Rechnungen werden am 1. als Entwurf erstellt") : tr("Automatische Retainer-Rechnungen aus"));
+            } catch (err) {
+              setError((err as Error).message);
+            }
+          }} />
+          {tr("Am 1. für jeden Kunden mit Retainer die Rechnung des Vormonats als Entwurf anlegen (Kontingent plus Mehraufwand). Versendet wird nichts automatisch.")}
+        </label>
       </section>
     </div>
   );

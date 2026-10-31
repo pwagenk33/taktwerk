@@ -68,3 +68,12 @@ describe("import", () => {
     expect(plan).toMatchObject({ entries: 2, hours: 2.25, from: "2026-09-01", to: "2026-09-02" });
   });
 });
+
+describe("parseHours for the week grid", () => {
+  it("reads decimals, commas, clock times and minutes", () => {
+    expect(parseHours("1,5")).toBe(1.5);
+    expect(parseHours("1:30")).toBe(1.5);
+    expect(parseHours("90m")).toBe(1.5);
+    expect(parseHours("abc")).toBeNull();
+  });
+});

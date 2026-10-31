@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { PROJECT_KINDS, addMonths, currencyOf, fmt1, fmtCHF, fmtCHF2, fmtDate, fmtMoney, fmtMonth, fmtMonthLong, fmtNum, monthOf, type Currency, type Figures, type PostalAddress, type ProfitRow } from "@taktwerk/domain";
+import { PROJECT_KINDS, addMonths, currencyOf, fmt1, fmtCHF, fmtCHF2, fmtDate, fmtMoney, fmtMonth, fmtMonthLong, fmtNum, fmtQty, monthOf, type Currency, type Figures, type PostalAddress, type ProfitRow } from "@taktwerk/domain";
 import { useBexio } from "./Bexio";
 import { api, type Invoice, type InvoicePosition, type InvoiceStatus } from "../api";
 import { useStore } from "../store";
@@ -111,6 +111,8 @@ const INVOICE_STATUS: Record<InvoiceStatus, { label: string; cls: string }> = {
 };
 const EMPTY_ADDRESS: PostalAddress = { name: "", street: "", zip: "", city: "", country: "CH" };
 
+type Preview = { positions: InvoicePosition[]; net: number; fixedProjects: { id: string; name: string; price: number; billedShare: number }[] };
+
 /** Invoices for one customer: billing address, preview and creation for a month, list with PDF, send and status. */
 function Invoices({ customerId }: { customerId: string }) {
   const { data, mode, notify } = useStore();
@@ -121,12 +123,16 @@ function Invoices({ customerId }: { customerId: string }) {
   const [ready, setReady] = useState<string | null>(null);
   const [address, setAddress] = useState<PostalAddress>(EMPTY_ADDRESS);
   const [editAddress, setEditAddress] = useState(false);
-  const [preview, setPreview] = useState<{ positions: InvoicePosition[]; net: number } | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [fixed, setFixed] = useState<Record<string, string>>({});
   const [showPreview, setShowPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const bexio = useBexio();
   const [error, setError] = useState("");
   const demo = mode === "demo";
+  // Instalments in % per fixed-price project; empty or invalid fields are left out.
+  const shares = Object.fromEntries(Object.entries(fixed).map(([id, v]) => [id, Number(v.replace(",", "."))]).filter(([, n]) => Number.isFinite(n as number) && (n as number) > 0 && (n as number) <= 100));
+  const sharesKey = JSON.stringify(shares);
 
   const reload = async () => {
     const r = await api<{ invoices: Invoice[]; ready: string | null }>(`/api/invoices?customerId=${customerId}`);
@@ -146,9 +152,12 @@ function Invoices({ customerId }: { customerId: string }) {
   }, [customerId, demo]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (demo) return;
-    setPreview(null);
-    api<{ positions: InvoicePosition[]; net: number }>(`/api/invoices/preview?customerId=${customerId}&month=${month}`).then(setPreview).catch(() => {});
-  }, [customerId, month, demo]);
+    const t = setTimeout(() => {
+      api<Preview>(`/api/invoices/preview?customerId=${customerId}&month=${month}${Object.keys(shares).length ? `&fixed=${encodeURIComponent(JSON.stringify(shares))}` : ""}`).then(setPreview).catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [customerId, month, demo, sharesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setFixed({}), [customerId]);
 
   const run = async (fn: () => Promise<unknown>, msg: string) => {
     setBusy(true);
@@ -163,7 +172,10 @@ function Invoices({ customerId }: { customerId: string }) {
       setBusy(false);
     }
   };
-  const create = () => run(() => api("/api/invoices", { body: { customerId, month } }), tr("Rechnung für {0} erstellt", fmtMonthLong(month)));
+  const create = () => run(async () => {
+    await api("/api/invoices", { body: { customerId, month, ...(Object.keys(shares).length ? { fixed: shares } : {}) } });
+    setFixed({});
+  }, tr("Rechnung für {0} erstellt", fmtMonthLong(month)));
   const send = (i: Invoice) => run(() => api(`/api/invoices/${i.id}/send`, { body: {} }), tr("Rechnung {0} versendet", i.number));
   const status = (i: Invoice, status: InvoiceStatus, msg: string) => run(() => api(`/api/invoices/${i.id}/status`, { body: { status } }), msg);
   const toBexio = (i: Invoice) => run(async () => {
@@ -215,13 +227,30 @@ function Invoices({ customerId }: { customerId: string }) {
           {tr("Rechnung erstellen")}
         </button>
       </div>
+      {preview && preview.fixedProjects.length > 0 && (
+        <div className="fixed-shares">
+          {preview.fixedProjects.map((f) => {
+            const left = Math.max(0, Math.round((100 - f.billedShare) * 100) / 100);
+            return (
+              <label key={f.id} className="field fixed-share">
+                <span>{tr("Festpreis {0}", f.name)}</span>
+                <span className="fixed-share-row">
+                  <input id={`i-fixed-${f.id}`} className="input num" inputMode="decimal" placeholder="0" value={fixed[f.id] ?? ""} disabled={left <= 0} onChange={(e) => setFixed({ ...fixed, [f.id]: e.target.value })} />
+                  <span>%</span>
+                  <span className="muted">{tr("{0} % von {1} verrechnet, {2} % offen", fmtNum(f.billedShare), fmtCHF(f.price), fmtNum(left))}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
       {showPreview && preview && (
         <div className="table-wrap">
           <table className="data">
             <thead><tr><th>{tr("Position")}</th><th className="r">{tr("Menge")}</th><th className="r">{tr("Ansatz")}</th><th className="r">{tr("Betrag")}</th></tr></thead>
             <tbody>
               {preview.positions.map((p, i) => (
-                <tr key={i}><td>{p.text}{p.detail && <div className="muted" style={{ fontSize: "0.76rem" }}>{p.detail}</div>}</td><td className="r num">{fmtNum(p.quantity)} {p.unit}</td><td className="r num">{fmtCHF2(p.unitPrice)}</td><td className="r num">{fmtCHF2(p.amount)}</td></tr>
+                <tr key={i}><td>{p.text}{p.detail && <div className="muted" style={{ fontSize: "0.76rem" }}>{p.detail}</div>}</td><td className="r num">{fmtQty(p.quantity)} {p.unit}</td><td className="r num">{fmtCHF2(p.unitPrice)}</td><td className="r num">{fmtCHF2(p.amount)}</td></tr>
               ))}
             </tbody>
           </table>

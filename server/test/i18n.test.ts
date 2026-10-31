@@ -40,7 +40,8 @@ describe("language per request and per recipient", () => {
   });
 
   it("formats numbers in the recipient's language", () => {
-    expect(withLocale("fr", () => fmtCHF(12300))).toMatch(/^12\s300\sCHF$/);
+    // French Swiss grouping is a space or ’ depending on the ICU/CLDR version of the runtime.
+    expect(withLocale("fr", () => fmtCHF(12300))).toMatch(/^12[\s’]300\sCHF$/);
     expect(withLocale("de", () => fmtCHF(12300))).toMatch(/^CHF\s12’300$/);
   });
 

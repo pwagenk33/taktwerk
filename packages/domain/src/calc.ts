@@ -425,6 +425,7 @@ function df(key: string, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat 
 const chf = { format: (v: number) => nf("chf", { style: "currency", currency: "CHF", maximumFractionDigits: 0 }).format(v) };
 const chf2 = { format: (v: number) => nf("chf2", { style: "currency", currency: "CHF", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) };
 const num1 = { format: (v: number) => nf("num1", { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(v) };
+const num2 = { format: (v: number) => nf("num2", { maximumFractionDigits: 2 }).format(v) };
 const num0 = { format: (v: number) => nf("num0", { maximumFractionDigits: 0 }).format(v) };
 const monthFmt = { format: (d: Date) => df("month", { month: "short", year: "2-digit", timeZone: "UTC" }).format(d) };
 const monthLong = { format: (d: Date) => df("monthLong", { month: "long", year: "numeric", timeZone: "UTC" }).format(d) };
@@ -441,6 +442,8 @@ export const fmtKCHF = (v: number) => `${num0.format(v / 1000)}k`;
 export const fmtH = (v: number) => `${num1.format(v)} h`;
 export const fmtNum = (v: number) => num0.format(v);
 export const fmt1 = (v: number) => num1.format(v);
+/** Up to two decimals, for quantities such as 70.25 h on an invoice. */
+export const fmtQty = (v: number) => num2.format(v);
 const toDate = (m: string) => new Date(`${m.length === 7 ? `${m}-01` : m}T00:00:00Z`);
 export const fmtMonth = (m: string) => monthFmt.format(toDate(m)).replace(".", "");
 export const fmtMonthLong = (m: string) => monthLong.format(toDate(m));

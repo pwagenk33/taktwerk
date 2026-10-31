@@ -1,4 +1,4 @@
-import { DEFAULT_RATES, addMonths, countsExpense, fmtMonthLong } from "@taktwerk/domain";
+import { DEFAULT_RATES, addMonths, countsExpense, fmtMonthLong, rateOn } from "@taktwerk/domain";
 import { and, desc, eq, like } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import PDFDocument from "pdfkit";
@@ -29,30 +29,75 @@ export function billingProblem(b: BillingSettings | undefined): string | null {
   return null;
 }
 
-/** Positions for one customer and month: hours per sub-project and rate, approved billable expenses. */
-export async function invoicePositions(ctx: AppContext, orgId: string, customerId: string, month: string) {
-  const data = await loadDataset(ctx, { id: "", organizationId: orgId, name: "", username: "", email: "", role: "admin" });
-  const subs = new Map(
-    data.subProjects
-      .filter((s) => data.projects.find((p) => p.id === s.projectId)?.customerId === customerId)
-      .map((s) => [s.id, { sub: s, project: data.projects.find((p) => p.id === s.projectId)! }]),
-  );
+/** Share of a fixed price (in %) already billed on invoices that are not cancelled, per project. */
+export async function fixedShares(ctx: AppContext, orgId: string, customerId: string): Promise<Map<string, number>> {
+  const rows = await ctx.db.select({ positions: invoices.positions, status: invoices.status }).from(invoices).where(and(eq(invoices.organizationId, orgId), eq(invoices.customerId, customerId)));
+  const out = new Map<string, number>();
+  for (const r of rows) if (r.status !== "cancelled") for (const p of r.positions) if (p.projectId && p.share) out.set(p.projectId, (out.get(p.projectId) ?? 0) + p.share);
+  return out;
+}
+
+/**
+ * Positions for one customer and month, by project kind:
+ * - time & material: hours per sub-project and frozen rate;
+ * - retainer: the monthly contingent at the customer's rate, plus hours above it at their rates;
+ * - fixed price: no hours; an instalment only when `fixed` names a share of the price in %.
+ * Approved billable expenses are added for every kind.
+ */
+export async function invoicePositions(ctx: AppContext, orgId: string, customerId: string, month: string, fixed: Record<string, number> = {}) {
+  const data = await loadDataset(ctx, { id: "", organizationId: orgId, name: "", username: "", email: "", role: "admin" }, { detailFrom: `${month}-01` });
+  const customer = data.customers.find((c) => c.id === customerId);
+  const projects = new Map(data.projects.filter((p) => p.customerId === customerId).map((p) => [p.id, p]));
+  const subs = new Map(data.subProjects.filter((s) => projects.has(s.projectId)).map((s) => [s.id, { sub: s, project: projects.get(s.projectId)! }]));
   const inMonth = (d: string) => d.startsWith(month);
   const positions: InvoicePosition[] = [];
+  const hourLine = (text: string, detail: string, hours: number, rate: number): InvoicePosition => ({ text, detail, quantity: round2(hours), unit: "h", unitPrice: rate, amount: round05(hours * rate) });
 
   // Hours grouped by sub-project and frozen rate (a rate change mid-month gives two lines).
-  const groups = new Map<string, { text: string; detail: string; hours: number; rate: number }>();
+  const groups = new Map<string, { text: string; hours: number; rate: number }>();
+  const retainerHours = new Map<string, { hours: number; byRate: Map<number, number> }>();
   for (const e of data.timeEntries) {
     const s = subs.get(e.subProjectId);
-    if (!s || !e.billable || !inMonth(e.date)) continue;
+    if (!s || !e.billable || !inMonth(e.date) || e.summary) continue;
+    const kind = s.project.kind ?? "tm";
+    if (kind === "fixed") continue;
+    if (kind === "retainer" && s.project.retainerHours) {
+      const r = retainerHours.get(s.project.id) ?? { hours: 0, byRate: new Map<number, number>() };
+      r.hours += e.hours;
+      r.byRate.set(e.hourlyRate, (r.byRate.get(e.hourlyRate) ?? 0) + e.hours);
+      retainerHours.set(s.project.id, r);
+      continue;
+    }
     const key = `${e.subProjectId}:${e.hourlyRate}`;
-    const g = groups.get(key) ?? { text: `${s.project.name} · ${s.sub.name}`, detail: tr("Leistungen {0}", fmtMonthLong(month)), hours: 0, rate: e.hourlyRate };
+    const g = groups.get(key) ?? { text: `${s.project.name} · ${s.sub.name}`, hours: 0, rate: e.hourlyRate };
     g.hours += e.hours;
     groups.set(key, g);
   }
-  for (const g of [...groups.values()].sort((a, b) => a.text.localeCompare(b.text, "de"))) {
-    positions.push({ text: g.text, detail: g.detail, quantity: round2(g.hours), unit: "h", unitPrice: g.rate, amount: round05(g.hours * g.rate) });
+  for (const g of [...groups.values()].sort((a, b) => a.text.localeCompare(b.text, "de"))) positions.push(hourLine(g.text, tr("Leistungen {0}", fmtMonthLong(month)), g.hours, g.rate));
+
+  // Retainers: the contingent is billed every month, used or not; hours above it come on top at their rates.
+  for (const p of [...projects.values()].filter((p) => p.kind === "retainer" && p.retainerHours).sort((a, b) => a.name.localeCompare(b.name, "de"))) {
+    const rate = customer ? rateOn(customer, `${month}-01`) : 0;
+    positions.push({ ...hourLine(tr("Retainer {0}", p.name), tr("Kontingent {0}", fmtMonthLong(month)), p.retainerHours!, rate) });
+    const used = retainerHours.get(p.id);
+    let over = used ? used.hours - p.retainerHours! : 0;
+    if (used && over > 0.001) {
+      // The most recent rates are used for the hours above the contingent (rates rarely differ within a month).
+      for (const [r, h] of [...used.byRate.entries()].sort((a, b) => b[0] - a[0])) {
+        const take = Math.min(h, over);
+        if (take > 0.001) positions.push(hourLine(tr("{0}: Mehraufwand über Kontingent", p.name), tr("{0} h gebucht, {1} h im Kontingent", round2(used.hours), p.retainerHours!), take, r));
+        over -= take;
+      }
+    }
   }
+
+  // Fixed price: an instalment as a share of the price.
+  for (const [projectId, share] of Object.entries(fixed)) {
+    const p = projects.get(projectId);
+    if (!p || p.kind !== "fixed" || !(share > 0)) continue;
+    positions.push({ text: tr("Festpreis {0}", p.name), detail: tr("Teilrechnung {0} % von {1}", share, p.budget.toLocaleString("de-CH").replace(/'/g, "’")), quantity: share, unit: "%", unitPrice: round2(p.budget / 100), amount: round05((p.budget * share) / 100), projectId, share });
+  }
+
   const person = new Map(data.employees.map((e) => [e.id, e.name]));
   for (const x of data.expenses.filter((x) => countsExpense(x) && inMonth(x.date) && subs.has(x.subProjectId)).sort((a, b) => a.date.localeCompare(b.date))) {
     const s = subs.get(x.subProjectId)!;
@@ -62,7 +107,7 @@ export async function invoicePositions(ctx: AppContext, orgId: string, customerI
       positions.push({ text: `${tr(x.category)} ${swissDate(x.date)} · ${x.reason}`, detail: `${s.sub.name} · ${person.get(x.employeeId) ?? ""}`, quantity: 1, unit: "Stk.", unitPrice: x.amount, amount: x.amount });
     }
   }
-  return { positions, customerName: data.customers.find((c) => c.id === customerId)?.name ?? "" };
+  return { positions, customerName: customer?.name ?? "" };
 }
 
 async function nextNumber(ctx: AppContext, orgId: string, year: string) {
@@ -76,12 +121,12 @@ async function nextNumber(ctx: AppContext, orgId: string, year: string) {
   return `${year}-${String(n).padStart(4, "0")}`;
 }
 
-export async function createInvoice(ctx: AppContext, orgId: string, customerId: string, month: string, today: string): Promise<Invoice> {
+export async function createInvoice(ctx: AppContext, orgId: string, customerId: string, month: string, today: string, fixed: Record<string, number> = {}): Promise<Invoice> {
   const [lang] = await ctx.db.select({ locale: customers.locale }).from(customers).where(and(eq(customers.id, customerId), eq(customers.organizationId, orgId))).limit(1);
-  return withLocale(lang?.locale, () => createInvoiceIn(ctx, orgId, customerId, month, today));
+  return withLocale(lang?.locale, () => createInvoiceIn(ctx, orgId, customerId, month, today, fixed));
 }
 
-async function createInvoiceIn(ctx: AppContext, orgId: string, customerId: string, month: string, today: string): Promise<Invoice> {
+async function createInvoiceIn(ctx: AppContext, orgId: string, customerId: string, month: string, today: string, fixed: Record<string, number>): Promise<Invoice> {
   const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
   const [customer] = await ctx.db.select().from(customers).where(and(eq(customers.id, customerId), eq(customers.organizationId, orgId))).limit(1);
   if (!org || !customer) throw new HttpError(404, tr("Kunde nicht gefunden."));
@@ -95,7 +140,11 @@ async function createInvoiceIn(ctx: AppContext, orgId: string, customerId: strin
     .limit(1);
   if (existing) throw new HttpError(409, tr("Für {0} gibt es bereits den Entwurf {1}.", fmtMonthLong(month), existing.number));
 
-  const { positions } = await invoicePositions(ctx, orgId, customerId, month);
+  const billed = await fixedShares(ctx, orgId, customerId);
+  for (const [projectId, share] of Object.entries(fixed)) {
+    if ((billed.get(projectId) ?? 0) + share > 100.001) throw new HttpError(400, tr("Vom Festpreis sind schon {0} % verrechnet; mehr als 100 % geht nicht.", round2(billed.get(projectId) ?? 0)));
+  }
+  const { positions } = await invoicePositions(ctx, orgId, customerId, month, fixed);
   if (positions.length === 0) throw new HttpError(400, tr("Für {0} gibt es keine verrechenbaren Leistungen oder Spesen.", fmtMonthLong(month)));
   const billing = org.settings.billing!;
   const vatRate = org.settings.vatRate ?? DEFAULT_RATES.vatRate;

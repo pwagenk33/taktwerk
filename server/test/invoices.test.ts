@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { login, setup } from "./helpers";
+import { draftRetainerInvoices } from "../src/jobs";
 
 let t: Awaited<ReturnType<typeof setup>>;
 let admin: string, lead: string, lea: string;
@@ -96,5 +97,55 @@ describe("invoices", () => {
     await send("PUT", `/api/customers/${medtech}/address`, admin, { name: "", street: "", zip: "", city: "" }).catch(() => {});
     const noAddress = (await send("POST", "/api/customers", admin, { name: "Neu AG", hourlyRate: 100, validFrom: "2026-01-01" })).json();
     expect((await send("POST", "/api/invoices", lead, { customerId: noAddress.id, month: "2026-09" })).statusCode).toBe(400);
+  });
+});
+
+describe("project kinds", () => {
+  type Pos = { text: string; quantity: number; unit: string; amount: number; share?: number };
+  it("bills a retainer's contingent and the hours above it", async () => {
+    const d = (await get("/api/dataset", admin)).json();
+    const rhein = d.customers.find((c: { name: string }) => c.name.startsWith("Rheinlogistik")).id;
+    const p = (await get(`/api/invoices/preview?customerId=${rhein}&month=2026-09`, lead)).json();
+    const lines = p.positions.filter((x: Pos) => x.unit === "h") as Pos[];
+    const contingent = lines.find((x) => x.text.startsWith("Retainer "))!;
+    expect(contingent.quantity).toBe(120);
+    const over = lines.filter((x) => x.text.includes("Mehraufwand"));
+    const booked = d.timeEntries
+      .filter((e: { subProjectId: string; date: string; billable: boolean }) => e.billable && e.date.startsWith("2026-09") && d.subProjects.find((s: { id: string }) => s.id === e.subProjectId)?.projectId === d.projects.find((x: { name: string }) => x.name === "Flottenmanagement").id)
+      .reduce((s: number, e: { hours: number }) => s + e.hours, 0);
+    expect(over.reduce((s, x) => s + x.quantity, 0)).toBeCloseTo(Math.max(0, booked - 120), 1);
+    expect(lines.every((x) => x.text.startsWith("Retainer ") || x.text.includes("Mehraufwand"))).toBe(true);
+  });
+
+  it("bills fixed prices in instalments up to 100 %", async () => {
+    await send("PUT", `/api/customers/${stadtwerke}/address`, lead, { name: "Stadtwerke Aarau", street: "Obere Vorstadt 37", zip: "5000", city: "Aarau" });
+    const p = (await get(`/api/invoices/preview?customerId=${stadtwerke}&month=2026-09`, lead)).json();
+    expect(p.positions.some((x: Pos) => x.unit === "h")).toBe(false);
+    const fixed = p.fixedProjects[0];
+    expect(fixed).toMatchObject({ billedShare: 0 });
+    expect(fixed.price).toBeGreaterThan(0);
+    const withShare = (await get(`/api/invoices/preview?customerId=${stadtwerke}&month=2026-09&fixed=${encodeURIComponent(JSON.stringify({ [fixed.id]: 40 }))}`, lead)).json();
+    const inst = withShare.positions.find((x: Pos) => x.unit === "%");
+    expect(inst).toMatchObject({ quantity: 40, share: 40 });
+    expect(inst.amount).toBeCloseTo(Math.round((fixed.price * 0.4) / 0.05) * 0.05, 2);
+
+    expect((await send("POST", "/api/invoices", lead, { customerId: stadtwerke, month: "2026-09", fixed: { [fixed.id]: 70 } })).statusCode).toBe(201);
+    expect((await send("POST", "/api/invoices", lead, { customerId: stadtwerke, month: "2026-10", fixed: { [fixed.id]: 40 } })).statusCode).toBe(400);
+    expect((await get(`/api/invoices/preview?customerId=${stadtwerke}&month=2026-10`, lead)).json().fixedProjects[0].billedShare).toBe(70);
+    expect((await send("POST", "/api/invoices", lead, { customerId: stadtwerke, month: "2026-10", fixed: { [fixed.id]: 30 } })).statusCode).toBe(201);
+  });
+
+  it("drafts retainer invoices on the 1st when switched on", async () => {
+    const d = (await get("/api/dataset", admin)).json();
+    const rhein = d.customers.find((c: { name: string }) => c.name.startsWith("Rheinlogistik")).id;
+    await send("PUT", `/api/customers/${rhein}/address`, lead, { name: "Rheinlogistik AG", street: "Hafenstrasse 1", zip: "4057", city: "Basel" });
+    expect(await draftRetainerInvoices(t.app.ctx, new Date("2026-10-01T08:00:00Z"))).toEqual([]);
+    expect((await send("PUT", "/api/settings", admin, { autoRetainerInvoices: true })).statusCode).toBe(200);
+    expect(await draftRetainerInvoices(t.app.ctx, new Date("2026-10-01T03:00:00Z"))).toEqual([]);
+    const made = await draftRetainerInvoices(t.app.ctx, new Date("2026-10-01T08:00:00Z"));
+    expect(made).toEqual([expect.objectContaining({ customerId: rhein })]);
+    expect(await draftRetainerInvoices(t.app.ctx, new Date("2026-10-01T08:15:00Z"))).toEqual([]);
+    const list = (await get(`/api/invoices?customerId=${rhein}`, lead)).json().invoices;
+    expect(list.filter((i: { month: string }) => i.month === "2026-09")).toHaveLength(1);
   });
 });

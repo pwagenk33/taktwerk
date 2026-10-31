@@ -1162,3 +1162,36 @@ body.dialog-open { overflow: hidden; }
   .mon-err { grid-template-columns: auto minmax(0, 1fr); }
   .mon-err .mono, .mon-err .when { display: none; }
 }
+
+/* Week grid (Zeiterfassung → Wochenraster) */
+.grid-nav { display: flex; align-items: center; gap: 6px; }
+.grid-nav h2 { margin: 0 4px; }
+.week-grid { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.week-grid th, .week-grid td { border-bottom: 1px solid var(--line); padding: 0; }
+.week-grid thead th { font-weight: 500; color: var(--muted); font-size: 0.78rem; padding: 8px 6px; text-align: right; white-space: nowrap; }
+.week-grid thead th.today { color: var(--ink); box-shadow: inset 0 -2px 0 var(--brand); }
+.week-grid .g-row { text-align: left; padding: 8px 12px 8px 16px; min-width: 220px; position: relative; }
+.week-grid .g-label { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+.week-grid .g-reason { font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+.week-grid .g-remove { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 1rem; }
+.week-grid .g-cell { width: 76px; }
+.week-grid .g-cell.we, .week-grid th.we, .week-grid .g-total.we { background: var(--surface-2); }
+.week-grid .g-cell input { width: 100%; height: 44px; border: 0; background: transparent; text-align: right; padding: 0 10px; font: inherit; color: var(--ink); }
+.week-grid .g-cell input:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--ink); background: var(--surface); }
+.week-grid .g-cell input:disabled { color: var(--muted); cursor: not-allowed; }
+.week-grid .g-cell.busy input { opacity: 0.5; }
+.week-grid .g-sum { width: 72px; text-align: right; padding: 8px 16px 8px 8px; }
+.week-grid tfoot td, .week-grid tfoot th { border-bottom: 0; border-top: 1.5px solid var(--ink); }
+.week-grid .g-total { text-align: right; padding: 8px 10px; }
+.week-grid .g-total.ok strong { color: var(--good-ink); }
+.week-grid .g-total .muted, .week-grid .g-sum .muted { font-size: 0.75rem; }
+.week-grid .g-empty { padding: 20px 16px; }
+.grid-add { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto; gap: 8px; border-top: 1px solid var(--line); }
+.grid-hint { font-size: 0.78rem; padding-top: 0; }
+@media (max-width: 700px) { .grid-add { grid-template-columns: 1fr; } .week-grid .g-row { min-width: 160px; } }
+.week-grid .g-cell input:hover:not(:disabled):not(:focus) { background: var(--surface-2); }
+
+/* Fixed-price instalments on the invoice card */
+.fixed-shares { display: flex; flex-direction: column; gap: 8px; }
+.fixed-share-row { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; }
+.fixed-share-row input { width: 5.5em; text-align: right; }

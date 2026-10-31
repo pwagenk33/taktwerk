@@ -95,6 +95,8 @@ export interface OrgSettings {
   onboarding?: "open" | "done";
   /** Wage type numbers of the payroll system per item of the payroll export. */
   payrollCodes?: Partial<Record<string, string>>;
+  /** On the 1st, draft last month's invoice for every customer with a retainer project (default off). */
+  autoRetainerInvoices?: boolean;
 }
 
 export const organizations = mysqlTable(
@@ -341,9 +343,12 @@ export interface InvoicePosition {
   text: string;
   detail?: string;
   quantity: number;
-  unit: "h" | "km" | "Stk.";
+  unit: "h" | "km" | "Stk." | "%";
   unitPrice: number;
   amount: number;
+  /** Fixed-price instalment: the project and the share of its price (in %) this line bills. */
+  projectId?: string;
+  share?: number;
 }
 
 export const invoices = mysqlTable(
@@ -373,6 +378,40 @@ export const invoices = mysqlTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("inv_number_uq").on(t.organizationId, t.number), index("inv_customer_idx").on(t.customerId)],
+);
+
+export interface QuotePosition {
+  /** Becomes the sub-project's name when the quote is accepted. */
+  name: string;
+  note?: string;
+  hours: number;
+  rate: number;
+  amount: number;
+}
+
+/** Quotes (Offerten) per customer; accepting one creates the project with a sub-project per position. */
+export const quotes = mysqlTable(
+  "quotes",
+  {
+    id: id().primaryKey(),
+    organizationId: orgId(),
+    customerId: id("customer_id").notNull().references(() => customers.id, { onDelete: "restrict" }),
+    /** Running number per organization, e.g. O-2026-0003. */
+    number: varchar("number", { length: 20 }).notNull(),
+    title: varchar("title", { length: 200 }).notNull(),
+    intro: text("intro"),
+    kind: mysqlEnum("kind", ["tm", "fixed", "retainer"]).notNull().default("tm"),
+    retainerHours: decimal("retainer_hours", { precision: 6, scale: 1, mode: "number" }),
+    validUntil: date("valid_until", { mode: "string" }).notNull(),
+    status: mysqlEnum("status", ["draft", "sent", "accepted", "declined"]).notNull().default("draft"),
+    positions: json<QuotePosition[]>("positions").notNull(),
+    net: money("net").notNull(),
+    /** Project created on acceptance. */
+    projectId: id("project_id"),
+    decidedAt: datetime("decided_at", { mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("quote_number_uq").on(t.organizationId, t.number), index("quote_customer_idx").on(t.customerId)],
 );
 
 /** Mirror of JIRA issues, filled by the JIRA sync (milestone 2) or the seed. */

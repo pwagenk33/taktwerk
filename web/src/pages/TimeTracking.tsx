@@ -10,6 +10,7 @@ import { Select } from "../ui/Select";
 import { Field, FieldRow, FormDialog } from "../ui/Dialog";
 import { intlLocale, tr, trn } from "../i18n";
 import { useCalendarSuggestions } from "../calendar";
+import { WeekGrid } from "./WeekGrid";
 
 const CATEGORIES = EXPENSE_CATEGORIES as readonly ExpenseCategory[];
 
@@ -1457,8 +1458,8 @@ export function TimeTracking() {
   const { data, currentUserId } = useStore();
   const stamping = data.workModel?.timeModel === "full";
   const me = data.employees.find((e) => e.id === currentUserId);
-  const [view, setView] = useState<"day" | "week">(() => loadLocal<"day" | "week">("rt.view", "week"));
-  const switchTo = (v: "day" | "week") => {
+  const [view, setView] = useState<"day" | "week" | "grid">(() => loadLocal<"day" | "week" | "grid">("rt.view", "week"));
+  const switchTo = (v: "day" | "week" | "grid") => {
     setView(v);
     saveLocal("rt.view", v);
   };
@@ -1471,6 +1472,7 @@ export function TimeTracking() {
         </div>
         <div className="seg" role="tablist" aria-label={tr("Ansicht")}>
           <button id="view-week" className={view === "week" ? "on" : ""} onClick={() => switchTo("week")}>{tr("Kalender")}</button>
+          <button id="view-grid" className={view === "grid" ? "on" : ""} onClick={() => switchTo("grid")}>{tr("Wochenraster")}</button>
           <button id="view-day" className={view === "day" ? "on" : ""} onClick={() => switchTo("day")}>{tr("Liste")}</button>
         </div>
       </div>
@@ -1480,6 +1482,8 @@ export function TimeTracking() {
           {me && <WorkTiles employee={me} />}
           <WeekCalendar />
         </>
+      ) : view === "grid" ? (
+        <WeekGrid />
       ) : (
         <div className="grid-2" style={{ alignItems: "start" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>

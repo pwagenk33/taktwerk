@@ -3,11 +3,13 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { HttpError, requireRole } from "../app";
 import { customers, invoices, organizations } from "../db/schema";
-import { billingProblem, createInvoice, invoicePositions, renderInvoicePdf, sendInvoice } from "../reports/invoice";
-import { todayZurich } from "./data";
+import { billingProblem, createInvoice, fixedShares, invoicePositions, renderInvoicePdf, sendInvoice } from "../reports/invoice";
+import { loadDataset, todayZurich } from "./data";
 import { emit } from "../events";
 import { tr } from "@taktwerk/domain";
 
+/** Fixed-price instalments: project id → share of the price in %. */
+const fixedParam = z.record(z.string(), z.number().gt(0).max(100));
 const monthParam = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, tr("Monat im Format JJJJ-MM"));
 
 export async function invoiceRoutes(app: FastifyInstance) {
@@ -41,15 +43,20 @@ export async function invoiceRoutes(app: FastifyInstance) {
   /** What an invoice for this month would contain, before creating it. */
   app.get("/api/invoices/preview", async (req) => {
     const user = requireRole(req, "admin", "consultant");
-    const q = z.object({ customerId: z.string(), month: monthParam }).parse(req.query);
-    const { positions } = await invoicePositions(ctx, user.organizationId, q.customerId, q.month);
-    return { positions, net: Math.round(positions.reduce((s, p) => s + p.amount, 0) * 100) / 100 };
+    const q = z.object({ customerId: z.string(), month: monthParam, fixed: z.string().optional() }).parse(req.query);
+    const fixed = q.fixed ? fixedParam.parse(JSON.parse(q.fixed)) : {};
+    const { positions } = await invoicePositions(ctx, user.organizationId, q.customerId, q.month, fixed);
+    // Fixed-price projects of this customer with the share billed so far, for the instalment fields.
+    const billed = await fixedShares(ctx, user.organizationId, q.customerId);
+    const dataset = await loadDataset(ctx, user, { detailFrom: `${q.month}-01` });
+    const fixedProjects = dataset.projects.filter((p) => p.customerId === q.customerId && p.kind === "fixed").map((p) => ({ id: p.id, name: p.name, price: p.budget, billedShare: Math.round((billed.get(p.id) ?? 0) * 100) / 100 }));
+    return { positions, net: Math.round(positions.reduce((s, p) => s + p.amount, 0) * 100) / 100, fixedProjects };
   });
 
   app.post("/api/invoices", async (req, reply) => {
     const user = requireRole(req, "admin", "consultant");
-    const body = z.object({ customerId: z.string(), month: monthParam }).parse(req.body);
-    const inv = await createInvoice(ctx, user.organizationId, body.customerId, body.month, todayZurich());
+    const body = z.object({ customerId: z.string(), month: monthParam, fixed: fixedParam.optional() }).parse(req.body);
+    const inv = await createInvoice(ctx, user.organizationId, body.customerId, body.month, todayZurich(), body.fixed ?? {});
     await emit(ctx, user.organizationId, "invoice.created", summary(inv));
     return reply.status(201).send(summary(inv));
   });

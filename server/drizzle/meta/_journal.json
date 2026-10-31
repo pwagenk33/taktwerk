@@ -183,6 +183,13 @@
       "when": 1793323405900,
       "tag": "0025_api_webhooks",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1793446523964,
+      "tag": "0026_quotes",
+      "breakpoints": true
     }
   ]
 }

@@ -121,6 +121,7 @@ export interface Settings {
   ssoAutoProvisionDomains: string[];
   payrollCodes?: Record<string, string>;
   reportDay?: number;
+  autoRetainerInvoices?: boolean;
   weeklyHours?: number;
   holidays?: Holiday[];
   kmRate?: number;
@@ -152,9 +153,11 @@ export interface InvoicePosition {
   text: string;
   detail?: string;
   quantity: number;
-  unit: "h" | "km" | "Stk.";
+  unit: "h" | "km" | "Stk." | "%";
   unitPrice: number;
   amount: number;
+  projectId?: string;
+  share?: number;
 }
 export interface Invoice {
   id: string;
