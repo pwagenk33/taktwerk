@@ -211,6 +211,13 @@
       "when": 1793467568294,
       "tag": "0029_email_per_org",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1793468395406,
+      "tag": "0030_chat_links",
+      "breakpoints": true
     }
   ]
 }

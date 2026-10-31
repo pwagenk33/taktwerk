@@ -27,6 +27,7 @@ import { expenseRoutes } from "./routes/expenses";
 import { invoiceRoutes } from "./routes/invoices";
 import { quoteRoutes } from "./routes/quotes";
 import { ssoRoutes } from "./routes/sso";
+import { chatRoutes } from "./routes/chat";
 import { mandateRoutes } from "./routes/mandates";
 import { worktimeRoutes } from "./routes/worktime";
 import { planningRoutes } from "./routes/planning";
@@ -217,6 +218,8 @@ export async function buildApp(ctx: AppContext) {
     if (!req.url.startsWith("/api/") || ["GET", "HEAD", "OPTIONS"].includes(req.method)) return;
     // The identity provider posts the signed SAML response from its own origin.
     if (/^\/api\/auth\/saml\/[^/]+\/acs$/.test(req.url.split("?")[0]!)) return;
+    // Slack and Teams call with a signed body (checked in the route).
+    if (/^\/api\/chat\/(slack|teams)\//.test(req.url)) return;
     const origin = req.headers.origin;
     if (!origin) return;
     const originHost = (() => { try { return new URL(origin).host; } catch { return ""; } })();
@@ -305,6 +308,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(quoteRoutes);
   await app.register(mandateRoutes);
   await app.register(ssoRoutes);
+  await app.register(chatRoutes);
   await app.register(planningRoutes);
   await app.register(portalRoutes);
   await app.register(platformRoutes);

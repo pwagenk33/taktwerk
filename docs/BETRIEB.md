@@ -470,7 +470,17 @@ Geprüft wird die Signatur der Assertion mit dem hinterlegten Zertifikat, die Zi
 
 Entra legt Personen an, ändert Name und Adresse und deaktiviert Austritte. Löschen in Entra deaktiviert nur; Buchungen bleiben für Reports. Rollen und Teams werden in TrackInsight vergeben. Die letzte aktive Admin-Person kann per SCIM nicht deaktiviert werden.
 
-## 20. Kurzreferenz
+## 20. Buchen aus Slack und Microsoft Teams
+
+Pro Firma unter Einstellungen → Slack & Teams (nur Admins). Es braucht keine Server-Variablen; die Geheimnisse liegen pro Firma in der Datenbank und gehen nie an den Browser.
+
+**Slack:** api.slack.com/apps → Create New App → From scratch. Slash Commands → `/zeit` mit der angezeigten Request URL. Basic Information → Signing Secret in TrackInsight einfügen, App im Workspace installieren. Jede Anfrage wird mit dem Signing Secret geprüft (Signatur v0, höchstens 5 Minuten alt).
+
+**Teams:** Im gewünschten Team → Apps verwalten → Ausgehenden Webhook erstellen, Rückruf-URL aus TrackInsight. Das angezeigte Sicherheitstoken in TrackInsight einfügen. Geprüft wird die HMAC-Signatur jeder Nachricht.
+
+**Bedienung:** `2h Muster Website Startseite überarbeitet` (Dauer, Anfang von Kunde/Projekt/Teilprojekt, Text), `gestern 1:30 …`, `heute`, `woche`, `hilfe`. Beim ersten Mal antwortet der Bot mit einem Link (30 Minuten gültig); wer ihn angemeldet öffnet, verknüpft sein Chat-Konto. Gebucht wird mit den Regeln der App (abgeschlossene Monate und Projekte, Rechte).
+
+## 21. Kurzreferenz
 
 | Aufgabe | Befehl (im Ordner `~/trackinsight`) |
 |---|---|

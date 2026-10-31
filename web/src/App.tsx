@@ -200,7 +200,7 @@ function HeaderTimer() {
 const isTyping = (el: EventTarget | null) => el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.closest("[role=dialog]") !== null);
 
 export function App() {
-  const { role, setRole, toast, branding, mode, me, logout, pending, flushOutbox, scope } = useStore();
+  const { role, setRole, toast, branding, mode, me, logout, pending, flushOutbox, scope, notify } = useStore();
   const [page, setPage] = useState<PageId>(readHash);
   const [hash, setHash] = useState(location.hash);
   const [theme, setTheme] = useTheme();
@@ -225,6 +225,18 @@ export function App() {
     }
     return () => window.removeEventListener("ti:setup", open);
   }, [role, mode]);
+
+  // Finishes linking a Slack or Teams account (link from the chat, kept across the sign-in in main.tsx).
+  useEffect(() => {
+    let token: string | null = null;
+    try { token = sessionStorage.getItem("ti.chatLink"); sessionStorage.removeItem("ti.chatLink"); } catch { /* ignore */ }
+    if (!token) return;
+    if (location.hash.startsWith("#chat-verbinden/")) history.replaceState(null, "", "#eingang");
+    if (mode === "demo") return notify(tr("Im Prototyp ist kein Chat verbunden."));
+    api<{ provider: "slack" | "teams" }>("/api/chat/link", { body: { token } })
+      .then((r) => notify(tr("{0} ist verbunden. Du kannst jetzt im Chat buchen.", r.provider === "slack" ? "Slack" : "Teams")))
+      .catch((e) => notify((e as Error).message));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onHash = () => { setPage(readHash()); setHash(location.hash); setMore(false); };

@@ -7,6 +7,7 @@ import { JiraTab } from "./Jira";
 import { IntegrationsTab } from "./Integrations";
 import { ImportTab } from "./Import";
 import { SsoTab } from "./SsoSettings";
+import { ChatTab } from "./ChatSettings";
 import { MonitorCard } from "./Monitor";
 import { STATUS_LABEL, SubscriptionTab, statusPill, useSubscription } from "./Subscription";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
@@ -727,7 +728,7 @@ function Operator() {
   );
 }
 
-type Tab = "look" | "users" | "signin" | "sso" | "work" | "billing" | "reports" | "import" | "jira" | "api" | "abo" | "operator";
+type Tab = "look" | "users" | "signin" | "sso" | "chat" | "work" | "billing" | "reports" | "import" | "jira" | "api" | "abo" | "operator";
 const tabOfHash = (): Tab | null => (location.hash.startsWith("#einstellungen/") ? (location.hash.split("/")[1] as Tab) : null);
 
 const NAV_ICON: Partial<Record<Tab, () => JSX.Element>> = {
@@ -736,6 +737,7 @@ const NAV_ICON: Partial<Record<Tab, () => JSX.Element>> = {
   work: Icon.clock,
   signin: Icon.lock,
   sso: Icon.shield,
+  chat: () => <svg viewBox="0 0 24 24" {...NAV_P}><path d="M4 5h16v11H9l-5 4V5Z" /><path d="M8 9.5h8M8 12.5h5" /></svg>,
   billing: () => <svg viewBox="0 0 24 24" {...NAV_P}><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" /><path d="M9 8h6M9 12h6" /></svg>,
   abo: () => <svg viewBox="0 0 24 24" {...NAV_P}><rect x="3" y="5.5" width="18" height="13" rx="2" /><path d="M3 10h18M7 15h4" /></svg>,
   reports: Icon.report,
@@ -801,7 +803,7 @@ export function Settings() {
     ] },
     { id: "conn", label: tr("Verbindungen"), items: [
       { id: "jira", label: tr("Jira"), badge: hints.jira ? { text: tr("verbunden"), tone: "good" } : undefined },
-      ...(role === "admin" ? [{ id: "api" as Tab, label: tr("API & Webhooks") }] : []),
+      ...(role === "admin" ? [{ id: "chat" as Tab, label: tr("Slack & Teams") }, { id: "api" as Tab, label: tr("API & Webhooks") }] : []),
     ] },
     ...(operator ? [{ id: "op", label: tr("Plattform"), items: [{ id: "operator" as Tab, label: tr("Betreiber") }] }] : []),
   ];
@@ -847,6 +849,7 @@ export function Settings() {
           {tab === "users" && <Users />}
           {tab === "signin" && <SignIn />}
           {tab === "sso" && role === "admin" && <SsoTab />}
+          {tab === "chat" && role === "admin" && <ChatTab />}
           {tab === "work" && <WorkSettings />}
           {tab === "billing" && <><Billing /><BexioCard /></>}
           {tab === "reports" && <ReportsAndExport />}

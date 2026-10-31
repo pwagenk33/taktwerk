@@ -99,6 +99,8 @@ export interface OrgSettings {
   autoRetainerInvoices?: boolean;
   /** Company sign-in (SAML 2.0, e.g. Microsoft Entra ID, Okta, Google Workspace) and user provisioning via SCIM 2.0. */
   sso?: SsoSettings;
+  /** Booking from chat: Slack signing secret and Teams outgoing-webhook secret (both never sent to the browser). */
+  chat?: { slackSigningSecret?: string; teamsSecret?: string };
 }
 
 export interface SsoSettings {
@@ -736,4 +738,18 @@ export const webhookDeliveries = mysqlTable(
     createdAt: createdAt(),
   },
   (t) => [index("whd_due_idx").on(t.deliveredAt, t.failedAt, t.nextAttemptAt), index("whd_endpoint_idx").on(t.endpointId, t.createdAt)],
+);
+
+/** A Slack or Teams account linked to a person, so chat messages book in their name. */
+export const chatLinks = mysqlTable(
+  "chat_links",
+  {
+    id: id().primaryKey(),
+    organizationId: orgId(),
+    provider: mysqlEnum("provider", ["slack", "teams"]).notNull(),
+    externalId: varchar("external_id", { length: 120 }).notNull(),
+    userId: id("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("chat_links_uq").on(t.organizationId, t.provider, t.externalId)],
 );

@@ -17,3 +17,4 @@ export * from "./payroll";
 export { MESSAGES } from "./messages";
 export * from "./pack";
 export * from "./assist";
+export * from "./chat";
