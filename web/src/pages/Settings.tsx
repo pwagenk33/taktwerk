@@ -12,7 +12,7 @@ import { BrandMark, MatterhornRidge } from "../ui/motif";
 import { Select } from "../ui/Select";
 import { Icon } from "../ui/components";
 import { OrgDialog, ROLE_LABEL, ReportDialog, TeamDialog, UserDialog } from "./SettingsDialogs";
-import { tr } from "../i18n";
+import { tr, trn } from "../i18n";
 
 export const PRESETS = [
   { name: tr("Violett"), color: "#6D4CF0" },
@@ -729,48 +729,131 @@ function Operator() {
 type Tab = "look" | "users" | "signin" | "work" | "billing" | "reports" | "import" | "jira" | "api" | "abo" | "operator";
 const tabOfHash = (): Tab | null => (location.hash.startsWith("#einstellungen/") ? (location.hash.split("/")[1] as Tab) : null);
 
+const NAV_ICON: Partial<Record<Tab, () => JSX.Element>> = {
+  look: () => <svg viewBox="0 0 24 24" {...NAV_P}><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.5-.8 1.5-1.5 0-.9-.6-1.2-.6-2 0-.9.7-1.5 1.6-1.5H17a4 4 0 0 0 4-4c0-5-4-9-9-9Z" /><circle cx="7.5" cy="11" r="1" /><circle cx="10.5" cy="7" r="1" /><circle cx="15" cy="7.5" r="1" /></svg>,
+  users: Icon.users,
+  work: Icon.clock,
+  signin: Icon.lock,
+  billing: () => <svg viewBox="0 0 24 24" {...NAV_P}><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" /><path d="M9 8h6M9 12h6" /></svg>,
+  abo: () => <svg viewBox="0 0 24 24" {...NAV_P}><rect x="3" y="5.5" width="18" height="13" rx="2" /><path d="M3 10h18M7 15h4" /></svg>,
+  reports: Icon.report,
+  import: () => <svg viewBox="0 0 24 24" {...NAV_P}><path d="M12 3v12M7 10l5 5 5-5" /><path d="M4 17v3h16v-3" /></svg>,
+  jira: () => <svg viewBox="0 0 24 24" {...NAV_P}><path d="M12 3 21 12l-9 9-9-9 9-9Z" /><path d="M12 8.5 15.5 12 12 15.5 8.5 12 12 8.5Z" /></svg>,
+  api: () => <svg viewBox="0 0 24 24" {...NAV_P}><path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14" /></svg>,
+  operator: Icon.shield,
+};
+const NAV_P = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
+
+type NavItem = { id: Tab; label: string; badge?: { text: string; tone: "warn" | "good" | "n" } };
+type NavGroup = { id: string; label: string; items: NavItem[] };
+
+/** Small status hints next to the settings entries: missing IBAN, Jira connection, team size, trial days. */
+function useNavHints(enabled: boolean) {
+  const { mode } = useStore();
+  const [hints, setHints] = useState<{ ibanMissing?: boolean; jira?: boolean }>({});
+  useEffect(() => {
+    if (!enabled) return;
+    if (mode === "demo") { setHints({ ibanMissing: false, jira: true }); return; }
+    api<OrgSettings>("/api/settings").then((s) => setHints((h) => ({ ...h, ibanMissing: !s.billing?.iban }))).catch(() => {});
+    api<{ connected: boolean }>("/api/jira").then((j) => setHints((h) => ({ ...h, jira: j.connected }))).catch(() => {});
+  }, [enabled, mode]);
+  return hints;
+}
+
 export function Settings() {
-  const { me, mode, role } = useStore();
+  const { me, mode, role, data } = useStore();
   const operator = mode === "demo" || !!me?.platformAdmin;
   const sub = useSubscription();
   const [tab, setTab] = useState<Tab>(() => tabOfHash() ?? "look");
+  // On phones the list is its own screen; picking an entry opens it, «Einstellungen» goes back.
+  const [listOpen, setListOpen] = useState(() => !tabOfHash());
+  const [query, setQuery] = useState("");
+  const hints = useNavHints(role === "admin");
   useEffect(() => {
-    const on = () => { const t = tabOfHash(); if (t) setTab(t); };
+    const on = () => { const t = tabOfHash(); if (t) { setTab(t); setListOpen(false); } };
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
+  const open = (t: Tab) => {
+    setTab(t);
+    setListOpen(false);
+    history.replaceState(null, "", `#einstellungen/${t}`);
+  };
+
+  const people = data.employees.filter((e) => e.role !== "customer").length;
+  const trialDays = sub?.status === "trialing" && sub.trialEndsAt ? Math.max(0, Math.ceil((Date.parse(sub.trialEndsAt) - Date.now()) / 86_400_000)) : null;
+  const groups: NavGroup[] = [
+    { id: "firma", label: tr("Firma"), items: [
+      { id: "look", label: tr("Erscheinungsbild") },
+      { id: "users", label: tr("Benutzer"), badge: people ? { text: String(people), tone: "n" } : undefined },
+      { id: "work", label: tr("Arbeitszeit") },
+    ] },
+    { id: "login", label: tr("Anmeldung"), items: [{ id: "signin", label: tr("Anmeldung & E-Mail") }] },
+    { id: "geld", label: tr("Abrechnung"), items: [
+      { id: "billing", label: tr("Rechnung"), badge: hints.ibanMissing ? { text: tr("IBAN fehlt"), tone: "warn" } : undefined },
+      ...(sub ? [{ id: "abo" as Tab, label: tr("Abo"), badge: trialDays !== null ? { text: trn(trialDays, "{0} Tag", "{0} Tage"), tone: "n" as const } : sub.status === "past_due" ? { text: tr("Zahlung offen"), tone: "warn" as const } : undefined }] : []),
+    ] },
+    { id: "daten", label: tr("Daten"), items: [
+      { id: "reports", label: tr("Berichte & Export") },
+      ...(role === "admin" ? [{ id: "import" as Tab, label: tr("Import") }] : []),
+    ] },
+    { id: "conn", label: tr("Verbindungen"), items: [
+      { id: "jira", label: tr("Jira"), badge: hints.jira ? { text: tr("verbunden"), tone: "good" } : undefined },
+      ...(role === "admin" ? [{ id: "api" as Tab, label: tr("API & Webhooks") }] : []),
+    ] },
+    ...(operator ? [{ id: "op", label: tr("Plattform"), items: [{ id: "operator" as Tab, label: tr("Betreiber") }] }] : []),
+  ];
+  const q = query.trim().toLowerCase();
+  const shown = groups.map((g) => ({ ...g, items: g.items.filter((i) => !q || i.label.toLowerCase().includes(q) || g.label.toLowerCase().includes(q)) })).filter((g) => g.items.length);
+  const current = groups.find((g) => g.items.some((i) => i.id === tab));
+
   return (
     <>
       <div className="page-head">
         <div>
           <h1>{tr("Einstellungen")}</h1>
-          <p className="sub">{tr("Corporate Design, Benutzer, Anmeldung, Arbeitszeitmodell, Rechnungsstellung, Berichte, Export, Import, Jira und API.")}</p>
+          <p className="sub">{tr("Für die ganze Firma.")}</p>
         </div>
       </div>
-      <div className="tabs" role="tablist">
-        <button role="tab" className={tab === "look" ? "on" : ""} onClick={() => setTab("look")}>{tr("Erscheinungsbild")}</button>
-        <button role="tab" className={tab === "users" ? "on" : ""} onClick={() => setTab("users")}>{tr("Benutzer")}</button>
-        <button role="tab" className={tab === "signin" ? "on" : ""} onClick={() => setTab("signin")}>{tr("Anmeldung & E-Mail")}</button>
-        <button role="tab" className={tab === "work" ? "on" : ""} onClick={() => setTab("work")}>{tr("Arbeitszeit")}</button>
-        <button role="tab" className={tab === "billing" ? "on" : ""} onClick={() => setTab("billing")}>{tr("Rechnung")}</button>
-        <button role="tab" className={tab === "reports" ? "on" : ""} onClick={() => setTab("reports")}>{tr("Berichte & Export")}</button>
-        {role === "admin" && <button role="tab" id="tab-import" className={tab === "import" ? "on" : ""} onClick={() => setTab("import")}>{tr("Import")}</button>}
-        <button role="tab" id="tab-jira" className={tab === "jira" ? "on" : ""} onClick={() => setTab("jira")}>{tr("Jira")}</button>
-        {role === "admin" && <button role="tab" id="tab-api" className={tab === "api" ? "on" : ""} onClick={() => setTab("api")}>{tr("API")}</button>}
-        {sub && <button role="tab" id="tab-abo" className={tab === "abo" ? "on" : ""} onClick={() => setTab("abo")}>{tr("Abo")}</button>}
-        {operator && <button role="tab" id="tab-operator" className={tab === "operator" ? "on" : ""} onClick={() => setTab("operator")}>{tr("Betreiber")}</button>}
+      <div className={`set-layout${listOpen ? " list-open" : ""}`}>
+        <nav className="set-nav" aria-label={tr("Einstellungen")}>
+          <label className="set-search">
+            <Icon.search />
+            <input id="set-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={tr("Einstellung suchen")} aria-label={tr("Einstellung suchen")} />
+          </label>
+          {shown.map((g) => (
+            <div key={g.id} className={`set-group g-${g.id}`}>
+              <div className="set-group-label">{g.label}</div>
+              {g.items.map((i) => {
+                const I = NAV_ICON[i.id];
+                return (
+                  <button key={i.id} id={`tab-${i.id}`} type="button" className={`set-item${tab === i.id ? " on" : ""}`} aria-current={tab === i.id ? "page" : undefined} onClick={() => open(i.id)}>
+                    {I && <I />}
+                    <span className="set-label">{i.label}</span>
+                    {i.badge && <span className={`set-badge ${i.badge.tone}`}>{i.badge.text}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+          {!shown.length && <p className="muted set-empty">{tr("Nichts gefunden.")}</p>}
+        </nav>
+        <div className="set-main">
+          <button type="button" className="set-back" onClick={() => setListOpen(true)}><Icon.back /> {tr("Einstellungen")}</button>
+          {current && <div className="set-crumb">{current.label}</div>}
+          {tab === "look" && <Appearance />}
+          {tab === "users" && <Users />}
+          {tab === "signin" && <SignIn />}
+          {tab === "work" && <WorkSettings />}
+          {tab === "billing" && <><Billing /><BexioCard /></>}
+          {tab === "reports" && <ReportsAndExport />}
+          {tab === "import" && role === "admin" && <ImportTab />}
+          {tab === "jira" && <JiraTab />}
+          {tab === "api" && role === "admin" && <IntegrationsTab />}
+          {tab === "abo" && sub && <SubscriptionTab onSetup={() => window.dispatchEvent(new CustomEvent("ti:setup"))} />}
+          {tab === "operator" && operator && <Operator />}
+        </div>
       </div>
-      {tab === "look" && <Appearance />}
-      {tab === "users" && <Users />}
-      {tab === "signin" && <SignIn />}
-      {tab === "work" && <WorkSettings />}
-      {tab === "billing" && <><Billing /><BexioCard /></>}
-      {tab === "reports" && <ReportsAndExport />}
-      {tab === "import" && role === "admin" && <ImportTab />}
-      {tab === "jira" && <JiraTab />}
-      {tab === "api" && role === "admin" && <IntegrationsTab />}
-      {tab === "abo" && sub && <SubscriptionTab onSetup={() => window.dispatchEvent(new CustomEvent("ti:setup"))} />}
-      {tab === "operator" && operator && <Operator />}
     </>
   );
 }

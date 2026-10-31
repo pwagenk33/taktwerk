@@ -10,6 +10,7 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 - Forecast, Budgets und Überzeit-Saldi rechnen schneller, bei vielen Projekten und Personen etwa doppelt so schnell.
 
 ### Neu
+- Einstellungen mit Seitenleiste statt Reitern: fünf Gruppen (Firma, Anmeldung, Abrechnung, Daten, Verbindungen), Suchfeld und Hinweise direkt in der Liste, etwa «IBAN fehlt», «verbunden» bei Jira oder die restlichen Testtage. Auf dem Handy ist die Liste eine eigene Seite.
 - Wochenraster in der Zeiterfassung: eine Zeile pro Subprojekt und Tätigkeit, Stunden direkt in die Tageszellen tippen, Zeilen der Vorwoche übernehmen.
 - Projektarten Retainer und Fixpreis: Retainer verrechnen jeden Monat das Kontingent und Mehrstunden nach Aufwand, auf Wunsch als Rechnungsentwurf am 1. des Monats (Einstellungen, standardmässig aus). Fixpreis-Projekte werden in Tranchen in Prozent verrechnet, höchstens 100 %.
 - Offerten beim Kunden: Positionen mit Stunden und Satz, PDF in der Sprache des Kunden. Wird eine Offerte angenommen, entsteht daraus das Projekt mit einem Subprojekt und Budget pro Position.
