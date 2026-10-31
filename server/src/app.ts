@@ -26,6 +26,7 @@ import { exportRoutes } from "./routes/export";
 import { expenseRoutes } from "./routes/expenses";
 import { invoiceRoutes } from "./routes/invoices";
 import { quoteRoutes } from "./routes/quotes";
+import { mandateRoutes } from "./routes/mandates";
 import { worktimeRoutes } from "./routes/worktime";
 import { planningRoutes } from "./routes/planning";
 import { portalRoutes } from "./routes/portal";
@@ -299,6 +300,7 @@ export async function buildApp(ctx: AppContext) {
   await app.register(exportRoutes);
   await app.register(invoiceRoutes);
   await app.register(quoteRoutes);
+  await app.register(mandateRoutes);
   await app.register(planningRoutes);
   await app.register(portalRoutes);
   await app.register(platformRoutes);

@@ -24,6 +24,7 @@ const pages = {
   Planning: () => import("./pages/Planning").then((m) => ({ default: m.Planning })),
   Portal: () => import("./pages/Portal").then((m) => ({ default: m.Portal })),
   Profile: () => import("./pages/Profile").then((m) => ({ default: m.Profile })),
+  Mandates: () => import("./pages/Mandates").then((m) => ({ default: m.Mandates })),
   Projects: () => import("./pages/Projects").then((m) => ({ default: m.Projects })),
   Reports: () => import("./pages/Reports").then((m) => ({ default: m.Reports })),
   Settings: () => import("./pages/Settings").then((m) => ({ default: m.Settings })),
@@ -36,6 +37,7 @@ const Dashboard = lazy(pages.Dashboard);
 const Planning = lazy(pages.Planning);
 const Portal = lazy(pages.Portal);
 const Profile = lazy(pages.Profile);
+const Mandates = lazy(pages.Mandates);
 const Projects = lazy(pages.Projects);
 const Reports = lazy(pages.Reports);
 const Settings = lazy(pages.Settings);
@@ -130,6 +132,7 @@ const PAGES = [
   { id: "dashboard", label: tr("Dashboard"), icon: Icon.dashboard, lead: false },
   { id: "einstellungen", label: tr("Einstellungen"), icon: Icon.settings, lead: true, admin: true },
   { id: "profil", label: tr("Profil"), icon: Icon.settings, lead: false, hidden: true },
+  { id: "mandanten", label: tr("Alle Firmen"), icon: Icon.folder, lead: false, hidden: true },
 ] as const;
 
 type PageId = (typeof PAGES)[number]["id"];
@@ -284,7 +287,7 @@ export function App() {
         )}
         <div className="rail-foot">
           {settings && <nav className="nav">{navLink(settings)}</nav>}
-          {mode === "api" && <CompanySwitch />}
+          {mode === "api" ? <CompanySwitch /> : <a href="#mandanten" className="muted rail-mandates">{tr("Alle Firmen im Überblick")}</a>}
           {mode === "demo" && (
             <Select id="role-select" ariaLabel={tr("Rolle")} value={role} onChange={(v) => setRole(v as Role)} options={(Object.keys(ROLE_LABEL) as Role[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))} small />
           )}
@@ -340,6 +343,7 @@ export function App() {
           {current === "velocity" && <FeatureGate feature="forecast"><Velocity /></FeatureGate>}
           {current === "einstellungen" && <Settings />}
           {current === "profil" && <Profile />}
+          {current === "mandanten" && <Mandates />}
           </Suspense>
           </PageBoundary>
         </main>
@@ -387,5 +391,10 @@ function CompanySwitch() {
       notify((err as Error).message);
     }
   };
-  return <Select id="company-switch" ariaLabel={tr("Firma wechseln")} value={accounts.current.organizationId} onChange={(v) => void go(v)} options={all.map((a) => ({ value: a.organizationId, label: a.name }))} small />;
+  return (
+    <div className="company-switch">
+      <Select id="company-switch" ariaLabel={tr("Firma wechseln")} value={accounts.current.organizationId} onChange={(v) => void go(v)} options={all.map((a) => ({ value: a.organizationId, label: a.name }))} small />
+      <a href="#mandanten" className="muted">{tr("Alle Firmen im Überblick")}</a>
+    </div>
+  );
 }

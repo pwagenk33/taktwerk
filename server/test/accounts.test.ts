@@ -54,5 +54,11 @@ describe("one person in several companies", () => {
     // The old session is closed; switching to a company without an account fails.
     expect((await get("/api/auth/me", tina)).statusCode).toBe(401);
     expect((await post("/api/auth/switch", { organizationId: "nope" }, tina2)).statusCode).toBe(404);
+
+    // The fiduciary overview lists both companies with key figures.
+    const mandates = (await get("/api/mandates", tina2)).json();
+    expect(mandates.mandates).toHaveLength(2);
+    expect(mandates.mandates.filter((m: { current: boolean }) => m.current)).toHaveLength(1);
+    expect(mandates.mandates.every((m: { people: number }) => m.people >= 1)).toBe(true);
   });
 });

@@ -142,20 +142,7 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.redirect("/");
   });
 
-  /**
-   * The other companies the signed-in person has an account in (same e-mail address, password already set).
-   * The address was proven when that account's invitation link was used, so switching needs no second password.
-   */
-  const otherAccounts = async (me: { id: string; email: string }) => {
-    if (!me.email) return [];
-    const rows = await ctx.db
-      .select({ id: users.id, organizationId: users.organizationId, role: users.role, name: organizations.name, passwordHash: users.passwordHash, lastLoginAt: users.lastLoginAt })
-      .from(users)
-      .innerJoin(organizations, eq(organizations.id, users.organizationId))
-      .where(and(sql`lower(${users.email}) = ${me.email.toLowerCase()}`, eq(users.active, true), eq(organizations.active, true)))
-      .limit(50);
-    return rows.filter((r) => r.id !== me.id && (r.passwordHash || r.lastLoginAt)).sort((a, b) => a.name.localeCompare(b.name, "de"));
-  };
+  const otherAccounts = (me: { id: string; email: string }) => accountsWithSameEmail(ctx, me);
 
   app.get("/api/auth/accounts", async (req) => {
     const me = requireUser(req);
@@ -324,4 +311,19 @@ export async function resolveOAuthUser(ctx: AppContext, provider: Provider, subj
   if (!userId) return null;
   await ctx.db.insert(oauthAccounts).values({ provider, providerUserId: subject, userId });
   return userId;
+}
+
+/**
+ * The other companies the signed-in person has an account in (same e-mail address, password already set or used).
+ * The address was proven when that account's invitation link was used, so switching needs no second password.
+ */
+export async function accountsWithSameEmail(ctx: AppContext, me: { id: string; email: string }) {
+  if (!me.email) return [];
+  const rows = await ctx.db
+    .select({ id: users.id, organizationId: users.organizationId, role: users.role, name: organizations.name, passwordHash: users.passwordHash, lastLoginAt: users.lastLoginAt })
+    .from(users)
+    .innerJoin(organizations, eq(organizations.id, users.organizationId))
+    .where(and(sql`lower(${users.email}) = ${me.email.toLowerCase()}`, eq(users.active, true), eq(organizations.active, true)))
+    .limit(50);
+  return rows.filter((r) => r.id !== me.id && (r.passwordHash || r.lastLoginAt)).sort((a, b) => a.name.localeCompare(b.name, "de"));
 }

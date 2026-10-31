@@ -1256,3 +1256,5 @@ body.dialog-open { overflow: hidden; }
 .company-choice { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; font: inherit; text-align: left; background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius-s); padding: 12px 14px; cursor: pointer; }
 .company-choice:focus-visible { box-shadow: var(--ring); outline: none; }
 @media (hover: hover) { .company-choice:hover { border-color: var(--ink); } }
+.company-switch { display: grid; gap: 4px; }
+.company-switch a, .rail-mandates { font-size: 0.76rem; padding: 0 4px; }
