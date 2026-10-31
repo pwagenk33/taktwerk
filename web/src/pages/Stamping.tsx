@@ -24,7 +24,7 @@ interface Landing { name: string; state: "off" | "working" | "break"; since: str
 
 /** Page behind an NFC tag or QR code: one big button for what fits now. */
 export function StampLanding() {
-  const { mode, notify, reload } = useStore();
+  const { mode, notify, reload, stamp } = useStore();
   const token = location.hash.split("/")[1] ?? "";
   const [info, setInfo] = useState<Landing | null>(null);
   const [error, setError] = useState("");
@@ -42,7 +42,10 @@ export function StampLanding() {
         const r = await api<{ now: string }>("/api/presence/stamp", { body: { action, point: token } });
         await reload();
         setDone(tr("{0} um {1} gestempelt", LABEL[action], r.now));
-      } else setDone(tr("{0} um {1} gestempelt", LABEL[action], info?.now ?? ""));
+      } else {
+        await stamp(action);
+        setDone(tr("{0} um {1} gestempelt", LABEL[action], info?.now ?? ""));
+      }
       notify(tr("Gestempelt"));
     } catch (e) {
       setError((e as Error).message);

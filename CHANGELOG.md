@@ -10,6 +10,17 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 - Forecast, Budgets und Überzeit-Saldi rechnen schneller, bei vielen Projekten und Personen etwa doppelt so schnell.
 
 ### Neu
+- Projekte abschliessen: danach keine Buchungen mehr, Retainer-Abrechnung stoppt, das Projekt verschwindet aus der Auswahl und bleibt in den Berichten.
+- Eine Person in mehreren Firmen (z. B. Treuhänder): Firmenwahl beim Login, Wechsel ohne neue Anmeldung, und eine Übersicht über alle Mandanten mit offenen Abschlüssen und Freigaben.
+- Firmen-Login mit SAML (Microsoft Entra ID, Okta, Google) und Benutzerabgleich per SCIM, im Paket Business (docs/BETRIEB.md, Abschnitt 19).
+- Buchen aus Slack (/zeit) und Microsoft Teams, Konto einmal verknüpfen (Abschnitt 20).
+- Empfehlungen: jede Firma hat einen eigenen Link, neue Firmen testen 30 Tage länger, für jede zahlende Firma gibt es einen Gratismonat. Partner-Codes mit längerem Test und Provision in der Betreiber-Konsole.
+- Öffentliche Statusseite unter /status (bzw. status.<Domain>): Erreichbarkeit der letzten 90 Tage, Störungs- und Wartungsmeldungen aus der Betreiber-Konsole.
+- GitHub und GitLab: eigene Commits erscheinen als Buchungsvorschläge, ein Jira-Schlüssel in der Nachricht wählt das Projekt (Abschnitt 21).
+- Lohnexport im Format für Abacus und eine fertige Power-BI-Vorlage über die API (docs/POWERBI.md).
+- Stempeln per NFC-Aufkleber, QR-Code oder Standort: Stempelpunkte unter Einstellungen → Arbeitszeit, auf Wunsch nur am Arbeitsort, Koordinaten werden nie gespeichert (Abschnitt 22).
+- App für App Store und Play Store vorbereitet (mobile/, Capacitor) mit Store-Texten in vier Sprachen; mit APP_IOS_TEAM_ID und APP_ANDROID_SHA256 öffnen Aufkleber und Mail-Links die installierte App.
+- Website auf Französisch (/fr) und Italienisch (/it) mit Sprachwahl; die Anmeldung öffnet sich dann in derselben Sprache.
 - Einstellungen mit Seitenleiste statt Reitern: fünf Gruppen (Firma, Anmeldung, Abrechnung, Daten, Verbindungen), Suchfeld und Hinweise direkt in der Liste, etwa «IBAN fehlt», «verbunden» bei Jira oder die restlichen Testtage. Auf dem Handy ist die Liste eine eigene Seite.
 - Wochenraster in der Zeiterfassung: eine Zeile pro Subprojekt und Tätigkeit, Stunden direkt in die Tageszellen tippen, Zeilen der Vorwoche übernehmen.
 - Projektarten Retainer und Fixpreis: Retainer verrechnen jeden Monat das Kontingent und Mehrstunden nach Aufwand, auf Wunsch als Rechnungsentwurf am 1. des Monats (Einstellungen, standardmässig aus). Fixpreis-Projekte werden in Tranchen in Prozent verrechnet, höchstens 100 %.
