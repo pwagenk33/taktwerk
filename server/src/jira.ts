@@ -212,7 +212,7 @@ async function syncProject(ctx: AppContext, conn: JiraConnection, project: typeo
     if (!subId) subId = noEpicId ??= await ensureSub(NO_EPIC, null);
     const status = STATUS[i.fields.status?.statusCategory?.key ?? "new"] ?? "To Do";
     const done = status === "Done" ? (i.fields.resolutiondate ?? i.fields.statuscategorychangedate ?? null) : null;
-    rows.push({ organizationId: orgId, key: i.key, subProjectId: subId, summary: (i.fields.summary || i.key).slice(0, 500), storyPoints: storyPointsOf(i, conn.storyPointFields), status, resolvedAt: done ? done.slice(0, 10) : null });
+    rows.push({ organizationId: orgId, key: i.key, subProjectId: subId, summary: (i.fields.summary || i.key).slice(0, 500), storyPoints: storyPointsOf(i, conn.storyPointFields), status, resolvedAt: done ? done.slice(0, 10) : null, issueType: i.fields.issuetype?.name?.slice(0, 60) ?? null });
   }
 
   const subIds = [...new Set([...subs.map((s) => s.id), ...byEpic.values(), ...(noEpicId ? [noEpicId] : [])])];
@@ -227,7 +227,7 @@ async function syncProject(ctx: AppContext, conn: JiraConnection, project: typeo
     await ctx.db
       .insert(jiraIssues)
       .values(chunk)
-      .onDuplicateKeyUpdate({ set: { subProjectId: sqlValues("sub_project_id"), summary: sqlValues("summary"), storyPoints: sqlValues("story_points"), status: sqlValues("status"), resolvedAt: sqlValues("resolved_at") } });
+      .onDuplicateKeyUpdate({ set: { subProjectId: sqlValues("sub_project_id"), summary: sqlValues("summary"), storyPoints: sqlValues("story_points"), status: sqlValues("status"), resolvedAt: sqlValues("resolved_at"), issueType: sqlValues("issue_type") } });
   }
   return rows.length;
 }

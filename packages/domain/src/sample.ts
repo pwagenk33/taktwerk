@@ -253,7 +253,9 @@ export function buildDataset(): Dataset {
     const prefix = plan.sub.jiraEpicKey!.split("-")[0];
     const n = (issueSeq.get(prefix) ?? 100) + 1 + Math.floor(rand() * 3);
     issueSeq.set(prefix, n);
-    return { key: `${prefix}-${n}`, summary: pick(plan.summaries), subProjectId: plan.sub.id, storyPoints: sp, status: "To Do" };
+    // Issue type from the number, so the random sequence (and every other sample figure) stays the same.
+    const issueType = n % 5 === 0 ? "Bug" : n % 7 === 0 ? "Task" : "Story";
+    return { key: `${prefix}-${n}`, summary: pick(plan.summaries), subProjectId: plan.sub.id, storyPoints: sp, status: "To Do", issueType };
   };
 
   for (const plan of plans) {
@@ -269,7 +271,8 @@ export function buildDataset(): Dataset {
         issue.status = "Done";
         const resolved = days[Math.min(days.length - 1, Math.floor(between(0.4, 1) * days.length))];
         issue.resolvedAt = resolved;
-        const hours = sp * trueFactor(mi) * between(0.85, 1.15);
+        // Bugs take longer per point than estimated, now and then an issue runs far over; on average the factor stays.
+        const hours = sp * trueFactor(mi) * between(0.85, 1.15) * (issue.key.endsWith("3") && sp >= 5 ? 2.2 : issue.issueType === "Bug" ? 1.25 : 0.92);
         // Most work lands in the month of resolution, some in the month before.
         const workMonths = month > plan.start && rand() < 0.3 ? [addMonths(month, -1), month] : [month];
         bookIssue(plan, issue, hours, workMonths);

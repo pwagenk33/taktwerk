@@ -28,7 +28,7 @@ import { isLocale, tr, type Locale } from "@taktwerk/domain";
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, tr("Datum im Format JJJJ-MM-TT"));
 const projectKind = z.enum(["tm", "fixed", "retainer"]);
 const currency = z.enum(["CHF", "EUR", "USD"]);
-const localeParam = z.enum(["de", "fr", "en"]);
+const localeParam = z.enum(["de", "fr", "en", "it"]);
 
 /** Today in Swiss time, as YYYY-MM-DD. */
 export const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, tr("Uhrzeit im Format HH:MM"));
@@ -227,6 +227,7 @@ export async function loadDataset(ctx: AppContext, user: SessionUser, opts: { de
       storyPoints: i.storyPoints,
       status: i.status,
       resolvedAt: i.resolvedAt ?? undefined,
+      issueType: i.issueType ?? undefined,
     })),
   };
 }

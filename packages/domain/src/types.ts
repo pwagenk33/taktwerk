@@ -75,7 +75,7 @@ export interface Customer {
   /** Postal address printed on invoices. */
   address?: PostalAddress;
   /** Language of reports, invoices and portal e-mails (de, fr, en). Default de. */
-  locale?: "de" | "fr" | "en";
+  locale?: "de" | "fr" | "en" | "it";
 }
 
 export interface Project {
@@ -156,6 +156,8 @@ export interface JiraIssue {
   storyPoints: number;
   status: JiraStatus;
   resolvedAt?: string; // YYYY-MM-DD, set when status = Done
+  /** Jira issue type, e.g. Story, Bug, Task. */
+  issueType?: string;
 }
 
 export type AbsenceType = "Ferien" | "Krankheit" | "Unfall" | "Militär/Zivildienst" | "Weiterbildung" | "Kompensation" | "Sonstiges";

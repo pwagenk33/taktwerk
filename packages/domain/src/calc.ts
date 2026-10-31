@@ -448,3 +448,99 @@ const toDate = (m: string) => new Date(`${m.length === 7 ? `${m}-01` : m}T00:00:
 export const fmtMonth = (m: string) => monthFmt.format(toDate(m)).replace(".", "");
 export const fmtMonthLong = (m: string) => monthLong.format(toDate(m));
 export const fmtDay = (d: string) => dayFmt.format(toDate(d));
+
+// ---------- velocity per team, issue type and outliers ----------
+
+export interface VelocityGroup {
+  id: string;
+  name: string;
+  storyPoints: number;
+  hours: number;
+  /** hours / SP over the window, null without done SP. */
+  hoursPerSp: number | null;
+  /** Same figure for the window before, for the trend. */
+  previous: number | null;
+  issues: number;
+}
+
+export interface VelocityOutlier {
+  key: string;
+  summary: string;
+  issueType: string;
+  storyPoints: number;
+  hours: number;
+  hoursPerSp: number;
+  /** Factor relative to the window's overall hours per SP (2 = twice as expensive). */
+  ratio: number;
+  resolvedAt: string;
+  teamId?: string;
+}
+
+/**
+ * Hours per story point over the last `window` complete months, split by team (hours of the team's members on an
+ * issue, with the issue's points counted for every team that worked on it, weighted by their share of the hours)
+ * and by issue type, plus issues far off the overall factor.
+ */
+export function velocityBreakdown(data: Dataset, window: number, opts: { outlierRatio?: number; minHours?: number } = {}) {
+  const current = monthOf(data.today);
+  const to = addMonths(current, -1);
+  const from = addMonths(current, -window);
+  const prevFrom = addMonths(from, -window);
+  const teamOf = new Map(data.employees.map((e) => [e.id, e.teamId]));
+  const byIssue = new Map<string, { total: number; team: Map<string, number> }>();
+  for (const e of data.timeEntries) {
+    if (!e.jiraIssueKey) continue;
+    const x = byIssue.get(e.jiraIssueKey) ?? { total: 0, team: new Map<string, number>() };
+    x.total += e.hours;
+    const t = teamOf.get(e.employeeId) ?? "";
+    x.team.set(t, (x.team.get(t) ?? 0) + e.hours);
+    byIssue.set(e.jiraIssueKey, x);
+  }
+  type Acc = { sp: number; h: number; n: number; psp: number; ph: number };
+  const blank = (): Acc => ({ sp: 0, h: 0, n: 0, psp: 0, ph: 0 });
+  const teams = new Map<string, Acc>();
+  const types = new Map<string, Acc>();
+  const all = blank();
+  const inWindow: { issue: JiraIssue; hours: number; team: Map<string, number> }[] = [];
+  for (const i of data.issues) {
+    const hrs = byIssue.get(i.key);
+    if (i.status !== "Done" || !i.resolvedAt || !hrs || i.storyPoints <= 0) continue;
+    const m = monthOf(i.resolvedAt);
+    const now = m >= from && m <= to;
+    const before = m >= prevFrom && m < from;
+    if (!now && !before) continue;
+    const add = (a: Acc, sp: number, h: number) => {
+      if (now) { a.sp += sp; a.h += h; a.n++; } else { a.psp += sp; a.ph += h; }
+    };
+    add(all, i.storyPoints, hrs.total);
+    const type = i.issueType || "–";
+    if (!types.has(type)) types.set(type, blank());
+    add(types.get(type)!, i.storyPoints, hrs.total);
+    for (const [t, h] of hrs.team) {
+      if (!t) continue;
+      if (!teams.has(t)) teams.set(t, blank());
+      add(teams.get(t)!, (i.storyPoints * h) / hrs.total, h);
+    }
+    if (now) inWindow.push({ issue: i, hours: hrs.total, team: hrs.team });
+  }
+  const group = (id: string, name: string, a: Acc): VelocityGroup => ({ id, name, storyPoints: a.sp, hours: a.h, hoursPerSp: a.sp > 0 ? a.h / a.sp : null, previous: a.psp > 0 ? a.ph / a.psp : null, issues: a.n });
+  const overall = all.sp > 0 ? all.h / all.sp : null;
+  const ratio = opts.outlierRatio ?? 1.8;
+  const minHours = opts.minHours ?? 4;
+  const outliers: VelocityOutlier[] = overall === null ? [] : inWindow
+    .map(({ issue, hours, team }) => {
+      const f = hours / issue.storyPoints;
+      const lead = [...team.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+      return { key: issue.key, summary: issue.summary, issueType: issue.issueType || "–", storyPoints: issue.storyPoints, hours, hoursPerSp: f, ratio: f / overall, resolvedAt: issue.resolvedAt!, teamId: lead || undefined };
+    })
+    .filter((o) => o.hours >= minHours && (o.ratio >= ratio || o.ratio <= 1 / ratio))
+    .sort((a, b) => Math.abs(Math.log(b.ratio)) - Math.abs(Math.log(a.ratio)));
+  return {
+    from,
+    to,
+    overall: group("", "", all),
+    teams: data.teams.filter((t) => teams.has(t.id)).map((t) => group(t.id, t.name, teams.get(t.id)!)),
+    types: [...types.entries()].sort((a, b) => b[1].sp - a[1].sp).map(([t, a]) => group(t, t, a)),
+    outliers,
+  };
+}

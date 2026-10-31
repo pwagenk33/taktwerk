@@ -425,6 +425,7 @@ export const jiraIssues = mysqlTable(
     storyPoints: decimal("story_points", { precision: 6, scale: 1, mode: "number" }).notNull().default(0),
     status: mysqlEnum("status", ["To Do", "In Progress", "Done"]).notNull(),
     resolvedAt: date("resolved_at", { mode: "string" }),
+    issueType: varchar("issue_type", { length: 60 }),
   },
   (t) => [primaryKey({ columns: [t.organizationId, t.key] }), index("ji_sub_idx").on(t.subProjectId)],
 );

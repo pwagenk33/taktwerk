@@ -1,10 +1,17 @@
-import { fmt1, fmtCHF, fmtMonthLong, fmtNum } from "@taktwerk/domain";
+import { useMemo, useState } from "react";
+import { currentVelocity, fmt1, fmtCHF, fmtMonth, fmtMonthLong, fmtNum, velocityBreakdown, velocityByMonth, type VelocityGroup } from "@taktwerk/domain";
 import { useStore } from "../store";
+import { Select } from "../ui/Select";
 import { VelocityChart } from "../ui/charts";
 import { tr } from "../i18n";
 
 export function Velocity() {
-  const { velocity, factor, velocitySettings, setVelocitySettings, reports } = useStore();
+  const { data, velocity: all, factor: allFactor, velocitySettings, setVelocitySettings, reports } = useStore();
+  const [teamId, setTeamId] = useState("");
+  const velocity = useMemo(() => (teamId ? velocityByMonth(data, velocitySettings, teamId) : all), [teamId, data, velocitySettings, all]);
+  const factor = teamId ? currentVelocity(velocity, velocitySettings) : allFactor;
+  const breakdown = useMemo(() => velocityBreakdown(data, velocitySettings.window), [data, velocitySettings.window]);
+  const teamName = new Map(data.teams.map((t) => [t.id, t.name]));
   const first = velocity.find((m) => m.smoothed !== null);
   const spOpen = reports.reduce((s, r) => s + r.spOpen, 0);
   const remaining = reports.reduce((s, r) => s + r.remainingHours, 0);
@@ -18,6 +25,7 @@ export function Velocity() {
           <p className="sub">{tr("Stunden pro Story Point, berechnet aus erledigten JIRA-Issues und den darauf gebuchten Stunden.")}</p>
         </div>
         <div className="toolbar">
+          {data.teams.length > 1 && <div style={{ width: 200 }}><Select id="v-team" value={teamId} onChange={setTeamId} options={[{ value: "", label: tr("Alle Teams") }, ...data.teams.map((t) => ({ value: t.id, label: t.name }))]} /></div>}
           <div className="seg" aria-label={tr("Methode")}>
             <button className={velocitySettings.method === "rolling" ? "on" : ""} onClick={() => setVelocitySettings({ ...velocitySettings, method: "rolling" })}>{tr("Gleitender Schnitt")}</button>
             <button className={velocitySettings.method === "ewma" ? "on" : ""} onClick={() => setVelocitySettings({ ...velocitySettings, method: "ewma" })}>{tr("EWMA")}</button>
@@ -59,6 +67,40 @@ export function Velocity() {
       </section>
 
       <div className="grid-2" style={{ alignItems: "start" }}>
+        <GroupTable title={tr("Teams im Vergleich")} rows={breakdown.teams} overall={breakdown.overall.hoursPerSp} from={breakdown.from} to={breakdown.to} id="v-teams" />
+        <GroupTable title={tr("Nach Issue-Typ")} rows={breakdown.types} overall={breakdown.overall.hoursPerSp} from={breakdown.from} to={breakdown.to} id="v-types" />
+      </div>
+
+      <section className="card" id="v-outliers">
+        <div className="card-head">
+          <h2>{tr("Ausreisser")}</h2>
+          <span className="muted" style={{ fontSize: "0.8rem" }}>{tr("Issues mit mindestens 1.8-mal mehr oder weniger Stunden pro SP als der Schnitt von {0}", breakdown.overall.hoursPerSp ? `${fmt1(breakdown.overall.hoursPerSp)} h/SP` : "–")}</span>
+        </div>
+        {breakdown.outliers.length === 0 ? (
+          <p className="muted card-pad" style={{ margin: 0 }}>{tr("Keine Ausreisser im Fenster. Die Schätzungen treffen den Aufwand gut.")}</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="data">
+              <thead><tr><th>{tr("Issue")}</th><th>{tr("Typ")}</th><th>{tr("Team")}</th><th className="r">{tr("SP")}</th><th className="r">{tr("Stunden")}</th><th className="r">{tr("h/SP")}</th><th className="r">{tr("vs. Schnitt")}</th></tr></thead>
+              <tbody>
+                {breakdown.outliers.slice(0, 12).map((o) => (
+                  <tr key={o.key}>
+                    <td><span className="mono">{o.key}</span>{" "}<span className="muted">{o.summary}</span></td>
+                    <td>{o.issueType}</td>
+                    <td>{o.teamId ? teamName.get(o.teamId) ?? "–" : "–"}</td>
+                    <td className="r num">{fmtNum(o.storyPoints)}</td>
+                    <td className="r num">{fmt1(o.hours)}</td>
+                    <td className="r num">{fmt1(o.hoursPerSp)}</td>
+                    <td className={`r num ${o.ratio > 1 ? "neg" : "pos"}`}>{o.ratio > 1 ? tr("{0}× teurer", fmt1(o.ratio)) : tr("{0}× günstiger", fmt1(1 / o.ratio))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <div className="grid-2" style={{ alignItems: "start" }}>
         <section className="card">
           <div className="table-wrap">
             <table className="data">
@@ -93,5 +135,39 @@ export function Velocity() {
         </section>
       </div>
     </>
+  );
+}
+
+/** Hours per SP of a group (team or issue type) over the window, with the window before as trend. */
+function GroupTable({ title, rows, overall, from, to, id }: { title: string; rows: VelocityGroup[]; overall: number | null; from: string; to: string; id: string }) {
+  return (
+    <section className="card" id={id}>
+      <div className="card-head">
+        <h2>{title}</h2>
+        <span className="muted" style={{ fontSize: "0.8rem" }}>{from === to ? fmtMonth(from) : `${fmtMonth(from)} – ${fmtMonth(to)}`}</span>
+      </div>
+      {rows.length === 0 ? <p className="muted card-pad" style={{ margin: 0 }}>{tr("Noch keine erledigten Issues im Fenster.")}</p> : (
+        <div className="table-wrap">
+          <table className="data">
+            <thead><tr><th>{title === tr("Nach Issue-Typ") ? tr("Typ") : tr("Team")}</th><th className="r">{tr("Issues")}</th><th className="r">{tr("SP")}</th><th className="r">{tr("h/SP")}</th><th className="r">{tr("Vorher")}</th></tr></thead>
+            <tbody>
+              {rows.map((r) => {
+                const off = r.hoursPerSp !== null && overall ? r.hoursPerSp / overall : 1;
+                const trend = r.hoursPerSp !== null && r.previous !== null ? r.hoursPerSp - r.previous : null;
+                return (
+                  <tr key={r.id}>
+                    <td>{r.name}</td>
+                    <td className="r num">{fmtNum(r.issues)}</td>
+                    <td className="r num">{fmtNum(r.storyPoints)}</td>
+                    <td className={`r num ${off > 1.15 ? "neg" : off < 0.87 ? "pos" : ""}`}><strong>{r.hoursPerSp !== null ? fmt1(r.hoursPerSp) : "–"}</strong></td>
+                    <td className="r num muted">{r.previous !== null ? fmt1(r.previous) : "–"}{trend !== null && Math.abs(trend) >= 0.1 && <span className={trend > 0 ? "neg" : "pos"}>{" "}{trend > 0 ? "↑" : "↓"}</span>}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

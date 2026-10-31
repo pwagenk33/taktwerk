@@ -1,0 +1,1 @@
+ALTER TABLE `jira_issues` ADD `issue_type` varchar(60);

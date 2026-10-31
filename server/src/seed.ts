@@ -117,7 +117,7 @@ export async function seedSample(db: Db, password: string) {
   await db.insert(customerRates).values(data.customers.flatMap((c) => c.rates.map((r) => ({ customerId: idFor(c.id), ...r }))));
   await db.insert(projects).values(data.projects.map((p) => ({ id: idFor(p.id), organizationId: orgId, customerId: idFor(p.customerId), name: p.name, budget: p.budget, jiraProjectKey: p.jiraProjectKey, leadUserId: p.leadUserId ? idFor(p.leadUserId) : null, kind: p.kind ?? "tm", retainerHours: p.retainerHours ?? null })));
   await db.insert(subProjects).values(data.subProjects.map((s) => ({ id: idFor(s.id), organizationId: orgId, projectId: idFor(s.projectId), name: s.name, budget: s.budget, jiraEpicKey: s.jiraEpicKey })));
-  await db.insert(jiraIssues).values(data.issues.map((i) => ({ organizationId: orgId, key: i.key, subProjectId: idFor(i.subProjectId), summary: i.summary, storyPoints: i.storyPoints, status: i.status, resolvedAt: i.resolvedAt ?? null })));
+  await db.insert(jiraIssues).values(data.issues.map((i) => ({ organizationId: orgId, key: i.key, subProjectId: idFor(i.subProjectId), summary: i.summary, storyPoints: i.storyPoints, status: i.status, resolvedAt: i.resolvedAt ?? null, issueType: i.issueType ?? null })));
   for (let i = 0; i < data.timeEntries.length; i += 500) {
     await db.insert(timeEntries).values(
       data.timeEntries.slice(i, i + 500).map((e) => ({
