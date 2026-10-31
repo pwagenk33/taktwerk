@@ -213,6 +213,12 @@ export async function buildApp(ctx: AppContext) {
   // The public website on the base domain answers before sessions and tenants are looked at.
   serveWebsite(app, ctx);
 
+  // status.<base domain> is the public status page.
+  app.addHook("onRequest", async (req, reply) => {
+    const base = ctx.config.SAAS_BASE_DOMAIN?.toLowerCase();
+    if (base && req.method === "GET" && req.url === "/" && (req.headers.host ?? "").split(":")[0]!.toLowerCase() === `status.${base}`) return reply.redirect("/status");
+  });
+
   // CSRF: state-changing API calls must come from our own origin (cookies are SameSite=Lax as second layer).
   // With several organizations on their own domains, the request's own host is an accepted origin too.
   app.addHook("onRequest", async (req) => {

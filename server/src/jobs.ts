@@ -16,6 +16,7 @@ import { syncAllJira } from "./jira";
 import { saasOn, seatsUsed, subscriptionOf } from "./saas";
 import { tr } from "@taktwerk/domain";
 import { trn, withLocale } from "./i18n";
+import { recordHeartbeat } from "./routes/status";
 
 const THRESHOLDS = ["80", "95", "100"] as const;
 type Threshold = (typeof THRESHOLDS)[number];
@@ -482,7 +483,10 @@ export function startScheduler(ctx: AppContext, log?: (msg: string, err?: unknow
   const first = setTimeout(tick, 60_000);
   const every = setInterval(tick, 15 * 60_000);
   // Webhook retries need a shorter beat than the other jobs.
-  const hooks = setInterval(() => void deliverDue(ctx).catch((err) => log?.("[jobs] Webhooks fehlgeschlagen", err)), 60_000);
+  const hooks = setInterval(() => {
+    void deliverDue(ctx).catch((err) => log?.("[jobs] Webhooks fehlgeschlagen", err));
+    void recordHeartbeat(ctx).catch((err) => log?.("[jobs] Status-Herzschlag fehlgeschlagen", err));
+  }, 60_000);
   return () => {
     clearTimeout(first);
     clearInterval(every);

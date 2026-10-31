@@ -778,3 +778,35 @@ export const partners = mysqlTable(
   },
   (t) => [uniqueIndex("partners_code_uq").on(t.code)],
 );
+
+/** Status page: one row per day with the minutes the installation answered (heartbeat every minute). */
+export const statusDays = mysqlTable("status_days", {
+  day: date("day", { mode: "string" }).primaryKey(),
+  okMinutes: int("ok_minutes").notNull().default(0),
+  badMinutes: int("bad_minutes").notNull().default(0),
+  /** First heartbeat of the day (Zurich time); before it on the first day there was no installation yet. */
+  firstAt: datetime("first_at", { mode: "date" }).notNull(),
+  lastAt: datetime("last_at", { mode: "date" }).notNull(),
+});
+
+export interface IncidentUpdate {
+  at: string;
+  status: "investigating" | "identified" | "monitoring" | "resolved" | "scheduled" | "in_progress" | "completed";
+  text: string;
+}
+
+/** Disruptions and planned maintenance the operator posts on the public status page. */
+export const incidents = mysqlTable(
+  "incidents",
+  {
+    id: id().primaryKey(),
+    title: varchar("title", { length: 200 }).notNull(),
+    impact: mysqlEnum("impact", ["minor", "major", "maintenance"]).notNull(),
+    status: mysqlEnum("status", ["investigating", "identified", "monitoring", "resolved", "scheduled", "in_progress", "completed"]).notNull(),
+    startsAt: datetime("starts_at", { mode: "date" }).notNull(),
+    endsAt: datetime("ends_at", { mode: "date" }),
+    updates: json<IncidentUpdate[]>("updates").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("incidents_start_idx").on(t.startsAt)],
+);

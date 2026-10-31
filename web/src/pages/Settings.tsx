@@ -8,6 +8,7 @@ import { IntegrationsTab } from "./Integrations";
 import { ImportTab } from "./Import";
 import { SsoTab } from "./SsoSettings";
 import { PartnersCard, ReferralCard } from "./Growth";
+import { IncidentsCard } from "./StatusAdmin";
 import { ChatTab } from "./ChatSettings";
 import { MonitorCard } from "./Monitor";
 import { STATUS_LABEL, SubscriptionTab, statusPill, useSubscription } from "./Subscription";
@@ -673,6 +674,7 @@ function Operator() {
         </div>
       )}
       <MonitorCard />
+      <IncidentsCard />
       {(data.saas || mode === "demo") && <PartnersCard />}
       <section className="card">
         <div className="card-head">

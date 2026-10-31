@@ -225,6 +225,13 @@
       "when": 1793468637005,
       "tag": "0031_referrals_partners",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1793468909646,
+      "tag": "0032_status_history",
+      "breakpoints": true
     }
   ]
 }
