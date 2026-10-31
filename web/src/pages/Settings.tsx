@@ -6,6 +6,7 @@ import { BexioCard } from "./Bexio";
 import { JiraTab } from "./Jira";
 import { IntegrationsTab } from "./Integrations";
 import { ImportTab } from "./Import";
+import { SsoTab } from "./SsoSettings";
 import { MonitorCard } from "./Monitor";
 import { STATUS_LABEL, SubscriptionTab, statusPill, useSubscription } from "./Subscription";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
@@ -726,7 +727,7 @@ function Operator() {
   );
 }
 
-type Tab = "look" | "users" | "signin" | "work" | "billing" | "reports" | "import" | "jira" | "api" | "abo" | "operator";
+type Tab = "look" | "users" | "signin" | "sso" | "work" | "billing" | "reports" | "import" | "jira" | "api" | "abo" | "operator";
 const tabOfHash = (): Tab | null => (location.hash.startsWith("#einstellungen/") ? (location.hash.split("/")[1] as Tab) : null);
 
 const NAV_ICON: Partial<Record<Tab, () => JSX.Element>> = {
@@ -734,6 +735,7 @@ const NAV_ICON: Partial<Record<Tab, () => JSX.Element>> = {
   users: Icon.users,
   work: Icon.clock,
   signin: Icon.lock,
+  sso: Icon.shield,
   billing: () => <svg viewBox="0 0 24 24" {...NAV_P}><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" /><path d="M9 8h6M9 12h6" /></svg>,
   abo: () => <svg viewBox="0 0 24 24" {...NAV_P}><rect x="3" y="5.5" width="18" height="13" rx="2" /><path d="M3 10h18M7 15h4" /></svg>,
   reports: Icon.report,
@@ -750,11 +752,11 @@ type NavGroup = { id: string; label: string; items: NavItem[] };
 /** Small status hints next to the settings entries: missing IBAN, Jira connection, team size, trial days. */
 function useNavHints(enabled: boolean) {
   const { mode } = useStore();
-  const [hints, setHints] = useState<{ ibanMissing?: boolean; jira?: boolean }>({});
+  const [hints, setHints] = useState<{ ibanMissing?: boolean; jira?: boolean; sso?: boolean }>({});
   useEffect(() => {
     if (!enabled) return;
-    if (mode === "demo") { setHints({ ibanMissing: false, jira: true }); return; }
-    api<OrgSettings>("/api/settings").then((s) => setHints((h) => ({ ...h, ibanMissing: !s.billing?.iban }))).catch(() => {});
+    if (mode === "demo") { setHints({ ibanMissing: false, jira: true, sso: true }); return; }
+    api<OrgSettings>("/api/settings").then((s) => setHints((h) => ({ ...h, ibanMissing: !s.billing?.iban, sso: !!s.ssoActive }))).catch(() => {});
     api<{ connected: boolean }>("/api/jira").then((j) => setHints((h) => ({ ...h, jira: j.connected }))).catch(() => {});
   }, [enabled, mode]);
   return hints;
@@ -788,7 +790,7 @@ export function Settings() {
       { id: "users", label: tr("Benutzer"), badge: people ? { text: String(people), tone: "n" } : undefined },
       { id: "work", label: tr("Arbeitszeit") },
     ] },
-    { id: "login", label: tr("Anmeldung"), items: [{ id: "signin", label: tr("Anmeldung & E-Mail") }] },
+    { id: "login", label: tr("Anmeldung"), items: [{ id: "signin", label: tr("Anmeldung & E-Mail") }, ...(role === "admin" ? [{ id: "sso" as Tab, label: tr("Firmen-Login (SSO)"), badge: hints.sso ? { text: tr("aktiv"), tone: "good" as const } : undefined }] : [])] },
     { id: "geld", label: tr("Abrechnung"), items: [
       { id: "billing", label: tr("Rechnung"), badge: hints.ibanMissing ? { text: tr("IBAN fehlt"), tone: "warn" } : undefined },
       ...(sub ? [{ id: "abo" as Tab, label: tr("Abo"), badge: trialDays !== null ? { text: trn(trialDays, "{0} Tag", "{0} Tage"), tone: "n" as const } : sub.status === "past_due" ? { text: tr("Zahlung offen"), tone: "warn" as const } : undefined }] : []),
@@ -844,6 +846,7 @@ export function Settings() {
           {tab === "look" && <Appearance />}
           {tab === "users" && <Users />}
           {tab === "signin" && <SignIn />}
+          {tab === "sso" && role === "admin" && <SsoTab />}
           {tab === "work" && <WorkSettings />}
           {tab === "billing" && <><Billing /><BexioCard /></>}
           {tab === "reports" && <ReportsAndExport />}

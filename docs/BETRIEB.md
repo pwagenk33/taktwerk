@@ -448,7 +448,29 @@ Danach verbindet ein Admin unter Einstellungen → Rechnung → bexio. TrackInsi
 
 **Lohnexport:** Unter Monatsabschluss → Lohnexport lädt ein Admin pro Monat eine CSV-Datei herunter. Sie enthält pro Person die geleisteten Stunden, das Soll, die Überzeit im Monat, den Überzeit-Saldo, die Absenztage nach Art (nur bewilligte) sowie Spesen und Kilometer zur Rückerstattung (nur bewilligte). Die Spalten heissen personalnummer, name, periode, lohnart, bezeichnung, menge, einheit und betrag. Die Nummern der Lohnarten stellt man unter «Lohnarten» auf das eigene Lohnprogramm ein, die Personalnummer im Arbeitsmodell der Person. Die Datei ist ein Import für Lohnprogramme und keine zertifizierte Swissdec-Übermittlung (ELM). Löhne, Sozialversicherungen und Lohnausweis rechnet weiterhin das Lohnprogramm.
 
-## 19. Kurzreferenz
+## 19. Firmen-Login (SAML) und SCIM mit Microsoft Entra ID
+
+Pro Firma unter Einstellungen → Firmen-Login (SSO), nur für Admins. Im SaaS-Betrieb ab Paket Business.
+
+**SAML einrichten (Entra ID):**
+1. Entra Admin Center → Unternehmensanwendungen → Neue Anwendung → Eigene Anwendung erstellen (nicht im Katalog).
+2. Einmaliges Anmelden → SAML. Bezeichner (Entity ID) und Antwort-URL (ACS) aus TrackInsight kopieren.
+3. Unter «SAML-Zertifikate» das Zertifikat (Base64) herunterladen und den Inhalt in TrackInsight einfügen, dazu die «Anmelde-URL» und optional den «Microsoft Entra-Bezeichner».
+4. Benutzer und Gruppen der Anwendung zuweisen.
+5. In TrackInsight die E-Mail-Domains eintragen (z. B. firma.ch) und den Firmen-Login einschalten.
+
+Neue Personen aus diesen Domains werden beim ersten Login als Mitarbeitende angelegt. «Nur noch Firmen-Login erlauben» sperrt die Passwort-Anmeldung für alle ausser Admins (Notzugang, falls Entra ausfällt). Die Anmeldeseite zeigt «Mit Firmen-Login anmelden»; die Firma wird über die E-Mail-Domain gefunden. Eine Domain kann nur bei einer Firma eingetragen sein.
+
+Geprüft wird die Signatur der Assertion mit dem hinterlegten Zertifikat, die Zielgruppe (Entity ID), die Gültigkeitsdauer (2 Minuten Toleranz) und dass eine Assertion nicht zweimal verwendet wird. Läuft das Entra-Zertifikat ab, das neue Zertifikat in TrackInsight einfügen.
+
+**SCIM einrichten (Benutzer automatisch abgleichen):**
+1. In TrackInsight «Token erstellen» klicken und das Token sofort kopieren (wird nur einmal angezeigt).
+2. In derselben Entra-Anwendung → Bereitstellung → Automatisch. Mandanten-URL `https://<firma-adresse>/scim/v2`, geheimes Token einfügen, «Verbindung testen».
+3. Zuordnungen: userName = userPrincipalName, emails[type eq "work"].value = mail, displayName, name.givenName, name.familyName, active. Gruppen werden nicht übernommen.
+
+Entra legt Personen an, ändert Name und Adresse und deaktiviert Austritte. Löschen in Entra deaktiviert nur; Buchungen bleiben für Reports. Rollen und Teams werden in TrackInsight vergeben. Die letzte aktive Admin-Person kann per SCIM nicht deaktiviert werden.
+
+## 20. Kurzreferenz
 
 | Aufgabe | Befehl (im Ordner `~/trackinsight`) |
 |---|---|

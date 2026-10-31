@@ -73,7 +73,7 @@ interface Props {
 export function Login({ branding, providers, demo, onLoggedIn }: Props) {
   const ssoError = new URLSearchParams(location.search).get("anmeldung");
   const [choices, setChoices] = useState<Choice[] | null>(null);
-  const [view, setView] = useState<"login" | "forgot" | "sent" | "register" | "second" | "choose">(location.pathname === "/registrieren" ? "register" : "login");
+  const [view, setView] = useState<"login" | "forgot" | "sent" | "register" | "second" | "choose" | "company">(location.pathname === "/registrieren" ? "register" : "login");
   const [second, setSecond] = useState<{ token: string; totp: boolean; passkey: boolean } | null>(null);
   const [code, setCode] = useState("");
   const [company, setCompany] = useState("");
@@ -182,6 +182,20 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
     if (demo) return setError(tr("Im Prototyp ist die Anmeldung mit Microsoft und Google nicht verbunden. Bitte mit Benutzername und Passwort anmelden."));
     location.href = `/api/auth/${provider}`;
   };
+  const companyLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (demo) return setError(tr("Im Prototyp ist kein Firmen-Login verbunden. Bitte mit Benutzername und Passwort anmelden."));
+    setBusy(true);
+    try {
+      const r = await api<{ url: string }>(`/api/auth/sso?email=${encodeURIComponent(email)}`);
+      location.href = r.url;
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+  const showCompany = demo || !!providers.sso;
   const showMs = demo || providers.microsoft;
   const showGoogle = demo || providers.google;
 
@@ -197,9 +211,11 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
             <div className="sso">
               {showMs && <button type="button" className="btn sso-btn" onClick={() => sso("microsoft")}><MicrosoftIcon />{tr("Mit Microsoft anmelden")}</button>}
               {showGoogle && <button type="button" className="btn sso-btn" onClick={() => sso("google")}><GoogleIcon />{tr("Mit Google anmelden")}</button>}
+              {showCompany && <button type="button" id="l-company" className="btn sso-btn" onClick={() => { setView("company"); setError(""); }}><Icon.shield />{tr("Mit Firmen-Login anmelden")}</button>}
             </div>
           )}
-          {(showMs || showGoogle) && <div className="divider"><span>{tr("oder")}</span></div>}
+          {!(showMs || showGoogle) && showCompany && <button type="button" id="l-company" className="btn sso-btn block" onClick={() => { setView("company"); setError(""); }}><Icon.shield />{tr("Mit Firmen-Login anmelden")}</button>}
+          {(showMs || showGoogle || showCompany) && <div className="divider"><span>{tr("oder")}</span></div>}
           <label className="field"><span>{tr("Benutzername oder E-Mail")}</span>
             <input id="l-user" className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
           </label>
@@ -212,6 +228,20 @@ export function Login({ branding, providers, demo, onLoggedIn }: Props) {
           <button type="button" className="link" onClick={() => { setView("forgot"); setError(""); }}>{tr("Passwort vergessen?")}</button>
           {providers.registration && !demo && <button type="button" id="to-register" className="link" onClick={() => { setView("register"); setError(""); }}>{tr("Neue Firma registrieren")}</button>}
           {demo && <p className="notice">{tr("Prototyp mit Beispieldaten: Die Felder sind vorausgefüllt, einfach auf «Anmelden» klicken.")}</p>}
+        </form>
+      )}
+      {view === "company" && (
+        <form onSubmit={companyLogin} className="login-form">
+          <div>
+            <h2>{tr("Firmen-Login")}</h2>
+            <p className="muted">{tr("Gib deine geschäftliche E-Mail-Adresse ein. Du wirst zur Anmeldung deiner Firma weitergeleitet, zum Beispiel Microsoft Entra ID.")}</p>
+          </div>
+          <label className="field"><span>{tr("E-Mail")}</span>
+            <input id="l-company-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </label>
+          {error && <p className="error" role="alert">{error}</p>}
+          <button className="btn primary block" disabled={busy}>{tr("Weiter")}</button>
+          <button type="button" className="link" onClick={() => { setView("login"); setError(""); }}>{tr("Zurück zur Anmeldung")}</button>
         </form>
       )}
       {view === "forgot" && (

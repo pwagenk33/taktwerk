@@ -9,6 +9,7 @@ import { hashPassword, newToken, passwordProblem, sha256, verifyPassword } from 
 import { DEFAULT_BRANDING, oauthAccounts, organizations, passkeys, passwordTokens, sessions, users } from "../db/schema";
 import { actionMail } from "../mail/mailer";
 import { syncSeats } from "../saas";
+import { passwordBlockedBySso } from "./sso";
 import { tr } from "@taktwerk/domain";
 
 type Provider = "microsoft" | "google";
@@ -80,6 +81,7 @@ export async function authRoutes(app: FastifyInstance) {
     google: oauthClient(ctx, "google") !== null,
     registration: ctx.config.REGISTRATION_OPEN === "true",
     saas: ctx.config.SAAS === "true",
+    sso: (await ctx.db.select({ id: organizations.id }).from(organizations).where(and(eq(organizations.active, true), sql`json_value(${organizations.settings}, '$.sso.saml.enabled') = true`)).limit(1)).length > 0,
   }));
 
   /** Public branding so the login page can render in the corporate design (per host, see organizationForHost). */
@@ -95,7 +97,7 @@ export async function authRoutes(app: FastifyInstance) {
     const hostOrg = await organizationForHost(ctx.db, req.headers.host, ctx.config.SAAS_BASE_DOMAIN);
     const hostBound = !!(hostOrg && (hostOrg.domain || ctx.config.SAAS_BASE_DOMAIN));
     const candidates = await ctx.db
-      .select({ user: users, orgName: organizations.name, orgActive: organizations.active })
+      .select({ user: users, orgName: organizations.name, orgActive: organizations.active, orgSettings: organizations.settings })
       .from(users)
       .innerJoin(organizations, eq(organizations.id, users.organizationId))
       .where(or(eq(users.username, body.username), sql`lower(${users.email}) = ${body.username.toLowerCase()}`))
@@ -116,6 +118,7 @@ export async function authRoutes(app: FastifyInstance) {
     const picked = body.organizationId ? open.find((m) => m.user.organizationId === body.organizationId) : open.length === 1 ? open[0] : undefined;
     if (!picked) return { ok: false, choose: open.map((m) => ({ organizationId: m.user.organizationId, name: m.orgName, role: m.user.role })).sort((a, b) => a.name.localeCompare(b.name, "de")) };
     const user = picked.user;
+    if (passwordBlockedBySso(picked.orgSettings, user.role)) throw new HttpError(403, tr("Deine Firma meldet dich über den Firmen-Login an. Bitte «Mit Firmen-Login anmelden» wählen."));
     // Second factor: the password alone opens no session; the client completes with a code or a passkey.
     const keys = await ctx.db.select({ id: passkeys.id }).from(passkeys).where(eq(passkeys.userId, user.id));
     if (user.totpEnabledAt || keys.length > 0) {

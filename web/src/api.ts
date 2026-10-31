@@ -105,6 +105,8 @@ export interface Providers {
   registration?: boolean;
   /** SaaS: registration starts a trial of a package. */
   saas?: boolean;
+  /** At least one company signs in through SAML (company login button). */
+  sso?: boolean;
 }
 
 export interface BillingSettings {
@@ -119,6 +121,8 @@ export interface Settings {
   name: string;
   branding: Branding;
   ssoAutoProvisionDomains: string[];
+  /** Company sign-in (SAML) is switched on; details under /api/sso. */
+  ssoActive?: boolean;
   payrollCodes?: Record<string, string>;
   reportDay?: number;
   autoRetainerInvoices?: boolean;

@@ -97,6 +97,20 @@ export interface OrgSettings {
   payrollCodes?: Partial<Record<string, string>>;
   /** On the 1st, draft last month's invoice for every customer with a retainer project (default off). */
   autoRetainerInvoices?: boolean;
+  /** Company sign-in (SAML 2.0, e.g. Microsoft Entra ID, Okta, Google Workspace) and user provisioning via SCIM 2.0. */
+  sso?: SsoSettings;
+}
+
+export interface SsoSettings {
+  saml?: { enabled: boolean; entryPoint: string; idpIssuer?: string; cert: string };
+  /** E-mail domains that sign in through SAML; new people from these domains are created as employees on first login. */
+  domains?: string[];
+  /** Password sign-in only for admins (break-glass); everyone else signs in through SAML. */
+  enforce?: boolean;
+  /** SHA-256 of the SCIM bearer token; the token itself is shown once. */
+  scimTokenHash?: string;
+  scimTokenHint?: string;
+  scimCreatedAt?: string;
 }
 
 export const organizations = mysqlTable(

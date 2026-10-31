@@ -66,7 +66,9 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get("/api/settings", async (req) => {
     const user = requireUser(req);
     const org = await orgOf(user.organizationId);
-    return { name: org.name, ...org.settings };
+    // SSO details have their own admin endpoint (/api/sso); the SCIM token hash never leaves the server.
+    const { sso, ...rest } = org.settings;
+    return { name: org.name, ...rest, ssoActive: !!sso?.saml?.enabled };
   });
 
   app.put("/api/settings", async (req) => {
@@ -139,7 +141,8 @@ export async function adminRoutes(app: FastifyInstance) {
       fx: body.fx ? { rates: { ...org.settings.fx?.rates, ...body.fx.rates }, asOf: todayZurich(), source: "manuell", manual: body.fx.manual ?? true } : org.settings.fx,
     };
     await ctx.db.update(organizations).set({ name: body.name ?? org.name, settings }).where(eq(organizations.id, org.id));
-    return { name: body.name ?? org.name, ...settings };
+    const { sso, ...rest } = settings;
+    return { name: body.name ?? org.name, ...rest, ssoActive: !!sso?.saml?.enabled };
   });
 
   /** Sends one scheduled report now to the requesting admin, to check its content. */

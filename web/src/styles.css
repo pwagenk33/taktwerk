@@ -1258,3 +1258,8 @@ body.dialog-open { overflow: hidden; }
 @media (hover: hover) { .company-choice:hover { border-color: var(--ink); } }
 .company-switch { display: grid; gap: 4px; }
 .company-switch a, .rail-mandates { font-size: 0.76rem; padding: 0 4px; }
+
+/* Settings → Firmen-Login: copyable values for the identity provider */
+.sso-row { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.sso-row code { overflow-wrap: anywhere; font-size: 0.8rem; background: var(--surface-2, rgba(0,0,0,.04)); padding: 4px 8px; border-radius: 6px; }
+@media (max-width: 640px) { .sso-row { grid-template-columns: minmax(0, 1fr) auto; } .sso-row > span { grid-column: 1 / -1; } }
