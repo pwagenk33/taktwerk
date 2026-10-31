@@ -22,7 +22,7 @@ export function periodEnd(from: Date, interval: BillingInterval) {
   return d;
 }
 
-const chf = (n: number) => `CHF ${n.toLocaleString("de-CH")}`;
+const chf = (n: number) => `CHF ${n.toLocaleString("de-CH").replace(/'/g, "’")}`;
 export const intervalLabel = (i: BillingInterval) => (i === "year" ? tr("jährlich") : tr("monatlich"));
 
 type MailContent = () => { subject: string; lines: string[]; action?: { label: string; path: string } };

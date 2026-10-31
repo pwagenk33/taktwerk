@@ -1,5 +1,5 @@
 // Operator console: response times and recent errors of this installation (GET /api/platform/monitor).
-import { fmtDate } from "@taktwerk/domain";
+import { fmtDate, fmtNum } from "@taktwerk/domain";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useStore } from "../store";
@@ -63,7 +63,7 @@ export function MonitorCard() {
       </div>
       <div className="card-pad" style={{ paddingTop: 10 }}>
         <div className="mon-figures">
-          <div><span className="eyebrow">{tr("Anfragen")}</span><strong className="num">{data.requests.toLocaleString("de-CH")}</strong></div>
+          <div><span className="eyebrow">{tr("Anfragen")}</span><strong className="num">{fmtNum(data.requests)}</strong></div>
           <div><span className="eyebrow">{tr("Antwortzeit Median")}</span><strong className="num">{ms(data.p50)}</strong></div>
           <div><span className="eyebrow">{tr("95 % schneller als")}</span><strong className="num">{ms(data.p95)}</strong></div>
           <div><span className="eyebrow">{tr("Serverfehler")}</span><strong className={`num ${data.serverErrors ? "bad" : ""}`}>{data.serverErrors}</strong><small className="muted">{errorRate ? `${errorRate.toFixed(2)} %` : tr("keine")}</small></div>

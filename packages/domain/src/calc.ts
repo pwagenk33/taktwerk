@@ -408,11 +408,13 @@ export function setFormatLocale(tag: string) { resolveTag = () => tag; }
 export function setFormatLocaleResolver(fn: () => string) { resolveTag = fn; }
 export const formatLocale = () => resolveTag();
 const formats = new Map<string, Intl.NumberFormat | Intl.DateTimeFormat>();
-function nf(key: string, opts: Intl.NumberFormatOptions): Intl.NumberFormat {
+// Swiss thousands separator: ICU versions differ between ’ and ' (browsers, Node, CI), so it is always ’.
+function nf(key: string, opts: Intl.NumberFormatOptions): { format: (v: number) => string } {
   const tag = resolveTag();
   let f = formats.get(`${tag}|${key}`);
   if (!f) formats.set(`${tag}|${key}`, (f = new Intl.NumberFormat(tag, opts)));
-  return f as Intl.NumberFormat;
+  const n = f as Intl.NumberFormat;
+  return { format: (v: number) => n.format(v).replace(/'/g, "’") };
 }
 function df(key: string, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
   const tag = resolveTag();
