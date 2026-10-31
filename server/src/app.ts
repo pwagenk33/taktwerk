@@ -42,6 +42,7 @@ import { subscriptionRoutes } from "./routes/subscription";
 import { presenceRoutes } from "./routes/presence";
 import { tr } from "@taktwerk/domain";
 import { currentLocale, requestLocale, withLocale } from "./i18n";
+import { recordError, recordRequest } from "./monitor";
 
 /** auditor (Treuhand/Revision) reads everything of the organization and changes nothing. */
 export type Role = "admin" | "consultant" | "employee" | "auditor" | "customer";
@@ -261,7 +262,13 @@ export async function buildApp(ctx: AppContext) {
     if (err.name === "ZodError") return reply.status(400).send({ error: tr("Eingaben sind unvollständig oder ungültig."), details: JSON.parse(err.message) });
     if (err.statusCode && err.statusCode < 500) return reply.status(err.statusCode).send({ error: err.message });
     req.log.error(err);
+    recordError({ source: "server", route: `${req.method} ${req.routeOptions?.url ?? req.url.split("?")[0]}`, message: err.message, detail: err.stack?.split("\n").slice(0, 6).join("\n"), orgId: req.user?.organizationId });
     return reply.status(500).send({ error: tr("Interner Fehler. Bitte später erneut versuchen.") });
+  });
+
+  // Response times per route for the operator console (only API calls; pages and files are cheap).
+  app.addHook("onResponse", async (req, reply) => {
+    if (req.url.startsWith("/api/")) recordRequest(`${req.method} ${req.routeOptions?.url ?? "?"}`, reply.elapsedTime, reply.statusCode);
   });
 
   // Large API answers (the dataset) are gzip-compressed when the client accepts it; behind Caddy this

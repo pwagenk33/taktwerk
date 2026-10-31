@@ -14,6 +14,21 @@ if (!DEMO && "serviceWorker" in navigator && location.protocol.startsWith("http"
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 }
 
+// Uncaught errors in the browser go to the operator console (Settings → Betreiber), at most 10 per page load.
+if (!DEMO) {
+  let sent = 0;
+  const report = (message: string, stack?: string) => {
+    if (sent++ >= 10 || !message) return;
+    api("/api/client-errors", { body: { message: message.slice(0, 500), stack: stack?.slice(0, 2000), page: location.hash.slice(1).split("/")[0] || "eingang", version: __BUILD__.version } }).catch(() => {});
+  };
+  window.addEventListener("error", (e) => report(e.message, (e.error as Error | undefined)?.stack));
+  window.addEventListener("unhandledrejection", (e) => {
+    const r = e.reason as Error | undefined;
+    if (r instanceof ApiError) return; // answers the app already shows
+    report(r?.message ?? String(e.reason), r?.stack);
+  });
+}
+
 type State =
   | { kind: "loading" }
   | { kind: "error"; message: string }

@@ -13,6 +13,7 @@ import { requireFeature, saasOn, seatsUsed } from "../saas";
 import { createPasswordToken, passwordLink, signIn } from "./auth";
 import { periodEnd } from "./subscription";
 import { tr } from "@taktwerk/domain";
+import { monitorReport, recordError } from "../monitor";
 
 const slug = z.string().trim().toLowerCase().regex(/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/, tr("Kürzel: Kleinbuchstaben, Ziffern und Bindestriche, 2–60 Zeichen"));
 const host = z.string().trim().toLowerCase().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/, tr("Domain wie zeit.firma.ch, ohne https://"));
@@ -49,6 +50,27 @@ export async function platformRoutes(app: FastifyInstance) {
     const [clash] = await ctx.db.select({ id: users.id }).from(users).where(or(eq(users.username, username), sql`lower(${users.email}) = ${email}`)).limit(1);
     if (clash) throw new HttpError(409, tr("Für diese E-Mail-Adresse gibt es bereits ein Konto."));
   };
+
+  /** Response times and recent errors of this installation (memory only, since the last start). */
+  app.get("/api/platform/monitor", async (req) => {
+    requirePlatformAdmin(req);
+    const q = z.object({ hours: z.coerce.number().int().min(1).max(24).default(24) }).parse(req.query);
+    return monitorReport(q.hours);
+  });
+
+  /** Errors from the browser (uncaught exceptions), at most 20 per person and hour. */
+  const clientErrorCount = new Map<string, { hour: number; n: number }>();
+  app.post("/api/client-errors", async (req, reply) => {
+    const user = requireUser(req);
+    const body = z.object({ message: z.string().min(1).max(500), stack: z.string().max(2000).optional(), page: z.string().max(100).optional(), version: z.string().max(40).optional() }).parse(req.body);
+    const hour = Math.floor(Date.now() / 3600_000);
+    const c = clientErrorCount.get(user.id);
+    const n = c && c.hour === hour ? c.n + 1 : 1;
+    clientErrorCount.set(user.id, { hour, n });
+    if (clientErrorCount.size > 5000) clientErrorCount.clear();
+    if (n <= 20) recordError({ source: "app", route: body.page ? `#${body.page}` : "?", message: body.message, detail: body.stack, orgId: user.organizationId, version: body.version });
+    return reply.code(204).send();
+  });
 
   app.get("/api/platform/orgs", async (req) => {
     requirePlatformAdmin(req);

@@ -1137,3 +1137,28 @@ body.dialog-open { overflow: hidden; }
 .cal-block.cal-suggest:hover .cal-suggest-x, .cal-suggest-x:focus-visible { opacity: 1; }
 @media (hover: none) { .cal-suggest-x { opacity: 1; } }
 .page-loading { min-height: 40vh; }
+
+/* Operator monitoring (Settings → Betreiber) */
+.mon-figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--radius); }
+.mon-figures > div { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; }
+.mon-figures > div + div { border-left: 1px solid var(--line); }
+.mon-figures strong { font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; }
+.mon-figures strong.bad { color: var(--crit); }
+.mon-figures small { font-size: 0.75rem; }
+.mon-bars { display: flex; align-items: flex-end; gap: 3px; height: 72px; margin-top: 16px; }
+.mon-bars span { flex: 1; min-width: 2px; background: var(--brand); opacity: 0.55; border-radius: 2px 2px 0 0; }
+.mon-bars span.err { background: var(--crit); opacity: 1; }
+.mon-h { font-size: 0.95rem; margin: 18px 0 8px; }
+.mon-errors { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.mon-errors li { border-bottom: 1px solid var(--line); }
+.mon-err { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; padding: 9px 0; background: none; border: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.mon-err .msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mon-err .when { font-size: 0.78rem; white-space: nowrap; }
+.mon-detail { margin: 0 0 10px; padding: 10px 12px; background: var(--surface-2); border-radius: var(--radius-s); font-size: 0.75rem; white-space: pre-wrap; overflow-x: auto; }
+@media (max-width: 700px) {
+  .mon-figures { grid-template-columns: 1fr 1fr; }
+  .mon-figures > div:nth-child(3) { border-left: 0; }
+  .mon-figures > div:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .mon-err { grid-template-columns: auto minmax(0, 1fr); }
+  .mon-err .mono, .mon-err .when { display: none; }
+}

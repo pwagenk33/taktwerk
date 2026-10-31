@@ -6,6 +6,7 @@ import { BexioCard } from "./Bexio";
 import { JiraTab } from "./Jira";
 import { IntegrationsTab } from "./Integrations";
 import { ImportTab } from "./Import";
+import { MonitorCard } from "./Monitor";
 import { STATUS_LABEL, SubscriptionTab, statusPill, useSubscription } from "./Subscription";
 import { BrandMark, MatterhornRidge } from "../ui/motif";
 import { Select } from "../ui/Select";
@@ -655,6 +656,7 @@ function Operator() {
           <div className="card tile"><span className="eyebrow">{tr("Beendet")}</span><span className="value num">{s.ended}</span><span className="delta">{tr("gekündigt oder Testphase abgelaufen")}</span></div>
         </div>
       )}
+      <MonitorCard />
       <section className="card">
         <div className="card-head">
           <h2>{tr("Firmen auf dieser Installation")}</h2>
