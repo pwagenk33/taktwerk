@@ -27,7 +27,7 @@ export interface Me {
   /** Operator of the installation: may manage the companies on it. */
   platformAdmin?: boolean;
   /** Language chosen in the profile; null until chosen. */
-  locale?: "de" | "fr" | "en" | null;
+  locale?: "de" | "fr" | "en" | "it" | null;
   /** Employees: projects and teams they lead. */
   leadsProjects?: string[];
   leadsTeams?: string[];

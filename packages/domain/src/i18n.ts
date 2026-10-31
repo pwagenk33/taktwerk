@@ -4,14 +4,16 @@
 // time stay German and are translated where they are shown.
 // The table is registered, not imported, so the browser only downloads it when someone uses French or English:
 // the server registers it at start, the web app loads it on demand (see web/src/main.tsx).
+// Languages: German, French, English and Italian (the four columns of messages.ts).
 
-export type Locale = "de" | "fr" | "en";
+export type Locale = "de" | "fr" | "en" | "it";
 export const LOCALES: { id: Locale; label: string }[] = [
   { id: "de", label: "Deutsch" },
   { id: "fr", label: "Français" },
   { id: "en", label: "English" },
+  { id: "it", label: "Italiano" },
 ];
-export const isLocale = (v: unknown): v is Locale => v === "de" || v === "fr" || v === "en";
+export const isLocale = (v: unknown): v is Locale => v === "de" || v === "fr" || v === "en" || v === "it";
 /** First supported language in an Accept-Language header or a list of browser languages; German otherwise. */
 export function pickLocale(wanted: string | readonly string[] | null | undefined): Locale {
   const list = typeof wanted === "string" ? wanted.split(",") : wanted ?? [];
@@ -25,7 +27,7 @@ export function pickLocale(wanted: string | readonly string[] | null | undefined
 type Arg = string | number | null | undefined;
 export type Translator = (de: string, ...args: Arg[]) => string;
 
-type Row = readonly [de: string, fr: string, en: string];
+type Row = readonly [de: string, fr: string, en: string, it?: string];
 let rows: readonly Row[] = [];
 const dicts = new Map<Locale, Map<string, string>>();
 /** Plugs in the translation table (messages.ts); without it every text stays German. */
@@ -37,7 +39,7 @@ export function dictionary(locale: Locale): Map<string, string> {
   let d = dicts.get(locale);
   if (!d) {
     d = new Map();
-    const col = locale === "fr" ? 1 : 2;
+    const col = locale === "fr" ? 1 : locale === "en" ? 2 : 3;
     if (locale !== "de") for (const row of rows) if (row[col]) d.set(row[0], row[col]);
     dicts.set(locale, d);
   }

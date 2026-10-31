@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { viteSingleFile } from "vite-plugin-singlefile";
@@ -16,6 +17,7 @@ function gitHash() {
 export default defineConfig(({ mode }) => ({
   plugins: mode === "single" ? [react(), viteSingleFile()] : [react()],
   build: { outDir: mode === "single" ? "dist-single" : "dist" },
+  resolve: mode === "single" ? { alias: [{ find: /^\.\/messages-early$/, replacement: fileURLToPath(new URL("./src/messages-early.single.ts", import.meta.url)) }] } : undefined,
   define: { __BUILD__: JSON.stringify({ version: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version, hash: gitHash(), date: new Date().toISOString().slice(0, 10) }) },
   server: { proxy: { "/api": "http://localhost:3000" } },
 }));

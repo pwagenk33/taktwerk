@@ -8,14 +8,14 @@ import { login, setup } from "./helpers";
 const placeholders = (s: string) => [...s.matchAll(/\{\d+\}/g)].map((m) => m[0]).sort().join(",");
 
 describe("translations", () => {
-  it("has French and English for every text the app, server and domain show", () => {
+  it("has French, English and Italian for every text the app, server and domain show", () => {
     const known = new Map(MESSAGES.map((m) => [m[0], m]));
-    const gaps = collectKeys().filter((k) => !known.get(k.key)?.[1] || !known.get(k.key)?.[2]);
+    const gaps = collectKeys().filter((k) => !known.get(k.key)?.[1] || !known.get(k.key)?.[2] || !known.get(k.key)?.[3]);
     expect(gaps.map((g) => `${g.key} (${g.where})`)).toEqual([]);
   });
 
   it("keeps the placeholders of the German text", () => {
-    const broken = MESSAGES.filter(([de, fr, en]) => placeholders(fr) !== placeholders(de) || placeholders(en) !== placeholders(de)).map((m) => m[0]);
+    const broken = MESSAGES.filter(([de, fr, en, it]) => [fr, en, it ?? de].some((x) => placeholders(x) !== placeholders(de))).map((m) => m[0]);
     expect(broken).toEqual([]);
   });
 });
@@ -35,6 +35,8 @@ describe("language per request and per recipient", () => {
   it("answers errors in the language the app sends", async () => {
     const fr = await t.app.inject({ method: "PATCH", url: "/api/customers/nope", payload: { name: "X" }, headers: { cookie: anna, "accept-language": "fr-CH" } });
     expect(fr.json()).toEqual({ error: "Client introuvable." });
+    const it_ = await t.app.inject({ method: "PATCH", url: "/api/customers/nope", payload: { name: "X" }, headers: { cookie: anna, "accept-language": "it-CH" } });
+    expect(it_.json()).toEqual({ error: "Cliente non trovato." });
     const de = await t.app.inject({ method: "PATCH", url: "/api/customers/nope", payload: { name: "X" }, headers: { cookie: anna } });
     expect(de.json()).toEqual({ error: "Kunde nicht gefunden." });
   });

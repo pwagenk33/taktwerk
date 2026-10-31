@@ -149,7 +149,7 @@ export async function authRoutes(app: FastifyInstance) {
   /** Language of the app and of e-mails to this person. */
   app.put("/api/me/locale", async (req) => {
     const me = requireUser(req);
-    const { locale } = z.object({ locale: z.enum(["de", "fr", "en"]) }).parse(req.body);
+    const { locale } = z.object({ locale: z.enum(["de", "fr", "en", "it"]) }).parse(req.body);
     await ctx.db.update(users).set({ locale }).where(eq(users.id, me.id));
     return { locale };
   });

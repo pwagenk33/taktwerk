@@ -52,7 +52,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename
   const { MESSAGES } = await import("../packages/domain/src/messages");
   const known = new Map(MESSAGES.map((m) => [m[0], m]));
   const keys = [...new Map(collectKeys().map((k) => [k.key, k])).values()];
-  const missing = keys.filter((k) => !known.get(k.key)?.[1] || !known.get(k.key)?.[2]);
+  const missing = keys.filter((k) => !known.get(k.key)?.[1] || !known.get(k.key)?.[2] || !known.get(k.key)?.[3]);
   const used = new Set(keys.map((k) => k.key));
   const unused = MESSAGES.filter((m) => !used.has(m[0]));
   if (process.argv.includes("--all")) console.log(JSON.stringify(keys.map((k) => k.key)));

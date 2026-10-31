@@ -1,5 +1,6 @@
 // The browser's language: chosen in the profile (saved here and on the server) or taken from the browser.
 // Texts and number formats switch together; changing the language reloads the page.
+import "./messages-early";
 import { LOCALES, isLocale, pickLocale, setFormatLocale, setTranslator, translate, trnFor, type Locale } from "@taktwerk/domain";
 
 export { LOCALES, type Locale };

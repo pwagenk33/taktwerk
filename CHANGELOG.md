@@ -10,6 +10,12 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 - Forecast, Budgets und Überzeit-Saldi rechnen schneller, bei vielen Projekten und Personen etwa doppelt so schnell.
 
 ### Neu
+- Wochenraster in der Zeiterfassung: eine Zeile pro Subprojekt und Tätigkeit, Stunden direkt in die Tageszellen tippen, Zeilen der Vorwoche übernehmen.
+- Projektarten Retainer und Fixpreis: Retainer verrechnen jeden Monat das Kontingent und Mehrstunden nach Aufwand, auf Wunsch als Rechnungsentwurf am 1. des Monats (Einstellungen, standardmässig aus). Fixpreis-Projekte werden in Tranchen in Prozent verrechnet, höchstens 100 %.
+- Offerten beim Kunden: Positionen mit Stunden und Satz, PDF in der Sprache des Kunden. Wird eine Offerte angenommen, entsteht daraus das Projekt mit einem Subprojekt und Budget pro Position.
+- Velocity pro Team und nach Issue-Typ (Story, Bug, Task), dazu eine Liste der Ausreisser, die deutlich mehr Stunden pro Story Point brauchten. Der Issue-Typ kommt beim Jira-Abgleich mit.
+- Vorschläge für Buchungstexte: unter dem Feld «Grund» stehen laufende Jira-Issues, eigene Texte der letzten 30 Tage und Texte des Teams; ein Klick übernimmt. Im Bericht fasst «Monatszusammenfassung» die erledigten Issues und Themen eines Kunden als Text zum Kopieren zusammen. Beides regelbasiert aus den eigenen Daten, ohne KI-Dienst.
+- TrackInsight auf Italienisch, für Oberfläche, E-Mails, Rechnungen, Offerten und Kundenberichte.
 - Automatische Prüfung bei jeder Änderung auf GitHub: Typen, alle Tests gegen MariaDB, Build und Docker-Image.
 - Wöchentlicher Wiederherstellungs-Test der Backups mit Ergebnis auf der Statusseite (docs/BETRIEB.md, Abschnitt 11).
 - Website: Seiten zum Umsteigen (Import, Alternativen zu Clockodo, Toggl und Harvest), für Agenturen und Treuhänder, ein Ratgeber zur Arbeitszeiterfassung nach ArGV 1 und ein Rechner für unverrechnete Zeit. Preise, Funktionen und Roadmap zeigen die Neuerungen.
