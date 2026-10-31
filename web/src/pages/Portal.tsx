@@ -5,7 +5,8 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { addMonths, currencyOf, fmt1, fmtDate, fmtMoney, fmtMonth, fmtMonthLong, fmtNum, monthOf, projectReports, type Currency, type ProjectReport } from "@taktwerk/domain";
 import { api, type PortalOverview } from "../api";
 import { useStore, useThemeColors } from "../store";
-import { ChartTip, Icon, Money, StatusPill } from "../ui/components";
+import { Icon, Money, StatusPill } from "../ui/components";
+import { ChartTip } from "../ui/charts";
 import { BrandMark } from "../ui/motif";
 import { Select } from "../ui/Select";
 import { tr, trn } from "../i18n";

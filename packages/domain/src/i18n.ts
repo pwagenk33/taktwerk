@@ -2,7 +2,8 @@
 // to German, so a new text never breaks anything. All texts live in messages.ts; `npm run i18n` lists the gaps.
 // The browser and the server each plug in how they pick the language (setTranslator). Constants built at import
 // time stay German and are translated where they are shown.
-import { MESSAGES } from "./messages";
+// The table is registered, not imported, so the browser only downloads it when someone uses French or English:
+// the server registers it at start, the web app loads it on demand (see web/src/main.tsx).
 
 export type Locale = "de" | "fr" | "en";
 export const LOCALES: { id: Locale; label: string }[] = [
@@ -24,13 +25,20 @@ export function pickLocale(wanted: string | readonly string[] | null | undefined
 type Arg = string | number | null | undefined;
 export type Translator = (de: string, ...args: Arg[]) => string;
 
+type Row = readonly [de: string, fr: string, en: string];
+let rows: readonly Row[] = [];
 const dicts = new Map<Locale, Map<string, string>>();
+/** Plugs in the translation table (messages.ts); without it every text stays German. */
+export function registerMessages(table: readonly Row[]) {
+  rows = table;
+  dicts.clear();
+}
 export function dictionary(locale: Locale): Map<string, string> {
   let d = dicts.get(locale);
   if (!d) {
     d = new Map();
     const col = locale === "fr" ? 1 : 2;
-    if (locale !== "de") for (const row of MESSAGES) if (row[col]) d.set(row[0], row[col]);
+    if (locale !== "de") for (const row of rows) if (row[col]) d.set(row[0], row[col]);
     dicts.set(locale, d);
   }
   return d;

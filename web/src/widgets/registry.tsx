@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { api, type Invoice } from "../api";
 import type { TimeEntry } from "@taktwerk/domain";
 import { useStore, useThemeColors } from "../store";
-import { BulletBars, BurnUpChart, ChartTip, HBar, StatusPill, VelocityChart, reportToBullet } from "../ui/components";
+import { BulletBars, StatusPill, reportToBullet } from "../ui/components";
+import { BurnUpChart, ChartTip, HBar, VelocityChart } from "../ui/charts";
 import { Select } from "../ui/Select";
 import { tr } from "../i18n";
 

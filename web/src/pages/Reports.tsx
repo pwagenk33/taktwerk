@@ -3,7 +3,8 @@ import { PROJECT_KINDS, addMonths, currencyOf, fmt1, fmtCHF, fmtCHF2, fmtDate, f
 import { useBexio } from "./Bexio";
 import { api, type Invoice, type InvoicePosition, type InvoiceStatus } from "../api";
 import { useStore } from "../store";
-import { BulletBars, BurnUpChart, Icon, Money, StatusPill, reportToBullet } from "../ui/components";
+import { BulletBars, Icon, Money, StatusPill, reportToBullet } from "../ui/components";
+import { BurnUpChart } from "../ui/charts";
 import { Select } from "../ui/Select";
 import { Field, FieldRow, FormDialog } from "../ui/Dialog";
 import { tr } from "../i18n";

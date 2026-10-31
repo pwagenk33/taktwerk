@@ -1,20 +1,9 @@
-import { useEffect, useState } from "react";
+import { Component, Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import type { Role } from "@taktwerk/domain";
-import { Closing } from "./pages/Closing";
-import { Dashboard } from "./pages/Dashboard";
 import { BudgetRing, Inbox, useInbox, useVisibleReports } from "./pages/Inbox";
-import { Planning } from "./pages/Planning";
-import { Portal } from "./pages/Portal";
-import { Profile } from "./pages/Profile";
-import { Projects } from "./pages/Projects";
-import { Reports } from "./pages/Reports";
 import { TimeTracking } from "./pages/TimeTracking";
-import { Settings } from "./pages/Settings";
-import { SetupWizard } from "./pages/Setup";
 import { FeatureGate, SubscriptionBanner, useSubscription } from "./pages/Subscription";
 import { canWrite } from "@taktwerk/domain";
-import { Velocity } from "./pages/Velocity";
-import { WorkTime } from "./pages/WorkTime";
 import { useStore } from "./store";
 import { useTheme, type Theme } from "./theme";
 import { elapsedOf, fmtTimer, hoursFromSeconds, timer, useTimer } from "./timer";
@@ -26,6 +15,56 @@ import { api } from "./api";
 import { loadLocal, saveLocal } from "./store";
 import { HelpPanel } from "./ui/Help";
 import { tr } from "./i18n";
+
+// Pages load when first opened, so the start (Eingang, Zeiterfassung) only downloads what it needs.
+// Once the app is idle the rest is fetched in the background, so pages open at once and work offline too.
+const pages = {
+  Closing: () => import("./pages/Closing").then((m) => ({ default: m.Closing })),
+  Dashboard: () => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })),
+  Planning: () => import("./pages/Planning").then((m) => ({ default: m.Planning })),
+  Portal: () => import("./pages/Portal").then((m) => ({ default: m.Portal })),
+  Profile: () => import("./pages/Profile").then((m) => ({ default: m.Profile })),
+  Projects: () => import("./pages/Projects").then((m) => ({ default: m.Projects })),
+  Reports: () => import("./pages/Reports").then((m) => ({ default: m.Reports })),
+  Settings: () => import("./pages/Settings").then((m) => ({ default: m.Settings })),
+  Velocity: () => import("./pages/Velocity").then((m) => ({ default: m.Velocity })),
+  WorkTime: () => import("./pages/WorkTime").then((m) => ({ default: m.WorkTime })),
+  SetupWizard: () => import("./pages/Setup").then((m) => ({ default: m.SetupWizard })),
+};
+const Closing = lazy(pages.Closing);
+const Dashboard = lazy(pages.Dashboard);
+const Planning = lazy(pages.Planning);
+const Portal = lazy(pages.Portal);
+const Profile = lazy(pages.Profile);
+const Projects = lazy(pages.Projects);
+const Reports = lazy(pages.Reports);
+const Settings = lazy(pages.Settings);
+const Velocity = lazy(pages.Velocity);
+const WorkTime = lazy(pages.WorkTime);
+const SetupWizard = lazy(pages.SetupWizard);
+function prefetchPages() {
+  const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+  if (conn?.saveData) return;
+  const run = () => { for (const load of Object.values(pages)) load().catch(() => {}); };
+  if ("requestIdleCallback" in window) window.requestIdleCallback(run, { timeout: 5000 });
+  else setTimeout(run, 2000);
+}
+
+/** A page file that can't be loaded (offline, or replaced by an update): offer a reload instead of a blank page. */
+class PageBoundary extends Component<{ children: ReactNode; page: string }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidUpdate(prev: { page: string }) { if (prev.page !== this.props.page && this.state.failed) this.setState({ failed: false }); }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="center-note">
+        <p>{tr("Diese Seite konnte nicht geladen werden. Vielleicht gibt es eine neue Version oder die Verbindung fehlt.")}</p>
+        <button className="btn primary" onClick={() => location.reload()}>{tr("Neu laden")}</button>
+      </div>
+    );
+  }
+}
 
 /** Minimal Markdown for CHANGELOG.md: headings, bullets and paragraphs. */
 function Changelog({ markdown }: { markdown: string }) {
@@ -171,6 +210,7 @@ export function App() {
   const projects = useVisibleReports();
   const openProject = page === "projekte" ? hash.match(/^#projekte\/p\/([^/]+)/)?.[1] ?? null : null;
   const locked = !!sub && !canWrite(sub);
+  useEffect(() => { if (role !== "customer") prefetchPages(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // New companies: the setup wizard opens for admins until it is finished or put off.
   useEffect(() => {
@@ -198,7 +238,7 @@ export function App() {
   }, []);
 
   // Portal accounts get their own, reduced application.
-  if (role === "customer") return <><Portal />{toast && <div className="toast" role="status">{toast}</div>}</>;
+  if (role === "customer") return <><Suspense fallback={<div className="center-note">{tr("Lade …")}</div>}><Portal /></Suspense>{toast && <div className="toast" role="status">{toast}</div>}</>;
 
   const allowed = PAGES.filter((p) => (!p.lead || scope.seesAll || (scope.leadsProjects.length > 0 && PROJECT_LEAD_PAGES.includes(p.id))) && !("admin" in p && role !== "admin"));
   const visible = allowed.filter((p) => !("hidden" in p));
@@ -286,6 +326,8 @@ export function App() {
         <SubscriptionBanner />
         {help && <HelpPanel page={current} onClose={() => setHelp(false)} />}
         <main className={`main ${current === "eingang" ? "flush" : ""}`}>
+          <PageBoundary page={current}>
+          <Suspense fallback={<div className="page-loading" aria-busy="true" />}>
           {current === "eingang" && <Inbox />}
           {current === "dashboard" && <Dashboard key={role === "employee" ? "employee" : "lead"} />}
           {current === "zeit" && <TimeTracking />}
@@ -297,6 +339,8 @@ export function App() {
           {current === "velocity" && <FeatureGate feature="forecast"><Velocity /></FeatureGate>}
           {current === "einstellungen" && <Settings />}
           {current === "profil" && <Profile />}
+          </Suspense>
+          </PageBoundary>
         </main>
       </div>
 
@@ -317,7 +361,7 @@ export function App() {
       )}
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} pages={visible.map((p) => ({ id: p.id, label: p.label }))} onNewEntry={requestNewEntry} />
-      {setup && <SetupWizard onClose={() => setSetup(false)} />}
+      {setup && <Suspense fallback={null}><SetupWizard onClose={() => setSetup(false)} /></Suspense>}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );

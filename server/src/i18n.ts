@@ -1,11 +1,12 @@
 // Language on the server: per request from the Accept-Language header the app sends (the language chosen in the
 // profile), and per recipient when building e-mails. Domain texts and number formats follow the same choice.
 import { AsyncLocalStorage } from "node:async_hooks";
-import { isLocale, pickLocale, setFormatLocaleResolver, setTranslator, translate, trnFor, type Locale } from "@taktwerk/domain";
+import { MESSAGES, isLocale, pickLocale, registerMessages, setFormatLocaleResolver, setTranslator, translate, trnFor, type Locale } from "@taktwerk/domain";
 
 const store = new AsyncLocalStorage<Locale>();
 export const currentLocale = (): Locale => store.getStore() ?? "de";
 
+registerMessages(MESSAGES);
 setTranslator((de, ...args) => translate(currentLocale(), de, ...args));
 setFormatLocaleResolver(() => `${currentLocale()}-CH`);
 

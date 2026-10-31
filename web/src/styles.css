@@ -1136,3 +1136,4 @@ body.dialog-open { overflow: hidden; }
 .cal-suggest-x { position: absolute; top: 2px; right: 3px; border: 0; background: none; color: var(--muted); font-size: 0.9rem; line-height: 1; padding: 2px 4px; cursor: pointer; border-radius: 4px; opacity: 0; }
 .cal-block.cal-suggest:hover .cal-suggest-x, .cal-suggest-x:focus-visible { opacity: 1; }
 @media (hover: none) { .cal-suggest-x { opacity: 1; } }
+.page-loading { min-height: 40vh; }

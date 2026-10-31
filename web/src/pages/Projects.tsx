@@ -3,7 +3,8 @@ import { PROJECT_KINDS, currencyOf, fmt1, fmtCHF, fmtDate, fmtMoney, fmtMonth, f
 import { CustomerDialog, PortalInviteDialog, ProjectDialog, SubProjectDialog } from "./EditDialogs";
 import { useStore } from "../store";
 import type { PortalAccount } from "../api";
-import { BurnUpChart, Icon, Money, StatusPill } from "../ui/components";
+import { Icon, Money, StatusPill } from "../ui/components";
+import { BurnUpChart } from "../ui/charts";
 import { tr, trn } from "../i18n";
 
 /** Who leads the project, shown under the project head. Changed in the project's edit popup. */

@@ -1,6 +1,6 @@
 import { fmt1, fmtCHF, fmtMonthLong, fmtNum } from "@taktwerk/domain";
 import { useStore } from "../store";
-import { VelocityChart } from "../ui/components";
+import { VelocityChart } from "../ui/charts";
 import { tr } from "../i18n";
 
 export function Velocity() {
