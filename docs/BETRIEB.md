@@ -435,7 +435,7 @@ Es werden dieselben App-Registrierungen verwendet wie für die Anmeldung mit Mic
 
 Lokal gilt dasselbe mit `http://localhost:3000/...`. Ohne Microsoft- bzw. Google-Konfiguration wird die jeweilige Kalenderoption nicht angezeigt.
 
-## 18. bexio und Lohnexport
+## 18. bexio und Lohnexport (inkl. Abacus)
 
 **bexio:** Firmen übertragen Rechnungen aus TrackInsight als Entwurf nach bexio (Reports → Rechnungen → «An bexio»). Dabei entsteht der Kunde als Kontakt, falls es ihn in bexio noch nicht gibt (gesucht wird nach dem Namen). Die Positionen kommen mit Nettopreisen und dem aktiven Umsatzsteuersatz, der zum Satz der Rechnung passt. Kontrollieren, verbuchen und versenden geschieht danach in bexio. Für die Verbindung braucht die Installation einmalig eine App bei bexio:
 
@@ -447,6 +447,10 @@ Lokal gilt dasselbe mit `http://localhost:3000/...`. Ohne Microsoft- bzw. Google
 Danach verbindet ein Admin unter Einstellungen → Rechnung → bexio. TrackInsight handelt mit den Rechten des bexio-Benutzers, der die Verbindung hergestellt hat. Persönliche Zugangstoken (PAT) sind laut bexio nur für den Eigengebrauch gedacht, deshalb läuft die Verbindung über OAuth. **Stand:** Die Anbindung ist gegen die öffentliche bexio-Dokumentation gebaut und automatisch getestet, aber noch nicht gegen ein echtes bexio-Konto. Vor dem Einsatz bei Kunden einmal mit einem bexio-Testkonto durchspielen.
 
 **Lohnexport:** Unter Monatsabschluss → Lohnexport lädt ein Admin pro Monat eine CSV-Datei herunter. Sie enthält pro Person die geleisteten Stunden, das Soll, die Überzeit im Monat, den Überzeit-Saldo, die Absenztage nach Art (nur bewilligte) sowie Spesen und Kilometer zur Rückerstattung (nur bewilligte). Die Spalten heissen personalnummer, name, periode, lohnart, bezeichnung, menge, einheit und betrag. Die Nummern der Lohnarten stellt man unter «Lohnarten» auf das eigene Lohnprogramm ein, die Personalnummer im Arbeitsmodell der Person. Die Datei ist ein Import für Lohnprogramme und keine zertifizierte Swissdec-Übermittlung (ELM). Löhne, Sozialversicherungen und Lohnausweis rechnet weiterhin das Lohnprogramm.
+
+**Abacus:** Der Knopf «Für Abacus» liefert dieselben Zahlen als variable Lohndaten für Abacus Lohn: Spalten `MANR;LOHNART;DATUM;ANZAHL;ANSATZ;BETRAG;TEXT`, Semikolon, Datum = letzter Tag des Monats (TT.MM.JJJJ). Stunden und Tage stehen in ANZAHL, Franken in BETRAG. Soll und Überzeit-Saldo fehlen (reine Information, keine Lohnart), ebenso Personen ohne Personalnummer. In Abacus die Importdefinition einmal auf diese Spalten einstellen und die Lohnarten unter «Lohnarten» auf die Abacus-Nummern setzen. Auch das ist keine Swissdec-Übermittlung.
+
+**Power BI:** siehe [POWERBI.md](POWERBI.md).
 
 ## 19. Firmen-Login (SAML) und SCIM mit Microsoft Entra ID
 

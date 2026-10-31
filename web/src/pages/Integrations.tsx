@@ -31,6 +31,7 @@ export function IntegrationsTab() {
         <h3 style={{ margin: 0 }}>{tr("Offene API und Webhooks")}</h3>
         <p className="explain" style={{ margin: 0 }}>{tr("In der installierten Version erstellt ein Admin hier API-Schlüssel (nur lesen oder lesen und schreiben) und Webhooks. Damit lesen andere Systeme Kunden, Projekte, Buchungen, Spesen, Absenzen, Budgets und Rechnungen, legen Buchungen an und erhalten jede Änderung sofort als signierte Nachricht.")}</p>
         <p className="muted" style={{ margin: 0, fontSize: "0.86rem" }}>{tr("Beschreibung der Schnittstelle: /api/v1/openapi.json und docs/API.md. Im Paket Business enthalten.")}</p>
+        <p className="muted" style={{ margin: 0, fontSize: "0.86rem" }}>{tr("Für Power BI gibt es hier eine fertige Vorlage mit allen Abfragen (docs/POWERBI.md).")}</p>
       </section>
     );
   if (!s) return <p className={error ? "error" : "muted"}>{error || tr("Lade …")}</p>;
@@ -64,6 +65,11 @@ export function IntegrationsTab() {
             </tbody>
           </table>
         </div>
+      </section>
+      <section className="card card-pad" id="powerbi" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <h3 style={{ margin: 0 }}>{tr("Power BI")}</h3>
+        <p className="explain" style={{ margin: 0 }}>{tr("Vorlage mit allen Abfragen (Kunden, Projekte, Buchungen, Spesen, Absenzen, Budgets mit Forecast, Rechnungen) für Power BI Desktop. Adresse ist eingetragen, den Schlüssel (nur lesen) fügst du ein. Anleitung im Kopf der Datei.")}</p>
+        <div><a className="btn small" id="powerbi-download" href="/api/integrations/powerbi" download>{tr("Power-BI-Vorlage herunterladen")}</a></div>
       </section>
 
       <section className="card">

@@ -33,6 +33,14 @@ const v1 = (method: "GET" | "POST" | "PATCH" | "DELETE", url: string, key: strin
   t.app.inject({ method, url, headers: { authorization: `Bearer ${key}` }, ...(payload ? { payload } : {}) });
 
 describe("API keys", () => {
+  it("offer a Power BI template with the company's address", async () => {
+    const res = await t.app.inject({ method: "GET", url: "/api/integrations/powerbi", headers: { cookie: anna } });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-disposition"]).toContain("TrackInsight-PowerBI.pq");
+    expect(res.payload).toContain('"https://zeit.example.ch/" meta [IsParameterQuery = true');
+    expect(res.payload).toContain('fnSeiten("time-entries")');
+  });
+
   it("are made by admins and shown once", async () => {
     const r = await t.app.inject({ method: "POST", url: "/api/integrations/keys", headers: { cookie: anna }, payload: { name: "Power BI", scope: "read" } });
     expect(r.statusCode).toBe(201);

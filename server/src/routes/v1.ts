@@ -5,10 +5,11 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { HttpError, requireRole, requireUser } from "../app";
+import { HttpError, appOrigin, requireRole, requireUser } from "../app";
 import { INTERNAL_HEADER, INTERNAL_TOKEN, newApiKey } from "../apikeys";
 import { sha256 } from "../auth/crypto";
-import { apiKeys, invoices, webhookDeliveries, webhookEndpoints } from "../db/schema";
+import { apiKeys, invoices, organizations, webhookDeliveries, webhookEndpoints } from "../db/schema";
+import { powerBiTemplate } from "../powerbi";
 import { EVENT_TYPES, endpointProblem, newSecret, sendOnce } from "../events";
 import { requireFeature } from "../saas";
 import { loadDataset, todayZurich } from "./data";
@@ -139,6 +140,13 @@ export async function v1Routes(app: FastifyInstance) {
     requireFeature(u, "api");
     return u;
   };
+
+  /** Power BI template (Power Query M) with this company's address filled in. */
+  app.get("/api/integrations/powerbi", async (req, reply) => {
+    const u = admin(req);
+    const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, u.organizationId)).limit(1);
+    return reply.header("content-disposition", 'attachment; filename="TrackInsight-PowerBI.pq"').type("text/plain; charset=utf-8").send(powerBiTemplate(`${appOrigin(ctx.config, org)}/`));
+  });
 
   app.get("/api/integrations", async (req) => {
     const u = admin(req);

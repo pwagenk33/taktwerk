@@ -105,3 +105,28 @@ export function payrollRows(data: Dataset, month: string, codes: PayrollCodes = 
 /** Flat rows for CSV/Excel with German column names that payroll tools map easily. */
 export const payrollTable = (rows: PayrollRow[]) =>
   rows.map((r) => ({ personalnummer: r.personnelNumber, name: r.name, periode: r.month, lohnart: r.code, bezeichnung: r.label, menge: r.quantity, einheit: r.unit === "d" ? tr("Tage") : r.unit, betrag: r.amount ?? "" }));
+
+/** Informational items that are no wage types in Abacus (target hours, running overtime balance). */
+const ABACUS_SKIP: PayrollItem[] = ["target", "overtimeBalance"];
+
+/**
+ * Abacus variable payroll data: semicolon separated, one line per person and wage type, dated on the last day of the
+ * month (DD.MM.YYYY). Hours and days go to ANZAHL, CHF amounts to BETRAG. People without personnel number are left
+ * out, because Abacus matches by MANR. The column mapping is set up once in Abacus; this is not a Swissdec transmission.
+ */
+export function payrollAbacus(rows: PayrollRow[]): string {
+  const cell = (v: string | number) => {
+    const t = String(v);
+    return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const lines = ["MANR;LOHNART;DATUM;ANZAHL;ANSATZ;BETRAG;TEXT"];
+  for (const r of rows) {
+    if (!r.personnelNumber || ABACUS_SKIP.includes(r.item)) continue;
+    const [y, m] = r.month.split("-").map(Number) as [number, number];
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const date = `${String(last).padStart(2, "0")}.${String(m).padStart(2, "0")}.${y}`;
+    const money = r.unit === "CHF";
+    lines.push([r.personnelNumber, r.code, date, money ? "1" : r.quantity.toFixed(2), "", money ? (r.amount ?? 0).toFixed(2) : "", r.label].map(cell).join(";"));
+  }
+  return lines.join("\r\n") + "\r\n";
+}

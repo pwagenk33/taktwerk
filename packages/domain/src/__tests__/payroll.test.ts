@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { payrollRows, payrollTable } from "../payroll";
+import { payrollAbacus, payrollRows, payrollTable } from "../payroll";
 import type { Dataset } from "../types";
 import { defaultHolidays } from "../worktime";
 
@@ -43,5 +43,14 @@ describe("payroll export", () => {
     const april = payrollRows(data, "2026-04");
     expect(april.find((r) => r.item === "sick")!.quantity).toBe(2);
     expect(payrollTable(april)[0]).toMatchObject({ personalnummer: "1042", name: "Lea Meier", periode: "2026-04" });
+  });
+
+  it("writes Abacus variable payroll data with the month's last day and no info-only lines", () => {
+    const lines = payrollAbacus(payrollRows(data, "2026-03", { hours: "100" })).trim().split("\r\n");
+    expect(lines[0]).toBe("MANR;LOHNART;DATUM;ANZAHL;ANSATZ;BETRAG;TEXT");
+    expect(lines).toContain("1042;100;31.03.2026;180.00;;;Geleistete Stunden");
+    expect(lines).toContain("1042;6000;31.03.2026;1;;88.40;Spesen (ohne Kilometer)");
+    expect(lines.some((l) => l.includes(";1001;"))).toBe(false);
+    expect(lines.some((l) => l.includes(";1101;"))).toBe(false);
   });
 });

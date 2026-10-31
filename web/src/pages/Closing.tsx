@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { PAYROLL_ITEMS, addMonths, fmt1, fmtCHF2, fmtDate, fmtMonthLong, isoWeekKey, monthOf, payrollRows, payrollTable, toCsv, weekRange, workBalance, type PayrollCodes } from "@taktwerk/domain";
+import { PAYROLL_ITEMS, addMonths, fmt1, fmtCHF2, fmtDate, fmtMonthLong, isoWeekKey, monthOf, payrollAbacus, payrollRows, payrollTable, toCsv, weekRange, workBalance, type PayrollCodes } from "@taktwerk/domain";
 import { api, type Settings as OrgSettings, type WeekOverviewRow } from "../api";
 import { Field, FormDialog } from "../ui/Dialog";
 import { useStore, type ClosingStatus } from "../store";
@@ -345,12 +345,12 @@ function PayrollCard({ month, unapproved }: { month: string; unapproved: number 
     if (mode === "api") api<OrgSettings>("/api/settings").then((s) => setCodes(s.payrollCodes ?? {})).catch(() => {});
   }, [mode]);
   const missing = data.employees.filter((e) => !e.personnelNumber).length;
-  const download = () => {
-    if (mode === "api") { window.open(`/api/export/payroll?month=${month}`, "_blank"); return; }
+  const download = (format: "csv" | "abacus" = "csv") => {
+    if (mode === "api") { window.open(`/api/export/payroll?month=${month}&format=${format}`, "_blank"); return; }
     const rows = payrollRows(data, month, codes);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([toCsv(payrollTable(rows))], { type: "text/csv;charset=utf-8" }));
-    a.download = `lohn-${month}.csv`;
+    a.href = URL.createObjectURL(new Blob([format === "abacus" ? payrollAbacus(rows) : toCsv(payrollTable(rows))], { type: "text/csv;charset=utf-8" }));
+    a.download = format === "abacus" ? `abacus-lohn-${month}.csv` : `lohn-${month}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
     notify(tr("{0} Zeilen exportiert", rows.length));
@@ -362,7 +362,8 @@ function PayrollCard({ month, unapproved }: { month: string; unapproved: number 
       {unapproved > 0 && <p className="notice" style={{ margin: 0 }}>{trn(unapproved, "{0} Person hat diesen Monat noch nicht freigegeben. Die Zahlen können sich noch ändern.", "{0} Personen haben diesen Monat noch nicht freigegeben. Die Zahlen können sich noch ändern.")}</p>}
       {missing > 0 && <p className="muted" style={{ margin: 0, fontSize: "0.82rem" }}>{trn(missing, "{0} Person hat noch keine Personalnummer (Absenzen → Team → Arbeitsmodell).", "{0} Personen haben noch keine Personalnummer (Absenzen → Team → Arbeitsmodell).")}</p>}
       <div className="toolbar" style={{ gap: 8 }}>
-        <button id="payroll-csv" className="btn primary" onClick={download}>{tr("Lohnexport herunterladen")}</button>
+        <button id="payroll-csv" className="btn primary" onClick={() => download()}>{tr("Lohnexport herunterladen")}</button>
+        <button id="payroll-abacus" className="btn" onClick={() => download("abacus")} title={tr("Variable Lohndaten für den Import in Abacus Lohn: Personalnummer, Lohnart, Datum, Anzahl oder Betrag.")}>{tr("Für Abacus")}</button>
         <button id="payroll-codes" className="btn" onClick={() => setEditing(true)}>{tr("Lohnarten")}</button>
       </div>
       {editing && (
