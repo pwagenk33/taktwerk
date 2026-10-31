@@ -5,6 +5,7 @@ import { useStore } from "../store";
 import type { PortalAccount } from "../api";
 import { Icon, Money, StatusPill } from "../ui/components";
 import { BurnUpChart } from "../ui/charts";
+import { Quotes } from "./Quotes";
 import { tr, trn } from "../i18n";
 
 /** Who leads the project, shown under the project head. Changed in the project's edit popup. */
@@ -394,6 +395,7 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
           );
         })}
       </section>
+      {scope.lead && !scope.readOnly && <Quotes customer={customer} onOpenProject={onOpenProject} />}
       {scope.lead && <PortalAccess customer={customer} />}
     </>
   );

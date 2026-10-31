@@ -1195,3 +1195,18 @@ body.dialog-open { overflow: hidden; }
 .fixed-shares { display: flex; flex-direction: column; gap: 8px; }
 .fixed-share-row { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; }
 .fixed-share-row input { width: 5.5em; text-align: right; }
+
+/* Quote positions editor */
+.quote-rows { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.quote-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5em 6.5em 8em 2.2em; gap: 8px; align-items: start; }
+.quote-row.head { font-size: 0.76rem; color: var(--muted); }
+.quote-row.foot { align-items: center; border-top: 1px solid var(--line); padding-top: 8px; }
+.quote-row .r { text-align: right; padding-top: 8px; }
+.quote-row.foot .r, .quote-row.head .r { padding-top: 0; }
+.quote-name { display: flex; flex-direction: column; gap: 4px; }
+.quote-note { font-size: 0.8rem; }
+@media (max-width: 700px) {
+  .quote-row { grid-template-columns: minmax(0, 1fr) 4.5em 5.5em 2.2em; }
+  .quote-row > :nth-child(4) { display: none; }
+}
+.quote-row.foot > button { justify-self: start; }

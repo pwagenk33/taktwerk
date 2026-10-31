@@ -233,7 +233,7 @@ function Invoices({ customerId }: { customerId: string }) {
             const left = Math.max(0, Math.round((100 - f.billedShare) * 100) / 100);
             return (
               <label key={f.id} className="field fixed-share">
-                <span>{tr("Festpreis {0}", f.name)}</span>
+                <span>{tr("Fixpreis {0}", f.name)}</span>
                 <span className="fixed-share-row">
                   <input id={`i-fixed-${f.id}`} className="input num" inputMode="decimal" placeholder="0" value={fixed[f.id] ?? ""} disabled={left <= 0} onChange={(e) => setFixed({ ...fixed, [f.id]: e.target.value })} />
                   <span>%</span>

@@ -95,7 +95,7 @@ export async function invoicePositions(ctx: AppContext, orgId: string, customerI
   for (const [projectId, share] of Object.entries(fixed)) {
     const p = projects.get(projectId);
     if (!p || p.kind !== "fixed" || !(share > 0)) continue;
-    positions.push({ text: tr("Festpreis {0}", p.name), detail: tr("Teilrechnung {0} % von {1}", share, p.budget.toLocaleString("de-CH").replace(/'/g, "’")), quantity: share, unit: "%", unitPrice: round2(p.budget / 100), amount: round05((p.budget * share) / 100), projectId, share });
+    positions.push({ text: tr("Fixpreis {0}", p.name), detail: tr("Teilrechnung {0} % von {1}", share, p.budget.toLocaleString("de-CH").replace(/'/g, "’")), quantity: share, unit: "%", unitPrice: round2(p.budget / 100), amount: round05((p.budget * share) / 100), projectId, share });
   }
 
   const person = new Map(data.employees.map((e) => [e.id, e.name]));
@@ -142,7 +142,7 @@ async function createInvoiceIn(ctx: AppContext, orgId: string, customerId: strin
 
   const billed = await fixedShares(ctx, orgId, customerId);
   for (const [projectId, share] of Object.entries(fixed)) {
-    if ((billed.get(projectId) ?? 0) + share > 100.001) throw new HttpError(400, tr("Vom Festpreis sind schon {0} % verrechnet; mehr als 100 % geht nicht.", round2(billed.get(projectId) ?? 0)));
+    if ((billed.get(projectId) ?? 0) + share > 100.001) throw new HttpError(400, tr("Vom Fixpreis sind schon {0} % verrechnet; mehr als 100 % geht nicht.", round2(billed.get(projectId) ?? 0)));
   }
   const { positions } = await invoicePositions(ctx, orgId, customerId, month, fixed);
   if (positions.length === 0) throw new HttpError(400, tr("Für {0} gibt es keine verrechenbaren Leistungen oder Spesen.", fmtMonthLong(month)));
