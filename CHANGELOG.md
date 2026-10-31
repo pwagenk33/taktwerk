@@ -43,6 +43,14 @@ Alle sichtbaren Änderungen, neueste zuerst. Versionen folgen [Semantic Versioni
 - Betreiber-Übersicht mit monatlichem Umsatz, zahlenden Firmen, Testphasen und Paket pro Firma.
 - Neue Startseite «Eingang»: knappe Budgets, offene Freigaben (Absenzen, Spesen, Monatsabschlüsse) und eigene Pendenzen in einer Liste, direkt bewilligen oder ablehnen, Details zum Budget in der rechten Spalte.
 
+### Behoben
+- Eine deaktivierte Firma war über ihre API-Schlüssel und über «Passwort zurücksetzen» weiterhin erreichbar; jetzt ist sie auf allen Wegen gesperrt.
+- Teams und Projektleitungen lassen sich nur noch mit Personen und Teams der eigenen Firma verknüpfen.
+- Eine Offerte kann nicht mehr doppelt angenommen werden, wenn zwei Personen gleichzeitig klicken.
+- CSV-Exporte: Buchungstexte, die mit =, +, - oder @ beginnen, werden in Excel nicht mehr als Formel ausgeführt.
+- Wochen lassen sich auch am Montag kurz nach Mitternacht einreichen (Schweizer statt UTC-Zeit); das gilt auch für die Beispieldaten.
+- Einzelne Wörter waren in Französisch, Englisch und Italienisch noch deutsch (Spesen-Meldung, Budget-Zeile im Projekt, Herkunft der Wechselkurse).
+
 ### Neu gestaltet
 - Ruhiges Erscheinungsbild in warmen Grautönen mit der Schrift Instrument Sans; Schwarz für Aktionen, die Firmenfarbe nur noch für das, was Aufmerksamkeit braucht. Knöpfe im Stil «Schweizer Raster» (kantig, kräftiger Rand, Nebenaktionen als unterstrichener Text), eckige Felder und Kennzahlen-Leisten, Budget-Ringe statt Punkte, Personen mit Initialen.
 - Menü ohne Symbole mit Zähler beim Eingang, den Projekten mit Budgetstatus und dem Bereich «Auswerten». Das anpassbare Widget-Dashboard ist dort unter «Dashboard» zu finden.

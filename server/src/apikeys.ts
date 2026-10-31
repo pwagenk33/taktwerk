@@ -24,7 +24,8 @@ export async function authenticateApiKey(ctx: AppContext, req: FastifyRequest, t
     .select({ key: apiKeys, user: users })
     .from(apiKeys)
     .innerJoin(users, eq(users.id, apiKeys.userId))
-    .where(and(eq(apiKeys.hash, sha256(token)), isNull(apiKeys.revokedAt), eq(users.active, true)))
+    .innerJoin(organizations, eq(organizations.id, users.organizationId))
+    .where(and(eq(apiKeys.hash, sha256(token)), isNull(apiKeys.revokedAt), eq(users.active, true), eq(organizations.active, true)))
     .limit(1);
   if (!row) throw new HttpError(401, tr("Ungültiger oder widerrufener API-Schlüssel."));
   const { key, user: u } = row;

@@ -80,7 +80,7 @@ export async function expenseRoutes(app: FastifyInstance) {
     const row = await load(lead, id);
     await assertBookable(ctx, lead, row.userId, row.date);
     const status = approve ? "approved" : "rejected";
-    if (row.status === status) throw new HttpError(409, tr("Diese Spese ist bereits {0}.", approve ? "bewilligt" : "abgelehnt"));
+    if (row.status === status) throw new HttpError(409, tr("Diese Spese ist bereits {0}.", approve ? tr("bewilligt") : tr("abgelehnt")));
     await ctx.db.update(expenses).set({ status, decidedBy: lead.id, decidedAt: new Date() }).where(eq(expenses.id, id));
     await audit(ctx, lead, "expense", id, approve ? "approve" : "reject", { status: row.status }, { status, comment });
 

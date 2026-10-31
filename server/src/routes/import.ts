@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { HttpError, requireRole, type AppContext } from "../app";
 import { customerRates, customers, expenses, importBatches, monthClosings, projects, subProjects, timeEntries, users } from "../db/schema";
-import { bookingChanged } from "./data";
+import { bookingChanged, todayZurich } from "./data";
 import { audit } from "./billing";
 import { tr } from "@taktwerk/domain";
 
@@ -110,7 +110,7 @@ export async function importRoutes(app: FastifyInstance) {
     const user = requireRole(req, "admin");
     const [open] = await ctx.db.select({ id: importBatches.id }).from(importBatches).where(and(eq(importBatches.organizationId, user.organizationId), eq(importBatches.source, "sample"), isNull(importBatches.undoneAt))).limit(1);
     if (open) throw new HttpError(409, tr("Die Beispieldaten sind schon geladen."));
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayZurich();
     const result = await runImport(ctx, user.organizationId, user.id, { source: "sample", fileName: tr("Beispieldaten"), rows: sampleRows(today, user.name), people: { [key(user.name)]: user.id }, rate: 160 });
     // Budgets make the forecast and the warnings visible right away.
     const [batch] = await ctx.db.select().from(importBatches).where(eq(importBatches.id, result.id)).limit(1);

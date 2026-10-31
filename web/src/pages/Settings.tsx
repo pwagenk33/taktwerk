@@ -506,7 +506,7 @@ function Billing() {
           <label className="field"><span>{tr("1 EUR in CHF")}</span><input id="fx-eur" type="number" step={0.0001} min={0} className="input num" value={fx.EUR} onChange={(e) => setFx({ ...fx, EUR: e.target.value })} /></label>
           <label className="field"><span>{tr("1 USD in CHF")}</span><input id="fx-usd" type="number" step={0.0001} min={0} className="input num" value={fx.USD} onChange={(e) => setFx({ ...fx, USD: e.target.value })} /></label>
         </div>
-        <p className="muted" style={{ fontSize: "0.82rem" }}>{fx.asOf ? tr("Stand {0} · {1}", fx.asOf.split("-").reverse().join("."), fx.manual ? "manuell" : fx.source || "automatisch") : tr("Noch keine Kurse geladen.")}</p>
+        <p className="muted" style={{ fontSize: "0.82rem" }}>{fx.asOf ? tr("Stand {0} · {1}", fx.asOf.split("-").reverse().join("."), fx.manual ? tr("manuell") : fx.source || tr("automatisch")) : tr("Noch keine Kurse geladen.")}</p>
         <div className="toolbar" style={{ gap: 8 }}>
           <button id="fx-save" className="btn primary" onClick={saveFx} disabled={mode === "demo"}>{tr("Kurse speichern")}</button>
           <button id="fx-refresh" className="btn ghost" onClick={refreshFx} disabled={fxBusy || mode === "demo"}>{fxBusy ? tr("Lädt …") : tr("Jetzt von der EZB laden")}</button>

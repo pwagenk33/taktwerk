@@ -367,7 +367,7 @@ function CustomerDetail({ customer, onBack, onOpenProject }: { customer: Custome
                   <div className="muted num" style={{ fontSize: "0.8rem" }}>
                     {r?.retainer
                       ? tr("Kontingent {0} h/Monat · {1} {2} h genutzt · Schnitt {3} h", fmtNum(r.retainer.hoursPerMonth), fmtMonth(r.retainer.month), fmt1(r.retainer.used), fmt1(r.retainer.avg3))
-                      : tr("{0} {1} · davon verteilt {2} · Reserve {3}", p.kind === "fixed" ? "Fixpreis" : "Budget", m(p.budget), m(allocated), m(p.budget - allocated))}
+                      : tr("{0} {1} · davon verteilt {2} · Reserve {3}", p.kind === "fixed" ? tr("Fixpreis") : tr("Budget"), m(p.budget), m(allocated), m(p.budget - allocated))}
                     {r && !r.retainer && tr(" · verbraucht {0} · Forecast {1}", m(r.actualCost), m(r.forecastCost))}
                   </div>
                 </div>

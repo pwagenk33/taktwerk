@@ -48,3 +48,10 @@ describe("utilization and exports", () => {
     expect(exportRows(data, "projects")[0]).toHaveProperty("projektart");
   });
 });
+
+describe("CSV export", () => {
+  it("keeps typed formulas as text and leaves negative numbers alone", () => {
+    const csv = toCsv([{ reason: "=HYPERLINK(\"x\")", hours: -1.5, note: "-2", plus: "+41 44 000" }]);
+    expect(csv.split("\r\n")[1]).toBe(`"'=HYPERLINK(""x"")";-1.5;-2;'+41 44 000`);
+  });
+});

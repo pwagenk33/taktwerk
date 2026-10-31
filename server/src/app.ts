@@ -230,7 +230,9 @@ export async function buildApp(ctx: AppContext) {
       .select({ user: users, lastSeenAt: sessions.lastSeenAt })
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
-      .where(and(eq(sessions.id, sid), gt(sessions.expiresAt, new Date()), eq(users.active, true)))
+      // A deactivated company is closed for every way in (password reset, hand-off, passkey), not only for the login form.
+      .innerJoin(organizations, eq(organizations.id, users.organizationId))
+      .where(and(eq(sessions.id, sid), gt(sessions.expiresAt, new Date()), eq(users.active, true), eq(organizations.active, true)))
       .limit(1);
     if (row) {
       const u = row.user;

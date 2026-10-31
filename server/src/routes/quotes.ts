@@ -1,11 +1,11 @@
-import { and, desc, eq, like } from "drizzle-orm";
+import { and, desc, eq, like, ne } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import PDFDocument from "pdfkit";
 import { z } from "zod";
 import { rateOn, tr } from "@taktwerk/domain";
 import { HttpError, requireRole, type AppContext } from "../app";
-import { customerRates, customers, organizations, projects, quotes, subProjects, type QuotePosition } from "../db/schema";
+import { customerRates, customers, organizations, projects, quotes, subProjects, users, type QuotePosition } from "../db/schema";
 import { currentLocale, withLocale } from "../i18n";
 import { todayZurich } from "./data";
 
@@ -108,11 +108,17 @@ export async function quoteRoutes(app: FastifyInstance) {
     const q = await load(user.organizationId, (req.params as { id: string }).id);
     if (q.status === "accepted") throw new HttpError(409, tr("Die Offerte ist schon angenommen."));
     const body = z.object({ name: z.string().trim().min(1).max(200).optional(), leadUserId: z.string().optional() }).parse(req.body ?? {});
+    const lead = body.leadUserId
+      ? (await ctx.db.select({ id: users.id, role: users.role }).from(users).where(and(eq(users.id, body.leadUserId), eq(users.organizationId, user.organizationId), eq(users.active, true))).limit(1))[0]
+      : null;
+    if (body.leadUserId && (!lead || lead.role === "customer" || lead.role === "auditor")) throw new HttpError(404, tr("Person für die Projektleitung nicht gefunden."));
     const projectId = randomUUID();
     await ctx.db.transaction(async (tx) => {
-      await tx.insert(projects).values({ id: projectId, organizationId: user.organizationId, customerId: q.customerId, name: body.name ?? q.title, budget: q.net, kind: q.kind, retainerHours: q.kind === "retainer" ? q.retainerHours : null, leadUserId: body.leadUserId || null });
+      // Only one acceptance wins when two people click at the same time.
+      const [res] = await tx.update(quotes).set({ status: "accepted", projectId, decidedAt: new Date() }).where(and(eq(quotes.id, q.id), ne(quotes.status, "accepted")));
+      if (!res.affectedRows) throw new HttpError(409, tr("Die Offerte ist schon angenommen."));
+      await tx.insert(projects).values({ id: projectId, organizationId: user.organizationId, customerId: q.customerId, name: body.name ?? q.title, budget: q.net, kind: q.kind, retainerHours: q.kind === "retainer" ? q.retainerHours : null, leadUserId: lead?.id ?? null });
       if (q.positions.length) await tx.insert(subProjects).values(q.positions.map((p) => ({ id: randomUUID(), organizationId: user.organizationId, projectId, name: p.name, budget: p.amount })));
-      await tx.update(quotes).set({ status: "accepted", projectId, decidedAt: new Date() }).where(eq(quotes.id, q.id));
     });
     return { ...summary(await load(user.organizationId, q.id)), projectId };
   });

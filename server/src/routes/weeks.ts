@@ -63,7 +63,7 @@ export async function weekRoutes(app: FastifyInstance) {
   app.post("/api/weeks/:week/submit", async (req) => {
     const user = requireUser(req);
     const week = weekParam.parse((req.params as { week: string }).week);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayZurich();
     if (week > isoWeekKey(today)) throw new HttpError(400, tr("Zukünftige Wochen können nicht eingereicht werden."));
     const start = weekRange(week).from;
     const window = detailStart(todayZurich());

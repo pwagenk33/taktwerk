@@ -5,7 +5,9 @@ export function toCsv(rows: Record<string, unknown>[], columns?: string[]): stri
   const cols = columns ?? [...new Set(rows.flatMap((r) => Object.keys(r)))];
   const cell = (v: unknown) => {
     if (v === null || v === undefined) return "";
-    const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+    let s = typeof v === "object" ? JSON.stringify(v) : String(v);
+    // Texts typed by people (e.g. "=HYPERLINK(…)") must not run as a formula when the file is opened in Excel.
+    if (typeof v === "string" && /^[=+\-@\t\r]/.test(s) && !/^-?\d+([.,]\d+)?$/.test(s)) s = `'${s}`;
     return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return `﻿${[cols.join(";"), ...rows.map((r) => cols.map((c) => cell(r[c])).join(";"))].join("\r\n")}\r\n`;

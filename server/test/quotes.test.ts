@@ -56,6 +56,9 @@ describe("quotes", () => {
     expect(q.retainerHours).toBe(20);
     expect((await send("POST", `/api/quotes/${q.id}/status`, lead, { status: "declined" })).json().status).toBe("declined");
     const draft = (await send("POST", "/api/quotes", lead, { customerId, title: "Entwurf", validUntil: "2026-12-31", positions: [{ name: "A", hours: 1, rate: 1 }] })).json();
+    // The project lead must be a person of the same company.
+    expect((await send("POST", `/api/quotes/${draft.id}/accept`, lead, { leadUserId: "someone-else" })).statusCode).toBe(404);
+    expect((await get(`/api/quotes?customerId=${customerId}`, lead)).json().quotes.find((x: { id: string }) => x.id === draft.id).status).toBe("draft");
     expect((await send("DELETE", `/api/quotes/${draft.id}`, lead)).statusCode).toBe(200);
     expect((await get(`/api/quotes?customerId=${customerId}`, lead)).json().quotes.map((x: { title: string }) => x.title)).toEqual(["Wartung", "App für Firmenkunden"]);
   });

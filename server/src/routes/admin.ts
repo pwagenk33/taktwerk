@@ -31,6 +31,12 @@ const iban = z
 
 export async function adminRoutes(app: FastifyInstance) {
   const ctx = app.ctx;
+  /** A team id from the request must belong to the same company. */
+  const assertOwnTeam = async (orgId: string, teamId: string | null | undefined) => {
+    if (!teamId) return;
+    const [team] = await ctx.db.select({ id: teams.id }).from(teams).where(and(eq(teams.id, teamId), eq(teams.organizationId, orgId))).limit(1);
+    if (!team) throw new HttpError(404, tr("Team nicht gefunden."));
+  };
 
   const orgOf = async (id: string) => {
     const [org] = await ctx.db.select().from(organizations).where(eq(organizations.id, id)).limit(1);
@@ -202,6 +208,7 @@ export async function adminRoutes(app: FastifyInstance) {
       .limit(1);
     if (clash) throw new HttpError(409, tr("Benutzername oder E-Mail ist bereits vergeben."));
     if (body.role === "auditor") requireFeature(admin, "auditor");
+    await assertOwnTeam(admin.organizationId, body.teamId);
     const id = randomUUID();
     await ctx.db.insert(users).values({ id, organizationId: admin.organizationId, ...body, teamId: body.teamId || null, trackingStart: todayZurich() });
     await syncSeats(ctx, admin.organizationId);
@@ -233,6 +240,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const [target] = await ctx.db.select().from(users).where(and(eq(users.id, id), eq(users.organizationId, admin.organizationId))).limit(1);
     if (!target) throw new HttpError(404, tr("Benutzer nicht gefunden."));
     if (body.role === "auditor" && target.role !== "auditor") requireFeature(admin, "auditor");
+    await assertOwnTeam(admin.organizationId, body.teamId);
     // Billed people change when someone is (de)activated or moves between a free role (auditor) and a regular one.
     const free = (r: string) => r === "auditor" || r === "customer";
     const willCount = (body.active ?? target.active) && !free(body.role ?? target.role);

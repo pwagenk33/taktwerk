@@ -63,11 +63,16 @@ describe("several companies on one installation", () => {
     expect(wrong.statusCode).toBe(403);
     expect((await post("/api/auth/login", { username: "rita@zweite.ch", password: "ganz-sicheres-passwort-9" }, "", "zeit.zweite.ch")).statusCode).toBe(200);
 
-    // Deactivating a company signs everyone out and blocks sign-in.
+    const key = (await t.app.inject({ method: "POST", url: "/api/integrations/keys", headers: { cookie: admin2 }, payload: { name: "BI", scope: "read" } })).json().key as string;
+    const viaKey = () => t.app.inject({ method: "GET", url: "/api/v1/customers", headers: { authorization: `Bearer ${key}` } });
+    expect((await viaKey()).statusCode).toBe(200);
+
+    // Deactivating a company signs everyone out and blocks sign-in and its API keys.
     const off = await t.app.inject({ method: "PATCH", url: `/api/platform/orgs/${org.id}`, headers: { cookie: anna }, payload: { active: false } });
     expect(off.json().active).toBe(false);
     expect((await get("/api/auth/me", admin2)).statusCode).toBe(401);
     expect((await post("/api/auth/login", { username: "rita@zweite.ch", password: "ganz-sicheres-passwort-9" })).statusCode).toBe(403);
+    expect((await viaKey()).statusCode).toBe(401);
     await t.app.inject({ method: "PATCH", url: `/api/platform/orgs/${org.id}`, headers: { cookie: anna }, payload: { active: true } });
   });
 
